@@ -1,0 +1,370 @@
+#include "MainSampleWorkflows.hpp"
+
+#include "PadFileActions.hpp"
+#include "StateCodec.hpp"
+#include "StateKeys.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <filesystem>
+#include <utility>
+
+namespace midichopper::plugin {
+namespace {
+
+constexpr std::uint64_t kSliceMask = 0xffffU;
+
+[[nodiscard]] std::filesystem::path pathFromUtf8(const std::string_view path)
+{
+    return std::filesystem::path(std::u8string(
+        reinterpret_cast<const char8_t*>(path.data()), path.size()));
+}
+
+[[nodiscard]] std::string fileName(const std::string_view path)
+{
+    const auto name = pathFromUtf8(path).filename().u8string();
+    return {reinterpret_cast<const char*>(name.data()), name.size()};
+}
+
+[[nodiscard]] PadData padData(sms::audio::WavAudio&& audio)
+{
+    PadData data;
+    data.sampleRate = audio.sampleRate;
+    data.frames = audio.frames;
+    data.stereo = std::move(audio.stereo);
+    double sumSquares = 0.0;
+    for (const float sample : data.stereo) {
+        data.peak = std::max(data.peak, std::abs(sample));
+        sumSquares += static_cast<double>(sample) * sample;
+    }
+    if (!data.stereo.empty())
+        data.rms = static_cast<float>(
+            std::sqrt(sumSquares / static_cast<double>(data.stereo.size())));
+    return data;
+}
+
+[[nodiscard]] constexpr std::uint64_t link(const std::uint64_t sourceId,
+                                           const std::uint16_t sliceId) noexcept
+{
+    return (sourceId << 16U) | sliceId;
+}
+
+} // namespace
+
+MainSampleSession MainSampleWorkflows::session() const
+{
+    const std::lock_guard lock(mutationMutex_);
+    return session_;
+}
+
+void MainSampleWorkflows::handleRequest(const std::string_view encoded)
+{
+    MainSampleRequest request;
+    if (!decodeMainSampleRequest(encoded, request)) {
+        publishStatus(request.sequence, MainSampleState::error, "Invalid main sample request");
+        return;
+    }
+    try {
+        handleRequestImpl(request);
+    } catch (...) {
+        publishStatus(request.sequence, MainSampleState::error, "Main sample action failed");
+    }
+}
+
+void MainSampleWorkflows::handleRequestImpl(const MainSampleRequest& request)
+{
+    switch (request.verb) {
+    case MainSampleVerb::load: load(request); return;
+    case MainSampleVerb::clear: clear(request); return;
+    case MainSampleVerb::query: publishStatus(request.sequence, MainSampleState::ready); return;
+    case MainSampleVerb::edit: edit(request); return;
+    case MainSampleVerb::assign: assign(request); return;
+    case MainSampleVerb::remove: remove(request); return;
+    case MainSampleVerb::waveform: waveform(request); return;
+    }
+}
+
+void MainSampleWorkflows::load(const MainSampleRequest& request)
+{
+    latestLoadSequence_.store(request.sequence, std::memory_order_release);
+    const auto name = fileName(request.path);
+    publishStatus(request.sequence, MainSampleState::loading, name);
+    // Decode without the mutation mutex: pad workflows and host saves keep
+    // running while a long file is read.
+    auto loaded = readPadWav(pathFromUtf8(request.path));
+    if (!loaded) {
+        publishStatus(request.sequence, MainSampleState::error, loaded.error);
+        return;
+    }
+    auto audio = padData(std::move(loaded.audio));
+    const std::lock_guard lock(mutationMutex_);
+    if (latestLoadSequence_.load(std::memory_order_acquire) != request.sequence)
+        return; // A newer load or clear owns the reply.
+    const auto id = nextSourceId(session_.sourceId);
+    if (!sampler_.setSource(&audio, id)) {
+        publishStatusLocked(request.sequence, MainSampleState::error,
+                            "Main sample storage is unavailable");
+        return;
+    }
+    // Rates above 96 kHz are stored at 96 kHz, so slices use the stored frames.
+    const auto info = sampler_.sourceInfo();
+    session_.reset(id, info.frames,
+                   static_cast<std::uint32_t>(std::lround(info.sampleRate)), name);
+    publishStatusLocked(request.sequence, MainSampleState::ready);
+}
+
+void MainSampleWorkflows::clear(const MainSampleRequest& request)
+{
+    latestLoadSequence_.store(request.sequence, std::memory_order_release);
+    const std::lock_guard lock(mutationMutex_);
+    if (!sampler_.setSource(nullptr, 0U)) {
+        publishStatusLocked(request.sequence, MainSampleState::error,
+                            "Main sample storage is unavailable");
+        return;
+    }
+    // Pads keep their audio and stale tags; a new source never reuses the id.
+    session_.reset(0U, 0U, 0U, {});
+    publishStatusLocked(request.sequence, MainSampleState::ready);
+}
+
+void MainSampleWorkflows::edit(const MainSampleRequest& request)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
+        return;
+    }
+    auto edited = session_;
+    const std::span<const MainSampleSlice> edits{request.edits.data(), request.editCount};
+    if (!edited.editSlices(edits)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Invalid slice edit");
+        return;
+    }
+    std::array<std::uint16_t, 2> ids{};
+    for (std::size_t index = 0; index < edits.size(); ++index)
+        ids[index] = edits[index].id;
+    std::uint64_t affected = 0U;
+    if (!recutLinkedPads(edited, {ids.data(), edits.size()}, snapshotPads(), affected)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+        return;
+    }
+    session_ = std::move(edited);
+    publishPadSettings(affected, false);
+    publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
+}
+
+void MainSampleWorkflows::assign(const MainSampleRequest& request)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
+        return;
+    }
+    const auto pad = request.pad;
+    const auto bit = std::uint64_t{1} << pad;
+    EngineSettings settings;
+    PadMetadata metadata;
+    controlDispatcher_.invoke([&]() noexcept {
+        settings = sampler_.settings();
+        metadata = sampler_.padMetadata(pad);
+    });
+    if (settings.armed || metadata.recording) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Disarm recording first");
+        return;
+    }
+    const auto pads = snapshotPads();
+    const bool ownLink = pads.provenance[pad] != 0U &&
+        (pads.provenance[pad] >> 16U) == session_.sourceId;
+    if (metadata.occupied && !ownLink && !request.confirm) {
+        publishStatusLocked(request.sequence, MainSampleState::confirm,
+                            "Replace this pad's audio?", bit);
+        return;
+    }
+    auto edited = session_;
+    MainSampleSlice created;
+    if (!edited.addSlice(request.start, request.end, created)) {
+        publishStatusLocked(request.sequence, MainSampleState::error,
+            edited.slices.size() >= kMainSampleMaxSlices ? "All 64 slices are in use"
+                                                         : "Invalid slice range");
+        return;
+    }
+    PadData audio;
+    PadImport import;
+    import.pad = pad;
+    import.audio = &audio;
+    import.provenance = link(edited.sourceId, created.id);
+    import.expectedGeneration = pads.generations[pad];
+    // Like a WAV import, the new audio starts with default editor and mixer settings.
+    if (!sampler_.copySourceRange(edited.sourceId, created.start, created.end - created.start,
+                                  audio) ||
+        !sampler_.importPads({&import, 1U}, &settings)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+        return;
+    }
+    session_ = std::move(edited);
+    publishPadSettings(bit, true);
+    publishStatusLocked(request.sequence, MainSampleState::ready, {}, bit);
+}
+
+void MainSampleWorkflows::remove(const MainSampleRequest& request)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
+        return;
+    }
+    auto edited = session_;
+    if (!edited.removeSlice(request.sliceId)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Slice not found");
+        return;
+    }
+    // Linked pads keep their audio and settings; only the tag goes.
+    const auto pads = snapshotPads();
+    const auto removed = link(edited.sourceId, request.sliceId);
+    std::uint64_t affected = 0U;
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        if (pads.provenance[pad] == removed &&
+            sampler_.setPadProvenance(pad, 0U, sampler_.padAudioFingerprint(pad)))
+            affected |= std::uint64_t{1} << pad;
+    }
+    session_ = std::move(edited);
+    publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
+}
+
+void MainSampleWorkflows::waveform(const MainSampleRequest& request)
+{
+    // No mutation mutex: the engine pins the source, so a long scan never
+    // blocks pad workflows. A stale range or source is refused there.
+    MainSampleWaveform reply;
+    reply.sequence = request.sequence;
+    reply.start = request.start;
+    reply.end = request.end;
+    reply.count = request.tiles;
+    const auto id = sampler_.sourceInfo().id;
+    if (id == 0U || !sampler_.summarizeSourceRange(id, request.start, request.end,
+                                                   {reply.tiles.data(), request.tiles})) {
+        publishStatus(request.sequence, MainSampleState::error, "Waveform unavailable");
+        return;
+    }
+    const auto encoded = encodeMainSampleWaveform(reply);
+    observer_.publishUiState(kMainSampleWaveformKey, encoded.c_str());
+}
+
+bool MainSampleWorkflows::recutLinkedPads(const MainSampleSession& target,
+    const std::span<const std::uint16_t> sliceIds, const PadSnapshot& pads,
+    std::uint64_t& affected)
+{
+    std::array<PadData, kPadCount> audio;
+    std::vector<PadImport> imports;
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        const auto provenance = pads.provenance[pad];
+        const auto sliceId = static_cast<std::uint16_t>(provenance & kSliceMask);
+        if (provenance == 0U || (provenance >> 16U) != target.sourceId ||
+            std::find(sliceIds.begin(), sliceIds.end(), sliceId) == sliceIds.end())
+            continue;
+        const auto* const slice = target.find(sliceId);
+        if (slice == nullptr ||
+            !sampler_.copySourceRange(target.sourceId, slice->start, slice->end - slice->start,
+                                      audio[pad]))
+            return false;
+        PadImport import;
+        import.pad = pad;
+        import.audio = &audio[pad];
+        // Settings read after the generation snapshot: a newer edit fails the
+        // generation check instead of being lost. The markers now define the
+        // trim, so Start/End reset; envelope and mixer stay.
+        import.playback = sampler_.padPlaybackSettings(pad);
+        import.playback.start = 0.0f;
+        import.playback.end = 1.0f;
+        import.mixer = sampler_.padMixerSettings(pad);
+        import.provenance = provenance;
+        import.expectedGeneration = pads.generations[pad];
+        imports.push_back(import);
+        affected |= std::uint64_t{1} << pad;
+    }
+    if (imports.empty())
+        return true;
+    const auto settings = engineSettings();
+    if (settings.armed)
+        return false;
+    return sampler_.importPads(imports, &settings);
+}
+
+MainSampleWorkflows::PadSnapshot MainSampleWorkflows::snapshotPads() const
+{
+    PadSnapshot pads;
+    sampler_.padProvenance(pads.provenance, pads.generations);
+    return pads;
+}
+
+EngineSettings MainSampleWorkflows::engineSettings() const
+{
+    EngineSettings settings;
+    controlDispatcher_.invoke([&]() noexcept { settings = sampler_.settings(); });
+    return settings;
+}
+
+void MainSampleWorkflows::publishPadSettings(const std::uint64_t pads, const bool mixer)
+{
+    // One or two slices change per request, and each slice feeds its own pad,
+    // so this stays far below the UI message bus capacity.
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        if ((pads & (std::uint64_t{1} << pad)) == 0U)
+            continue;
+        const auto editor = encodePlaybackSettings(sampler_.padPlaybackSettings(pad));
+        observer_.publishUiState(kPadEditStateKeys[pad].c_str(), editor.c_str());
+        if (mixer) {
+            const auto encoded = encodeMixerSettings(sampler_.padMixerSettings(pad));
+            observer_.publishUiState(kPadMixerStateKeys[pad].c_str(), encoded.c_str());
+        }
+    }
+}
+
+void MainSampleWorkflows::publishStatusLocked(const std::uint64_t sequence,
+    const MainSampleState state, const std::string_view text, const std::uint64_t affected)
+{
+    MainSampleStatus status;
+    status.sequence = sequence;
+    status.state = state == MainSampleState::ready && session_.empty() ? MainSampleState::empty
+                                                                       : state;
+    status.affectedMask = affected;
+    status.text = text.empty() && status.state == MainSampleState::ready
+        ? session_.name : std::string(text);
+    if (!session_.empty()) {
+        status.sourceId = session_.sourceId;
+        status.frames = session_.frames;
+        status.sampleRate = session_.sampleRate;
+        status.slices = session_.slices;
+        const auto pads = snapshotPads();
+        for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+            const auto provenance = pads.provenance[pad];
+            const auto sliceId = static_cast<std::uint16_t>(provenance & kSliceMask);
+            if (provenance != 0U && (provenance >> 16U) == session_.sourceId &&
+                session_.find(sliceId) != nullptr)
+                status.links.push_back({pad, sliceId});
+        }
+    }
+    const auto encoded = encodeMainSampleStatus(status);
+    observer_.publishUiState(kMainSampleStatusKey, encoded.c_str());
+}
+
+void MainSampleWorkflows::publishStatus(const std::uint64_t sequence,
+    const MainSampleState state, const std::string_view text, const std::uint64_t affected)
+{
+    const std::lock_guard lock(mutationMutex_);
+    publishStatusLocked(sequence, state, text, affected);
+}
+
+std::uint64_t MainSampleWorkflows::nextSourceId(const std::uint64_t current)
+{
+    const auto clock = static_cast<std::uint64_t>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    std::uint64_t id = 0U;
+    do {
+        id = makeMainSampleSourceId(clock ^ (++sourceCounter_ * 0x9e3779b97f4a7c15ULL));
+    } while (id == current);
+    return id;
+}
+
+} // namespace midichopper::plugin

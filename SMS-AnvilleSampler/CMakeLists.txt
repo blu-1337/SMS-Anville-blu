@@ -143,6 +143,7 @@ set(ANVILLESAMPLER_DSP_SOURCES
   src/plugin/PluginControls.cpp
   src/plugin/PluginMetadata.cpp
   src/plugin/MainSampleSession.cpp
+  src/plugin/MainSampleWorkflows.cpp
   src/plugin/PadFileActions.cpp
   src/plugin/PadWorkflows.cpp
   src/plugin/StateCodec.cpp)
@@ -450,6 +451,8 @@ if(BUILD_TESTING)
 
   add_executable(anvillesampler_pad_workflow_tests
     tests/pad_workflow_tests.cpp
+    src/plugin/MainSampleSession.cpp
+    src/plugin/MainSampleWorkflows.cpp
     src/plugin/PadWorkflows.cpp
     src/plugin/PadFileActions.cpp
     src/plugin/StateCodec.cpp

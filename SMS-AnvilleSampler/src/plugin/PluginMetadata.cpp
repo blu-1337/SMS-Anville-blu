@@ -36,7 +36,14 @@ constexpr std::uint32_t kChopSnapshotDataState = kChopSnapshotRequestState + 1U;
 constexpr std::uint32_t kCaptureActionRequestState = kChopSnapshotDataState + 1U;
 constexpr std::uint32_t kPadDirectionRequestState = kCaptureActionRequestState + 1U;
 constexpr std::uint32_t kGlobalControlStateOffset = kPadDirectionRequestState + 1U;
-constexpr std::uint32_t kStateCount = kGlobalControlStateOffset + kGlobalControlStateKeys.size();
+// Main Sample keys follow the global keys. Append only; never reorder.
+constexpr std::uint32_t kMainSampleStateOffset =
+    kGlobalControlStateOffset + static_cast<std::uint32_t>(kGlobalControlStateKeys.size());
+constexpr std::uint32_t kMainSampleRequestState = kMainSampleStateOffset;
+constexpr std::uint32_t kMainPreviewRequestState = kMainSampleRequestState + 1U;
+constexpr std::uint32_t kMainSampleStatusState = kMainPreviewRequestState + 1U;
+constexpr std::uint32_t kMainSampleWaveformState = kMainSampleStatusState + 1U;
+constexpr std::uint32_t kStateCount = kMainSampleWaveformState + 1U;
 constexpr std::array<const char*, midichopper::kPadsPerBank> kPadOccupiedNames{{
     "Pad 1 Occupied", "Pad 2 Occupied", "Pad 3 Occupied", "Pad 4 Occupied", "Pad 5 Occupied", "Pad 6 Occupied", "Pad 7 Occupied", "Pad 8 Occupied",
     "Pad 9 Occupied", "Pad 10 Occupied", "Pad 11 Occupied", "Pad 12 Occupied", "Pad 13 Occupied", "Pad 14 Occupied", "Pad 15 Occupied", "Pad 16 Occupied",
@@ -305,7 +312,29 @@ void initPluginParameter(const uint32_t index, DISTRHO::Parameter& parameter,
 void initPluginState(const uint32_t index, DISTRHO::State& state,
                  const std::array<GlobalValueSettings, kGlobalValueControls.size()>& initialSettings)
 {
-    if (index >= kGlobalControlStateOffset) {
+    // Test the appended Main Sample range first; the global branch below
+    // would otherwise capture it.
+    if (index == kMainSampleRequestState) {
+        state.key = kMainSampleRequestKey;
+        state.label = "Main Sample Request";
+        state.defaultValue = "";
+        state.hints = kStateIsOnlyForDSP;
+    } else if (index == kMainPreviewRequestState) {
+        state.key = kMainPreviewRequestKey;
+        state.label = "Main Sample Preview Request";
+        state.defaultValue = "";
+        state.hints = kStateIsOnlyForDSP;
+    } else if (index == kMainSampleStatusState) {
+        state.key = kMainSampleStatusKey;
+        state.label = "Main Sample Status";
+        state.defaultValue = "";
+        state.hints = kStateIsOnlyForUI;
+    } else if (index == kMainSampleWaveformState) {
+        state.key = kMainSampleWaveformKey;
+        state.label = "Main Sample Waveform";
+        state.defaultValue = "";
+        state.hints = kStateIsOnlyForUI;
+    } else if (index >= kGlobalControlStateOffset) {
         const auto control = index - kGlobalControlStateOffset;
         state.key = kGlobalControlStateKeys[control];
         state.label = "Global Knob Settings";

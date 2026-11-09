@@ -1,11 +1,15 @@
 #include "PadWorkflows.hpp"
 #include "ChopEditorProtocol.hpp"
+#include "MainSampleWorkflows.hpp"
+#include "PadFileActions.hpp"
 #include "PadStructureProtocol.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -805,6 +809,297 @@ void splitPlanCoversAllVisibleBanks()
           "split availability is false when no later visible pad is empty");
 }
 
+
+struct MainSampleFixture {
+    SamplerEngine engine{48000, 0.001};
+    sms::audio::RealtimeCommandDispatcher dispatcher;
+    Observer observer;
+    PadWorkflows pads{engine, dispatcher, observer};
+    MainSampleWorkflows main{engine, dispatcher, observer, pads.mutationMutex()};
+    std::uint64_t sequence = 0U;
+
+    MainSampleFixture()
+    {
+        engine.setControlDispatcher(&dispatcher,
+            &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
+    }
+
+    MainSampleStatus send(MainSampleRequest request, const std::size_t expectedStatuses = 1U)
+    {
+        request.sequence = ++sequence;
+        const auto before = statusCount();
+        main.handleRequest(encodeMainSampleRequest(request));
+        check(statusCount() - before == expectedStatuses, "one status per main-sample operation");
+        return status();
+    }
+
+    [[nodiscard]] std::size_t statusCount() const
+    {
+        return static_cast<std::size_t>(std::count_if(observer.messages.begin(),
+            observer.messages.end(), [](const auto& message) {
+                return message.first == kMainSampleStatusKey;
+            }));
+    }
+
+    [[nodiscard]] MainSampleStatus status() const
+    {
+        MainSampleStatus decoded;
+        check(decodeMainSampleStatus(observer.latest(kMainSampleStatusKey), decoded),
+              "main-sample status decodes");
+        return decoded;
+    }
+
+    [[nodiscard]] std::uint64_t provenance(const std::uint32_t pad) const
+    {
+        std::array<std::uint64_t, kPadCount> tags{};
+        engine.padProvenance(tags);
+        return tags[pad];
+    }
+};
+
+MainSampleRequest mainRequest(const MainSampleVerb verb)
+{
+    MainSampleRequest request;
+    request.verb = verb;
+    return request;
+}
+
+MainSampleRequest assignRequest(const std::uint32_t pad, const std::uint32_t start,
+                                const std::uint32_t end, const bool confirm = false)
+{
+    auto request = mainRequest(MainSampleVerb::assign);
+    request.pad = pad;
+    request.start = start;
+    request.end = end;
+    request.confirm = confirm;
+    return request;
+}
+
+MainSampleRequest editRequest(const MainSampleSlice first, const MainSampleSlice second = {})
+{
+    auto request = mainRequest(MainSampleVerb::edit);
+    request.edits = {first, second};
+    request.editCount = second.id == 0U ? 1U : 2U;
+    return request;
+}
+
+std::string utf8(const std::filesystem::path& path)
+{
+    const auto text = path.u8string();
+    return {reinterpret_cast<const char*>(text.data()), text.size()};
+}
+
+/** Source sample i is (i % 512) / 1024 left and its negation right: exact in any WAV format. */
+float sourceSample(const std::uint32_t frame) { return static_cast<float>(frame % 512U) / 1024.0f; }
+
+std::filesystem::path writeSourceWav(const char* name, const std::uint32_t frames)
+{
+    sms::audio::WavAudio audio;
+    audio.sampleRate = 48000U;
+    audio.frames = frames;
+    for (std::uint32_t frame = 0; frame < frames; ++frame) {
+        audio.stereo.push_back(sourceSample(frame));
+        audio.stereo.push_back(-sourceSample(frame));
+    }
+    const auto path = std::filesystem::temp_directory_path() / name;
+    check(writePadWav(path, audio).empty(), "write main-sample source WAV");
+    return path;
+}
+
+bool padHoldsSlice(const SamplerEngine& engine, const std::uint32_t pad,
+                   const std::uint32_t start, const std::uint32_t end)
+{
+    PadData audio;
+    if (!engine.exportPublishedPad(pad, audio) || audio.frames != end - start)
+        return false;
+    for (std::uint32_t frame = 0; frame < audio.frames; ++frame) {
+        if (audio.stereo[2U * frame] != sourceSample(start + frame) ||
+            audio.stereo[2U * frame + 1U] != -sourceSample(start + frame))
+            return false;
+    }
+    return true;
+}
+
+void mainSampleLoadQueryWaveformAndClear()
+{
+    MainSampleFixture fixture;
+    auto status = fixture.send(mainRequest(MainSampleVerb::query));
+    check(status.state == MainSampleState::empty && status.sourceId == 0U && status.sequence == 1U,
+          "query reports an empty main sample");
+
+    fixture.main.handleRequest("MS1;bad");
+    status = fixture.status();
+    check(status.state == MainSampleState::error && status.sequence == 0U &&
+          status.text == "Invalid main sample request", "malformed request is reported");
+
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(std::filesystem::temp_directory_path() / "sms-missing-main-sample.wav");
+    status = fixture.send(load, 2U);
+    check(status.state == MainSampleState::error && fixture.main.session().empty() &&
+          fixture.engine.sourceInfo().id == 0U, "unreadable WAV leaves no main sample");
+
+    const auto path = writeSourceWav("sms-main-sample-workflow.wav", 1000U);
+    load.path = utf8(path);
+    status = fixture.send(load, 2U);
+    MainSampleStatus loading;
+    const auto loadingIndex = fixture.observer.messages.size() - 2U;
+    check(fixture.observer.messages[loadingIndex].first == kMainSampleStatusKey &&
+          decodeMainSampleStatus(fixture.observer.messages[loadingIndex].second, loading) &&
+          loading.state == MainSampleState::loading &&
+          loading.text == "sms-main-sample-workflow.wav", "load publishes LOADING first");
+    const auto session = fixture.main.session();
+    check(status.state == MainSampleState::ready && status.sourceId == session.sourceId &&
+          status.sourceId == fixture.engine.sourceInfo().id && status.frames == 1000U &&
+          status.sampleRate == 48000U && status.slices.empty() &&
+          status.text == "sms-main-sample-workflow.wav", "load publishes READY with the source");
+
+    auto waveform = mainRequest(MainSampleVerb::waveform);
+    waveform.start = 100U;
+    waveform.end = 900U;
+    waveform.tiles = 2U;
+    waveform.sequence = ++fixture.sequence;
+    fixture.main.handleRequest(encodeMainSampleRequest(waveform));
+    MainSampleWaveform expected;
+    expected.sequence = waveform.sequence;
+    expected.start = 100U;
+    expected.end = 900U;
+    expected.count = 2U;
+    MainSampleWaveform reply;
+    const auto published = fixture.observer.latest(kMainSampleWaveformKey);
+    check(fixture.engine.summarizeSourceRange(status.sourceId, 100U, 900U,
+              {expected.tiles.data(), 2U}) &&
+          published == encodeMainSampleWaveform(expected) &&
+          decodeMainSampleWaveform(published, reply) && reply.tiles[0].frames == 400U,
+          "waveform tiles summarize the source");
+    waveform.end = 1001U;
+    status = fixture.send(waveform);
+    check(status.state == MainSampleState::error && status.text == "Waveform unavailable" &&
+          status.sourceId == session.sourceId, "out-of-range waveform is refused");
+
+    status = fixture.send(load, 2U);
+    check(status.state == MainSampleState::ready && status.sourceId != session.sourceId,
+          "reloading assigns a new source id");
+
+    status = fixture.send(mainRequest(MainSampleVerb::clear));
+    check(status.state == MainSampleState::empty && fixture.main.session().empty() &&
+          fixture.engine.sourceInfo().id == 0U, "clear removes the main sample");
+    std::filesystem::remove(path);
+}
+
+void mainSampleAssignEditAndDelete()
+{
+    MainSampleFixture fixture;
+    auto status = fixture.send(assignRequest(0U, 0U, 10U));
+    check(status.state == MainSampleState::error && status.text == "Load a main sample first",
+          "assign needs a main sample");
+    const auto path = writeSourceWav("sms-main-sample-assign.wav", 1000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    const auto sourceId = fixture.send(load, 2U).sourceId;
+
+    status = fixture.send(assignRequest(0U, 100U, 300U));
+    check(status.state == MainSampleState::ready && status.affectedMask == 1U &&
+          status.slices.size() == 1U && status.links.size() == 1U &&
+          status.links[0].pad == 0U && status.links[0].sliceId == status.slices[0].id &&
+          padHoldsSlice(fixture.engine, 0U, 100U, 300U) &&
+          fixture.provenance(0U) == ((sourceId << 16U) | status.slices[0].id),
+          "assign cuts the slice onto an empty pad and links it");
+    checkSettingsReply(fixture.observer, fixture.engine, 0U, {}, {},
+                       "assign publishes default pad settings");
+    const auto first = status.slices[0].id;
+
+    auto playback = fixture.engine.padPlaybackSettings(0U);
+    playback.start = 0.2f;
+    playback.end = 0.8f;
+    playback.attackSeconds = 0.1f;
+    fixture.engine.setPadPlaybackSettings(0U, playback);
+    auto mixer = fixture.engine.padMixerSettings(0U);
+    mixer.gainDecibels = -6;
+    fixture.engine.setPadMixerSettings(0U, mixer);
+    const auto mixerReplies = std::count_if(fixture.observer.messages.begin(),
+        fixture.observer.messages.end(), [](const auto& message) {
+            return message.first == kPadMixerStateKeys[0];
+        });
+    status = fixture.send(editRequest({first, 150U, 350U}));
+    playback.start = 0.0f;
+    playback.end = 1.0f;
+    check(status.state == MainSampleState::ready && status.affectedMask == 1U &&
+          status.slices[0].start == 150U && status.slices[0].end == 350U &&
+          padHoldsSlice(fixture.engine, 0U, 150U, 350U) &&
+          fixture.provenance(0U) == ((sourceId << 16U) | first) &&
+          samePlayback(fixture.engine.padPlaybackSettings(0U), playback) &&
+          sameMixer(fixture.engine.padMixerSettings(0U), mixer),
+          "moving a marker re-cuts the linked pad, resets Start/End and keeps envelope and mixer");
+    sms::dsp::SamplePlaybackSettings playbackReply;
+    check(decodePlaybackSettings(
+              fixture.observer.latest(kPadEditStateKeys[0].c_str()).c_str(), playbackReply) && samePlayback(playbackReply, playback) &&
+          std::count_if(fixture.observer.messages.begin(), fixture.observer.messages.end(),
+              [](const auto& message) { return message.first == kPadMixerStateKeys[0]; }) ==
+              mixerReplies, "a re-cut publishes the editor settings only");
+
+    check(fixture.engine.importPad(1U, sample()), "seed a foreign pad");
+    status = fixture.send(assignRequest(1U, 400U, 500U));
+    check(status.state == MainSampleState::confirm && status.affectedMask == 2U &&
+          status.slices.size() == 1U && snapshotPad(fixture.engine, 1U).audio.frames == 8U,
+          "assigning over foreign audio asks first and changes nothing");
+    status = fixture.send(assignRequest(1U, 400U, 500U, true));
+    check(status.state == MainSampleState::ready && status.slices.size() == 2U &&
+          status.links.size() == 2U && padHoldsSlice(fixture.engine, 1U, 400U, 500U),
+          "a confirmed assign replaces foreign audio");
+    const auto second = status.slices[1].id;
+
+    status = fixture.send(assignRequest(0U, 0U, 50U));
+    check(status.state == MainSampleState::ready && status.slices.size() == 3U &&
+          padHoldsSlice(fixture.engine, 0U, 0U, 50U),
+          "a pad linked to this source is reassigned without confirmation");
+    const auto third = status.slices[0].id;
+    check(third != first && status.slices[1].id == first, "slices stay sorted by start");
+
+    status = fixture.send(editRequest({third, 0U, 60U}, {first, 60U, 350U}));
+    check(status.state == MainSampleState::ready && status.affectedMask == 1U &&
+          padHoldsSlice(fixture.engine, 0U, 0U, 60U),
+          "a shared boundary edit re-cuts only linked slices");
+    status = fixture.send(editRequest({999U, 0U, 10U}));
+    check(status.state == MainSampleState::error && status.text == "Invalid slice edit" &&
+          status.slices.size() == 3U, "an unknown slice is refused");
+
+    auto settings = fixture.engine.settings();
+    settings.armed = true;
+    fixture.engine.setSettings(settings);
+    status = fixture.send(editRequest({second, 450U, 550U}));
+    check(status.state == MainSampleState::error && status.text == "Pads changed, try again" &&
+          status.slices[2].start == 400U && padHoldsSlice(fixture.engine, 1U, 400U, 500U),
+          "a refused re-cut keeps the session and the pad");
+    status = fixture.send(assignRequest(2U, 0U, 10U));
+    check(status.state == MainSampleState::error && status.text == "Disarm recording first",
+          "assign is refused while armed");
+    settings.armed = false;
+    fixture.engine.setSettings(settings);
+
+    auto remove = mainRequest(MainSampleVerb::remove);
+    remove.sliceId = second;
+    status = fixture.send(remove);
+    check(status.state == MainSampleState::ready && status.affectedMask == 2U &&
+          status.slices.size() == 2U && status.links.size() == 1U &&
+          fixture.provenance(1U) == 0U && padHoldsSlice(fixture.engine, 1U, 400U, 500U),
+          "delete unlinks the pad and keeps its audio");
+    status = fixture.send(remove);
+    check(status.state == MainSampleState::error && status.text == "Slice not found",
+          "a deleted slice cannot be deleted twice");
+
+    for (std::uint32_t index = 2U; index < kMainSampleMaxSlices; ++index)
+        check(fixture.send(assignRequest(0U, index, index + 1U)).state == MainSampleState::ready,
+              "fill every slice");
+    status = fixture.send(assignRequest(0U, 900U, 901U));
+    check(status.state == MainSampleState::error && status.text == "All 64 slices are in use" &&
+          status.slices.size() == kMainSampleMaxSlices, "the 65th slice is refused");
+
+    status = fixture.send(load, 2U);
+    check(status.state == MainSampleState::ready && status.slices.empty() &&
+          status.links.empty() && padHoldsSlice(fixture.engine, 0U, 63U, 64U),
+          "a new source starts without slices; pads keep their audio");
+    std::filesystem::remove(path);
+}
 }
 
 int main()
@@ -820,5 +1115,7 @@ int main()
     chopApplyRevisionAndReplies();
     crossBankWorkflowReplies();
     splitPlanCoversAllVisibleBanks();
+    mainSampleLoadQueryWaveformAndClear();
+    mainSampleAssignEditAndDelete();
     std::cout << "Pad workflow tests passed\n";
 }

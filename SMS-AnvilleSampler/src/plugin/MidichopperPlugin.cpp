@@ -8,6 +8,7 @@
 #include "ChopEditorProtocol.hpp"
 #include "DSP/PeakMeter.hpp"
 #include "EditorSnapshotProtocol.hpp"
+#include "MainSampleWorkflows.hpp"
 #include "PadWorkflows.hpp"
 #include "PadDirectionRequest.hpp"
 #include "StateKeys.hpp"
@@ -89,7 +90,8 @@ public:
               : KnobPreference::read(KnobPreference::configPath())),
           sampler_(getSampleRate()),
           controls_(initialLayout_, initialBankMode_),
-          padWorkflows_(sampler_, controlDispatcher_, *this)
+          padWorkflows_(sampler_, controlDispatcher_, *this),
+          mainSampleWorkflows_(sampler_, controlDispatcher_, *this, padWorkflows_.mutationMutex())
     {
         sampler_.setControlDispatcher(&controlDispatcher_,
             &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
@@ -264,6 +266,11 @@ protected:
         if (std::strcmp(key, kChopSnapshotRequestKey) == 0 ||
             std::strcmp(key, kChopSnapshotDataKey) == 0)
             return String();
+        if (std::strcmp(key, kMainSampleRequestKey) == 0 ||
+            std::strcmp(key, kMainPreviewRequestKey) == 0 ||
+            std::strcmp(key, kMainSampleStatusKey) == 0 ||
+            std::strcmp(key, kMainSampleWaveformKey) == 0)
+            return String();
         return String();
     }
 
@@ -280,7 +287,8 @@ protected:
             std::strcmp(key, kPadClipboardRequestKey) == 0 ||
             std::strcmp(key, kChopApplyRequestKey) == 0 ||
             std::strcmp(key, kChopSnapshotRequestKey) == 0 ||
-            std::strcmp(key, kPadStructureRequestKey) == 0;
+            std::strcmp(key, kPadStructureRequestKey) == 0 ||
+            std::strcmp(key, kMainSampleRequestKey) == 0;
         if (transient) {
             if (value == nullptr || value[0] == '\0')
                 return;
@@ -477,6 +485,17 @@ protected:
         }
         if (std::strcmp(key, kPadStructureStatusKey) == 0)
             return;
+        if (std::strcmp(key, kMainSampleRequestKey) == 0) {
+            if (value != nullptr && value[0] != '\0')
+                mainSampleWorkflows_.handleRequest(value);
+            return;
+        }
+        // The preview mailbox is wired with the position parameter; until then
+        // a preview request is inert, like the UI-only replies.
+        if (std::strcmp(key, kMainPreviewRequestKey) == 0 ||
+            std::strcmp(key, kMainSampleStatusKey) == 0 ||
+            std::strcmp(key, kMainSampleWaveformKey) == 0)
+            return;
     }
 
     void run(const float** const inputs, float** const outputs, const uint32_t frames,
@@ -558,6 +577,17 @@ private:
             const auto status = "PS1;E;" + std::to_string(decoded ? request.planId : 0U) +
                 ";Pad action failed; retry";
             publishUiState(kPadStructureStatusKey, status.c_str());
+        } else if (std::strcmp(key, kMainSampleRequestKey) == 0) {
+            // No session here: the worker may hold the mutation mutex for a
+            // long load. ERROR never changes the session, so the UI keeps it.
+            midichopper::plugin::MainSampleRequest request;
+            static_cast<void>(midichopper::plugin::decodeMainSampleRequest(value, request));
+            midichopper::plugin::MainSampleStatus status;
+            status.sequence = request.sequence;
+            status.state = midichopper::plugin::MainSampleState::error;
+            status.text = "Main sample action failed; retry";
+            const auto encoded = midichopper::plugin::encodeMainSampleStatus(status);
+            publishUiState(kMainSampleStatusKey, encoded.c_str());
         }
     }
 
@@ -749,6 +779,7 @@ private:
     midichopper::plugin::UiMessageBus uiMessageBus_;
 #endif
     midichopper::plugin::PadWorkflows padWorkflows_;
+    midichopper::plugin::MainSampleWorkflows mainSampleWorkflows_;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidichopperPlugin)
 };

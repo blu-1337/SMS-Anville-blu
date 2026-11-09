@@ -20,6 +20,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
 using namespace midichopper::plugin;
@@ -151,6 +152,25 @@ void metadata()
         for (std::size_t j = i + 1; j < kGlobalValueControls.size(); ++j)
             check(plugin.getStateValue(kGlobalControlStateKeys[j]) == encodeGlobalValueSettings(
                 defaultGlobalValueSettings(kGlobalValueControls[j].parameter)).c_str(), "independent settings");
+    }
+
+    // Main Sample keys are appended after the global keys: earlier indices never move.
+    const std::array<std::pair<const char*, std::uint32_t>, 4> mainSampleStates{{
+        {kMainSampleRequestKey, DISTRHO::kStateIsOnlyForDSP},
+        {kMainPreviewRequestKey, DISTRHO::kStateIsOnlyForDSP},
+        {kMainSampleStatusKey, DISTRHO::kStateIsOnlyForUI},
+        {kMainSampleWaveformKey, DISTRHO::kStateIsOnlyForUI},
+    }};
+    std::uint32_t lastGlobal = plugin.getStateCount();
+    for (std::uint32_t state = 0; state < plugin.getStateCount(); ++state)
+        if (plugin.getStateKey(state) == kGlobalControlStateKeys.back()) lastGlobal = state;
+    check(lastGlobal + mainSampleStates.size() < plugin.getStateCount(), "main-sample keys follow the global keys");
+    for (std::uint32_t i = 0; i < mainSampleStates.size(); ++i) {
+        const auto state = lastGlobal + 1U + i;
+        check(plugin.getStateKey(state) == mainSampleStates[i].first &&
+              plugin.getStateHints(state) == mainSampleStates[i].second &&
+              plugin.getStateDefaultValue(state) == "" &&
+              plugin.getStateValue(mainSampleStates[i].first) == "", "transient main-sample state metadata");
     }
 }
 

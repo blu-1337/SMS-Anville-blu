@@ -47,5 +47,10 @@ inline constexpr const char* kChopMidiPreviewKey = "chop_midi_preview";
 inline constexpr const char* kPadStructureRequestKey = "pad_structure_request";
 inline constexpr const char* kPadStructureStatusKey = "pad_structure_status";
 inline constexpr const char* kPlayStopRequestKey = "play_stop_request";
+// Main Sample: one long source whose slices link to pads (Docs/AI/MAIN-SAMPLE.md).
+inline constexpr const char* kMainSampleRequestKey = "main_sample_request";
+inline constexpr const char* kMainPreviewRequestKey = "main_preview_request";
+inline constexpr const char* kMainSampleStatusKey = "main_sample_status";
+inline constexpr const char* kMainSampleWaveformKey = "main_sample_waveform";
 
 } // namespace midichopper::plugin

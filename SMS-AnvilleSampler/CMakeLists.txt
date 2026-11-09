@@ -142,6 +142,7 @@ set(ANVILLESAMPLER_DSP_SOURCES
   src/plugin/MidichopperPlugin.cpp
   src/plugin/PluginControls.cpp
   src/plugin/PluginMetadata.cpp
+  src/plugin/MainSampleSession.cpp
   src/plugin/PadFileActions.cpp
   src/plugin/PadWorkflows.cpp
   src/plugin/StateCodec.cpp)
@@ -511,6 +512,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
   add_test(NAME state-codec COMMAND anvillesampler_state_codec_tests)
+
+  add_executable(anvillesampler_main_sample_protocol_tests
+    tests/main_sample_protocol_tests.cpp
+    src/plugin/MainSampleSession.cpp)
+  target_include_directories(anvillesampler_main_sample_protocol_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../Common-Src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
+  add_test(NAME main-sample-protocol COMMAND anvillesampler_main_sample_protocol_tests)
 
   add_executable(anvillesampler_ui_geometry_tests tests/ui_geometry_tests.cpp)
   target_include_directories(anvillesampler_ui_geometry_tests PRIVATE

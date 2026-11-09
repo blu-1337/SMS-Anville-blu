@@ -79,6 +79,19 @@ counts in `anyPlaybackActive`, not toward `maxVoices`, does not stop pad
 voices, and the playback gain applies. The position is 0 when stopped,
 otherwise 1 plus frame / source frames.
 
+## Protocols
+
+[MainSampleProtocol.hpp](../../SMS-AnvilleSampler/src/plugin/MainSampleProtocol.hpp)
+holds MS1 requests (`L` path, `C`, `Q`, `S` one or two slice edits, `A` assign,
+`D` delete, `W` 1 to 4 tiles), the one-per-operation MS1 status, MW1 tiles
+(WS2 summaries) and MP1 preview commands.
+[MainSampleSession.hpp](../../SMS-AnvilleSampler/src/plugin/MainSampleSession.hpp)
+holds the slice model (at most 64 slices with ids 1 to 65535, sorted by start)
+and the durable MSS1 session and LK1 link codecs. Frames are `uint32`, like
+the engine. A path, name or message is the last field and may contain `;`.
+Names are cut to 128 bytes, and status text to 512, on UTF-8 boundaries. The
+worst-case status and four-tile waveform fit under 8191 bytes.
+
 ## Tests
 
 `main-sample-core` covers capture reuse, ranged copies, fingerprints, tags
@@ -88,4 +101,5 @@ capacity, layout, Arm), the source (capacity, collection, rebuild, ranges,
 tiles, rates, freeing) and its preview (exact one-shot, loop and rate-converted
 output, stale ids, exclusivity and every stop). `sampler-transfer` checks that
 64-pad `importPads` commits, source swaps and preview start, render and stop
-allocate and free nothing on the audio thread.
+allocate and free nothing on the audio thread. `main-sample-protocol` covers
+round-trips, malformed input, UTF-8 cuts and message sizes.

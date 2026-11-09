@@ -1,0 +1,247 @@
+// Main Sample codecs: MS1 requests/status, MW1 waveform tiles, MP1 preview,
+// MSS1 session and LK1 links, plus the session's slice model.
+#include "MainSampleProtocol.hpp"
+#include "MainSampleSession.hpp"
+
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <vector>
+
+namespace {
+using namespace midichopper::plugin;
+
+void check(const bool value, const char* const message)
+{
+    if (!value) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+MainSampleRequest roundTrip(const MainSampleRequest& request)
+{
+    MainSampleRequest decoded;
+    check(decodeMainSampleRequest(encodeMainSampleRequest(request), decoded), "request round-trip");
+    return decoded;
+}
+
+void requests()
+{
+    MainSampleRequest load;
+    load.sequence = 7U;
+    load.verb = MainSampleVerb::load;
+    load.path = "C:\\beats;2024\\song.wav";
+    auto decoded = roundTrip(load);
+    check(decoded.sequence == 7U && decoded.verb == MainSampleVerb::load &&
+          decoded.path == load.path, "a load path keeps its ';'");
+
+    MainSampleRequest edit;
+    edit.verb = MainSampleVerb::edit;
+    edit.edits = {{{3U, 0U, 100U}, {4U, 100U, 250U}}};
+    edit.editCount = 2U;
+    decoded = roundTrip(edit);
+    check(decoded.editCount == 2U && decoded.edits[0] == edit.edits[0] &&
+          decoded.edits[1] == edit.edits[1], "a shared-boundary edit carries two slices");
+
+    MainSampleRequest assign;
+    assign.verb = MainSampleVerb::assign;
+    assign.pad = 63U;
+    assign.start = 10U;
+    assign.end = 20U;
+    assign.confirm = true;
+    decoded = roundTrip(assign);
+    check(decoded.pad == 63U && decoded.start == 10U && decoded.end == 20U && decoded.confirm,
+          "assign round-trips");
+    MainSampleRequest waveform;
+    waveform.verb = MainSampleVerb::waveform;
+    waveform.start = 5U;
+    waveform.end = 9U;
+    waveform.tiles = 4U;
+    decoded = roundTrip(waveform);
+    check(decoded.tiles == 4U && decoded.start == 5U && decoded.end == 9U, "waveform round-trips");
+    MainSampleRequest remove;
+    remove.verb = MainSampleVerb::remove;
+    remove.sliceId = 65535U;
+    check(roundTrip(remove).sliceId == 65535U, "remove round-trips");
+
+    MainSampleRequest ignored;
+    for (const char* bad : {"MS1;99999999999999999999;Q", "MS1;1;Q;x", "MS1;1;C;", "MS1;1;D;5;",
+                            "MS1;1;A;3;0;10", "MS1;1;A;64;0;10;0", "MS1;1;A;3;10;10;0",
+                            "MS1;1;A;3;0;10;2", "MS1;1;W;0;10;5", "MS1;1;W;0;10;0",
+                            "MS1;1;S;1:0:5,1:5:9", "MS1;1;S;1:0:5,2:5:9,3:9:12", "MS1;1;S;",
+                            "MS1;1;S;1:0:5,", "MS1;1;D;0", "MS1;1;L;", "MS1;1;L", "MS1;1;X",
+                            "MS1;1;QQ", "MS2;1;Q", "MS1;-1;Q", "MS1;1;D;65536", "MS1;1;S;0:0:5"})
+        check(!decodeMainSampleRequest(bad, ignored), bad);
+}
+
+MainSampleStatus worstStatus()
+{
+    MainSampleStatus status;
+    status.sequence = UINT64_MAX;
+    status.state = MainSampleState::confirm;
+    status.sourceId = kMainSampleSourceIdMask;
+    status.frames = 184'320'000U;
+    status.sampleRate = 96000U;
+    for (std::uint32_t index = 0; index < kMainSampleMaxSlices; ++index) {
+        status.slices.push_back({static_cast<std::uint16_t>(65535U - index),
+                                 183'000'000U + index, 184'320'000U});
+        status.links.push_back({index, static_cast<std::uint16_t>(65535U - index)});
+    }
+    status.affectedMask = UINT64_MAX;
+    status.text = std::string(2000U, 'x');
+    return status;
+}
+
+void statuses()
+{
+    MainSampleStatus status;
+    status.sequence = 12U;
+    status.state = MainSampleState::ready;
+    status.sourceId = 0xabcdef123456ULL;
+    status.frames = 1000U;
+    status.sampleRate = 44100U;
+    status.slices = {{1U, 0U, 400U}, {2U, 400U, 1000U}};
+    status.links = {{5U, 2U}, {0U, 1U}};
+    status.affectedMask = 0x21U;
+    status.text = "song; final.wav";
+    MainSampleStatus decoded;
+    check(decodeMainSampleStatus(encodeMainSampleStatus(status), decoded) &&
+          decoded.sequence == 12U && decoded.state == MainSampleState::ready &&
+          decoded.sourceId == status.sourceId && decoded.slices == status.slices &&
+          decoded.links == status.links && decoded.affectedMask == 0x21U &&
+          decoded.text == status.text, "a status round-trips with ';' in the name");
+    MainSampleStatus empty;
+    check(decodeMainSampleStatus(encodeMainSampleStatus(empty), decoded) &&
+          decoded.state == MainSampleState::empty && decoded.slices.empty() &&
+          decoded.links.empty() && decoded.text.empty(), "an empty status round-trips");
+
+    const auto worst = encodeMainSampleStatus(worstStatus());
+    check(worst.size() < 8191U, "the worst-case status fits a UI message");
+    check(decodeMainSampleStatus(worst, decoded) && decoded.slices.size() == 64U &&
+          decoded.links.size() == 64U && decoded.text.size() == kMainSampleTextBytes,
+          "the worst-case status decodes with its text cut to 512 bytes");
+
+    for (const char* bad : {"MS1;1;READY;1;100;1:0:50;3:2;0;x", // unknown slice
+                            "MS1;1;READY;1;100;1:0:50;3:1,3:1;0;x", // duplicate pad
+                            "MS1;1;READY;1;100;1:0:150;;0;x", // slice past the end
+                            "MS1;1;DONE;1;100;;;0;x", "MS1;1;READY;1;100;;;0",
+                            "MS1;1;READY;1000000000000;100;;;0;x", "MS1;1;READY;1;100;;64:1;0;x"})
+        check(!decodeMainSampleStatus(bad, decoded), bad);
+}
+
+void waveforms()
+{
+    MainSampleWaveform waveform;
+    waveform.sequence = 3U;
+    waveform.start = 0U;
+    waveform.end = 184'320'000U;
+    waveform.count = 4U;
+    for (std::uint32_t tile = 0; tile < 4U; ++tile) {
+        waveform.tiles[tile].frames = mainSampleTileFrames(0U, 184'320'000U, 4U, tile);
+        waveform.tiles[tile].sampleRate = 96000.0;
+        waveform.tiles[tile].minimum.fill(-0.5f);
+        waveform.tiles[tile].maximum.fill(0.5f);
+    }
+    const auto encoded = encodeMainSampleWaveform(waveform);
+    check(encoded.size() < 8191U, "four worst-case tiles fit a UI message");
+    MainSampleWaveform decoded;
+    check(decodeMainSampleWaveform(encoded, decoded) && decoded.count == 4U &&
+          decoded.tiles[3].frames == waveform.tiles[3].frames &&
+          decoded.tiles[2].maximum[7] > 0.49f, "waveform tiles round-trip");
+    waveform.count = 3U;
+    check(!decodeMainSampleWaveform(encodeMainSampleWaveform(waveform), decoded),
+          "tiles must split the range exactly");
+    check(!decodeMainSampleWaveform(encoded.substr(0U, encoded.rfind(";WS2;")), decoded),
+          "a missing tile is refused");
+    check(!decodeMainSampleWaveform(encoded + ";WS2;0;1;2;", decoded), "an extra tile is refused");
+    check(!decodeMainSampleWaveform("MW1;1;0;10;1", decoded), "tiles are required");
+}
+
+void previews()
+{
+    const SourcePreviewRequest play{true, true, 0x123456789abcULL, 10U, 4000U};
+    SourcePreviewRequest decoded;
+    check(decodeSourcePreviewRequest(encodeSourcePreviewRequest(play), decoded) && decoded.play &&
+          decoded.loop && decoded.sourceId == play.sourceId && decoded.start == 10U &&
+          decoded.end == 4000U, "a play request round-trips");
+    check(decodeSourcePreviewRequest(encodeSourcePreviewRequest({}), decoded) && !decoded.play,
+          "a stop needs no range");
+    for (const char* bad : {"MP1;1;0;0;0;10", "MP1;1;0;5;10;10", "MP1;2;0;5;0;10",
+                            "MP1;0;0;0;0;0;", "MP1;0;0;0;0", "MP1;0;0;1000000000000;0;0"})
+        check(!decodeSourcePreviewRequest(bad, decoded), bad);
+}
+
+void sessions()
+{
+    MainSampleSession session;
+    check(encodeMainSampleSession(session).empty(), "an empty session encodes as clear");
+    // 127 ASCII bytes then a two-byte character: the cut must not split it.
+    session.reset(0xfeedULL, 48000U, 48000U, std::string(127U, 'a') + "\xC3\xA9;x");
+    check(session.name == std::string(127U, 'a'), "names are cut on a UTF-8 boundary");
+    session.reset(0xfeedULL, 48000U, 48000U, "drums; take 2 \xE2\x82\xAC");
+    MainSampleSlice first, second, third;
+    check(session.addSlice(1000U, 2000U, first) && session.addSlice(0U, 1000U, second) &&
+          first.id == 1U && second.id == 2U && session.slices.front().id == 2U,
+          "new slices get fresh ids and stay sorted");
+    check(!session.addSlice(10U, 10U, third) && !session.addSlice(0U, 48001U, third),
+          "bad slice ranges are refused");
+    const std::vector<MainSampleSlice> bad{{1U, 900U, 2000U}, {2U, 0U, 48001U}};
+    check(!session.editSlices(bad) && session.find(1U)->start == 1000U,
+          "a two-slice edit is all-or-nothing");
+    const std::vector<MainSampleSlice> moved{{1U, 900U, 2000U}, {2U, 0U, 900U}};
+    check(session.editSlices(moved) && session.find(2U)->end == 900U, "a shared boundary moves");
+
+    MainSampleSession decoded;
+    check(decodeMainSampleSession(encodeMainSampleSession(session), decoded) &&
+          decoded.sourceId == 0xfeedULL && decoded.frames == 48000U &&
+          decoded.nextSliceId == 3U && decoded.slices == session.slices &&
+          decoded.name == session.name, "MSS1 round-trips with ';' and UTF-8 in the name");
+    check(session.removeSlice(1U) && !session.removeSlice(1U) && session.slices.size() == 1U,
+          "slices can be removed once");
+
+    session.nextSliceId = 65535U;
+    check(session.addSlice(0U, 5U, third) && third.id == 65535U && session.nextSliceId == 1U &&
+          session.addSlice(5U, 9U, third) && third.id == 1U, "ids wrap past 65535");
+    check(session.addSlice(9U, 12U, third) && third.id == 3U, "ids in use are skipped");
+    while (session.slices.size() < kMainSampleMaxSlices)
+        check(session.addSlice(0U, 1U, third), "fill the session");
+    check(!session.addSlice(0U, 1U, third), "a session holds at most 64 slices");
+
+    for (const char* bad : {"MSS1;0;100;48000;1;;x", "MSS1;1;0;48000;1;;x", "MSS1;1;100;1;1;;x",
+                            "MSS1;1;100;48000;0;;x", "MSS1;1;100;48000;1;2:50:60,1:0:10;x",
+                            "MSS1;1;100;48000;1;1:0:200;x", "MSS1;1;100;48000;1;", "MSS1;1;100"})
+        check(!decodeMainSampleSession(bad, decoded), bad);
+}
+
+void links()
+{
+    const std::vector<MainSampleLinkRecord> records{
+        {0U, (0xfeedULL << 16U) | 1U, 1000U, 0x0123456789abcdefULL},
+        {63U, (0xfeedULL << 16U) | 2U, 7U, 0U}};
+    std::vector<MainSampleLinkRecord> decoded;
+    check(decodeMainSampleLinks(encodeMainSampleLinks(records), decoded) && decoded == records,
+          "LK1 round-trips");
+    check(decodeMainSampleLinks("LK1;", decoded) && decoded.empty(), "LK1 may hold no links");
+    for (const char* bad : {"LK1;0:1:5:9,0:2:5:9", "LK1;0:0:5:9", "LK1;64:1:5:9", "LK1;0:1:0:9",
+                            "LK1;0:1:5:9,", "LK1;0:1:5", "LK1;0:1:5:9:1", "LK0;0:1:5:9"})
+        check(!decodeMainSampleLinks(bad, decoded), bad);
+    const auto a = makeMainSampleSourceId(1U);
+    const auto b = makeMainSampleSourceId(2U);
+    check(a != 0U && b != 0U && a != b && a <= kMainSampleSourceIdMask &&
+          b <= kMainSampleSourceIdMask, "source ids are distinct nonzero 48-bit values");
+}
+
+} // namespace
+
+int main()
+{
+    requests();
+    statuses();
+    waveforms();
+    previews();
+    sessions();
+    links();
+    std::cout << "main sample protocol tests passed\n";
+    return 0;
+}

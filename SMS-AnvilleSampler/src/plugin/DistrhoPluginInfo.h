@@ -17,7 +17,7 @@
 #define DISTRHO_PLUGIN_VST3_CATEGORIES "Instrument|Sampler|Stereo"
 #define DISTRHO_PLUGIN_CLAP_FEATURES   "instrument", "sampler", "stereo"
 #define DISTRHO_PLUGIN_NUM_INPUTS      2
-#define DISTRHO_PLUGIN_NUM_OUTPUTS     2
+#define DISTRHO_PLUGIN_NUM_OUTPUTS     34 // main pair plus 16 auxiliary stereo pairs
 #define DISTRHO_PLUGIN_WANT_MIDI_INPUT 1
 #define DISTRHO_PLUGIN_WANT_PARAMETER_VALUE_CHANGE_REQUEST 1
 #define DISTRHO_PLUGIN_WANT_STATE      1

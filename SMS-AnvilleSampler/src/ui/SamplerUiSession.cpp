@@ -1040,6 +1040,18 @@ void SamplerUiSession::cycleSampleChokeGroup()
     fHost.repaintUi();
 }
 
+void SamplerUiSession::cycleSampleOutput()
+{
+    if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
+        fState.mixerSettingsPad != fState.selectedPad)
+        return;
+    auto settings = fState.mixerSettings;
+    settings.outputBus = std::fmod(std::round(settings.outputBus) + 1.0f,
+                                   static_cast<float>(sms::dsp::kAuxOutputCount + 1));
+    commitMixerSettings(settings);
+    fHost.repaintUi();
+}
+
 void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &settings)
 {
     fState.mixerSettings = sms::dsp::sanitize(settings);

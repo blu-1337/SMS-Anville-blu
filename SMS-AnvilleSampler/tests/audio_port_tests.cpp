@@ -29,8 +29,8 @@ int main()
     plugin.setOffline(false);
     check(!instance->isOffline(), "returning to realtime clears the offline host signal");
 
-    check(DISTRHO_PLUGIN_NUM_INPUTS == 2 && DISTRHO_PLUGIN_NUM_OUTPUTS == 2,
-          "all formats retain two audio inputs and two audio outputs");
+    check(DISTRHO_PLUGIN_NUM_INPUTS == 2 && DISTRHO_PLUGIN_NUM_OUTPUTS == 34,
+          "two audio inputs; main stereo output plus 16 auxiliary stereo outputs");
     for (const bool input : {true, false}) {
         for (uint32_t channel = 0; channel < 2; ++channel) {
             const auto& port = plugin.getAudioPort(input, channel);
@@ -49,5 +49,17 @@ int main()
 #endif
         }
     }
+    for (uint32_t index = 2; index < DISTRHO_PLUGIN_NUM_OUTPUTS; ++index) {
+        const auto& port = plugin.getAudioPort(false, index);
+        check(port.groupId == 1U + (index - 2U) / 2U, "each auxiliary output pair is its own group");
+        check((port.hints & kAudioPortIsCV) == 0, "auxiliary outputs carry ordinary audio");
+#ifdef ANVILLESAMPLER_VST3
+        check((port.hints & kAudioPortIsSidechain) != 0,
+              "VST3 auxiliary outputs are aux buses, so hosts leave them inactive by default");
+#endif
+    }
+    check(std::string_view(plugin.getAudioPort(false, 2).symbol.buffer()) == "out1_l" &&
+          std::string_view(plugin.getAudioPort(false, 33).symbol.buffer()) == "out16_r",
+          "auxiliary port symbols are out1_l .. out16_r");
     std::cout << "Audio port metadata tests passed\n";
 }

@@ -542,17 +542,23 @@ void mixerStateRoundTrip()
     original.dirty = 1.0f;
     original.reverse = 1.0f;
     original.chokeGroup = 5.0f;
+    original.outputBus = 3.0f;
     const std::string encoded = midichopper::plugin::encodeMixerSettings(original);
-    check(encoded.rfind("MX5;", 0U) == 0U, "mixer settings use the MX5 state version");
+    check(encoded.rfind("MX6;", 0U) == 0U, "mixer settings use the MX6 state version");
     sms::dsp::SampleMixerSettings decoded;
     check(midichopper::plugin::decodeMixerSettings(encoded.c_str(), decoded),
           "sample mixer settings decode");
-    check(decoded.chokeGroup == 5.0f, "choke group round-trips");
+    check(decoded.chokeGroup == 5.0f && decoded.outputBus == 3.0f,
+          "choke group and output bus round-trip");
     sms::dsp::SampleMixerSettings other;
     check(midichopper::plugin::decodeMixerSettings("MX4;0;0;0;0;0;0;0;0;1", other) &&
               other.chokeGroup == 0.0f, "MX4 states decode with the choke group Off");
-    check(midichopper::plugin::decodeMixerSettings("MX5;0;0;0;0;0;0;0;0;1;99", other) &&
-              other.chokeGroup == 8.0f, "choke group is clamped to 8");
+    check(midichopper::plugin::decodeMixerSettings("MX5;0;0;0;0;0;0;0;0;1;4", other) &&
+              other.chokeGroup == 4.0f && other.outputBus == 0.0f,
+          "MX5 states decode with the output on Main");
+    check(midichopper::plugin::decodeMixerSettings("MX6;0;0;0;0;0;0;0;0;1;99;99", other) &&
+              other.chokeGroup == 8.0f && other.outputBus == 16.0f,
+          "choke group and output bus are clamped");
     check(std::abs(decoded.gainDecibels - original.gainDecibels) < 1.0e-6f,
           "mixer gain round-trips");
     check(std::abs(decoded.pan - original.pan) < 1.0e-6f,

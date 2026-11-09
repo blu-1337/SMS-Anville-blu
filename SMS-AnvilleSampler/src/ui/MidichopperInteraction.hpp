@@ -76,6 +76,7 @@ enum class InteractiveType : int {
     globalDirection,
     padGlobalMixer,
     padChoke,
+    padOutput,
     menuReset,
     valueModeItem,
     globalSettingsGroup,
@@ -695,6 +696,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::padGlobalMixer);
         if (uiLayout::padChoke.contains(point))
             return target(InteractiveType::padChoke);
+        if (uiLayout::padOutput.contains(point))
+            return target(InteractiveType::padOutput);
         for (int slider = 0; slider < 7; ++slider) {
             if (slider != 5 && uiLayout::mixerValueLabel(slider).contains(point))
                 return target(InteractiveType::mixerValueLabel, slider);

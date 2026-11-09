@@ -942,13 +942,27 @@ void SamplerEngine::process(const float* inputLeft, const float* inputRight,
         if (activePad_ >= 0) writeRecordFrame(frame, inL, inR);
         float outL = 0.0f;
         float outR = 0.0f;
+        float auxL[kAuxOutputCount]{};
+        float auxR[kAuxOutputCount]{};
         for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
             auto& p = pads_[pad];
             if (!p.voice.playing()) continue;
             const auto frameCount = p.publishedFrames.load(std::memory_order_acquire);
             const auto sourceRate = p.sourceSampleRate.load(std::memory_order_relaxed);
-            if (!p.voice.render(storagePool_, p.storage, frameCount, sourceRate, outL, outR))
+            // A pad routed to Out N renders into that bus instead of the main mix.
+            // Without auxiliary buffers (tests, other hosts) it falls back to main.
+            const auto bus = auxOutputs_ != nullptr
+                ? static_cast<std::uint32_t>(p.mixerOutputBus.load(std::memory_order_relaxed)) : 0U;
+            float& destL = bus > 0U && bus <= kAuxOutputCount ? auxL[bus - 1U] : outL;
+            float& destR = bus > 0U && bus <= kAuxOutputCount ? auxR[bus - 1U] : outR;
+            if (!p.voice.render(storagePool_, p.storage, frameCount, sourceRate, destL, destR))
                 p.publishedPlaying.store(false, std::memory_order_release);
+        }
+        if (auxOutputs_ != nullptr) {
+            for (std::uint32_t bus = 0; bus < kAuxOutputCount; ++bus) {
+                auxOutputs_[bus * 2U][frame] = auxL[bus] * settings_.gain;
+                auxOutputs_[bus * 2U + 1U][frame] = auxR[bus] * settings_.gain;
+            }
         }
         mixChopPreview(outL, outR);
         mixSourcePreview(outL, outR);
@@ -2070,6 +2084,7 @@ sms::dsp::SampleMixerSettings SamplerEngine::padMixerSettings(
         p.mixerReverse.load(std::memory_order_acquire),
         p.mixerGlobalMixer.load(std::memory_order_acquire),
         p.mixerChokeGroup.load(std::memory_order_acquire),
+        p.mixerOutputBus.load(std::memory_order_acquire),
     });
 }
 
@@ -2091,7 +2106,8 @@ void SamplerEngine::setPadMixerSettingsDirect(
         p.mixerDirty.load(std::memory_order_acquire) != settings.dirty ||
         p.mixerReverse.load(std::memory_order_acquire) != settings.reverse ||
         p.mixerGlobalMixer.load(std::memory_order_acquire) != settings.globalMixer ||
-        p.mixerChokeGroup.load(std::memory_order_acquire) != settings.chokeGroup;
+        p.mixerChokeGroup.load(std::memory_order_acquire) != settings.chokeGroup ||
+        p.mixerOutputBus.load(std::memory_order_acquire) != settings.outputBus;
     // Bypassing the master changes only its contribution to direction. Keep
     // the latched local direction, current source position, and envelope.
     if (redirectGlobal && settings_.reverse &&
@@ -2107,6 +2123,7 @@ void SamplerEngine::setPadMixerSettingsDirect(
     p.mixerReverse.store(settings.reverse, std::memory_order_release);
     p.mixerGlobalMixer.store(settings.globalMixer, std::memory_order_release);
     p.mixerChokeGroup.store(settings.chokeGroup, std::memory_order_release);
+    p.mixerOutputBus.store(settings.outputBus, std::memory_order_release);
     if (changed)
         p.generation.fetch_add(1U, std::memory_order_release);
 }

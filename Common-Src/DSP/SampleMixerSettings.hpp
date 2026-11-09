@@ -14,6 +14,7 @@ inline constexpr float kMaximumTuneSemitones = 24.0f;
 inline constexpr float kMinimumFilterAmount = 0.0f;
 inline constexpr float kMaximumFilterAmount = 1.0f;
 inline constexpr int kChokeGroupCount = 8;
+inline constexpr int kAuxOutputCount = 16; // pad outputs 1..16 after Main (0)
 
 /** Per-sample level, balance, varispeed, color, direction, and global routing. */
 struct SampleMixerSettings {
@@ -27,6 +28,7 @@ struct SampleMixerSettings {
     float reverse = 0.0f;
     float globalMixer = 1.0f;
     float chokeGroup = 0.0f; // 0 = off, 1..8 = pads in one group cut each other
+    float outputBus = 0.0f;  // 0 = main stereo out, 1..16 = auxiliary stereo out
 };
 
 [[nodiscard]] inline SampleMixerSettings sanitize(SampleMixerSettings value) noexcept
@@ -52,6 +54,8 @@ struct SampleMixerSettings {
     value.globalMixer = finiteOr(value.globalMixer, 1.0f) >= 0.5f ? 1.0f : 0.0f;
     value.chokeGroup = std::clamp(std::round(finiteOr(value.chokeGroup, 0.0f)), 0.0f,
                                   static_cast<float>(kChokeGroupCount));
+    value.outputBus = std::clamp(std::round(finiteOr(value.outputBus, 0.0f)), 0.0f,
+                                 static_cast<float>(kAuxOutputCount));
     return value;
 }
 

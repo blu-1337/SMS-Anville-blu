@@ -24,7 +24,7 @@ Read [AGENTS.md](../../AGENTS.md), then the relevant row.
 | DPF host integration | [DPF VST3 constraints](DPF-VST3-CONSTRAINTS.md) | Offline mode, state, ports |
 | Skins and artwork | [Skin guide](../../SMS-AnvilleSampler/Docs/SKINS.md), [Authoring](SKINS.md), [Additional skins](../../SMS-AnvilleSampler/additional-skins/README.md) | [Catalog](../../Common-UI/SkinCatalog.hpp), [Theme adapter](../../Common-UI/DPF/SkinTheme.hpp) |
 | User-visible behavior | [Plugin guide](../../SMS-AnvilleSampler/README.md), [REAPER guide](../../SMS-AnvilleSampler/Docs/REAPER.md) | Verify against affected source/tests |
-| User mixing controls | [Mixing guide](../../SMS-AnvilleSampler/Docs/MIXING.md), [Choke](CHOKE-GROUPS.md) | Pad and global effects |
+| User mixing controls | [Mixing guide](../../SMS-AnvilleSampler/Docs/MIXING.md), [Choke](CHOKE-GROUPS.md), [Multi-out](MULTI-OUT.md) | Pad and global effects |
 | User WAV workflow | [WAV file guide](../../SMS-AnvilleSampler/Docs/WAV-FILES.md) | Formats, Linux requirements |
 | User cut-point workflow | [Adjust cut points](../../SMS-AnvilleSampler/Docs/CHOP-EDITOR.md) | Saving, cancellation, splits |
 | Human overview/review | [README](../../README.md), [Architecture](../ARCHITECTURE.md) | Components and review |

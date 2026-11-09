@@ -166,7 +166,7 @@ void pluginIdentity()
     constexpr std::array<std::string_view, 3> clapFeatures{DISTRHO_PLUGIN_CLAP_FEATURES};
     check(clapFeatures == std::array<std::string_view, 3>{"instrument", "sampler", "stereo"},
           "CLAP advertises a stereo sampler instrument");
-    check(DISTRHO_PLUGIN_NUM_INPUTS == 2 && DISTRHO_PLUGIN_NUM_OUTPUTS == 2 &&
+    check(DISTRHO_PLUGIN_NUM_INPUTS == 2 && DISTRHO_PLUGIN_NUM_OUTPUTS == 34 &&
           DISTRHO_PLUGIN_WANT_MIDI_INPUT == 1,
           "instrument classification preserves stereo live capture and MIDI playback ports");
     check(std::string_view(DISTRHO_PLUGIN_NAME) == "SMS-Anville Sampler",

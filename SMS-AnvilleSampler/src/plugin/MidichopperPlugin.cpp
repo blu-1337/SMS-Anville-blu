@@ -167,10 +167,32 @@ protected:
         if (input)
             port.hints |= kAudioPortIsSidechain;
 #endif
+        if (!input && index >= 2U) {
+            // Outputs 3..34 are 16 auxiliary stereo pairs (pad Output 1..16).
+            const uint32_t bus = (index - 2U) / 2U;
+            const bool left = (index & 1U) == 0U;
+            port.groupId = 1U + bus;
+#ifdef ANVILLESAMPLER_VST3
+            port.hints |= kAudioPortIsSidechain; // VST3 aux bus, inactive until the host enables it
+#endif
+            port.name = String("Out ") + String(bus + 1U) + (left ? " L" : " R");
+            port.symbol = String("out") + String(bus + 1U) + (left ? "_l" : "_r");
+            return;
+        }
         port.name = input ? (index == 0 ? "Input Left" : "Input Right")
                           : (index == 0 ? "Output Left" : "Output Right");
         port.symbol = input ? (index == 0 ? "in_l" : "in_r")
                             : (index == 0 ? "out_l" : "out_r");
+    }
+
+    void initPortGroup(const uint32_t groupId, PortGroup& portGroup) override
+    {
+        if (groupId >= 1U && groupId <= 16U) {
+            portGroup.name = String("Out ") + String(groupId);
+            portGroup.symbol = String("out") + String(groupId);
+            return;
+        }
+        Plugin::initPortGroup(groupId, portGroup);
     }
 
     void initParameter(const uint32_t index, DISTRHO::Parameter& parameter) override
@@ -539,6 +561,8 @@ protected:
             inputMeter_.process(inputs[0], inputs[1], frames, getSampleRate());
             std::fill_n(outputs[0], frames, 0.0f);
             std::fill_n(outputs[1], frames, 0.0f);
+            for (uint32_t aux = 2U; aux < DISTRHO_PLUGIN_NUM_OUTPUTS; ++aux)
+                std::fill_n(outputs[aux], frames, 0.0f);
             outputMeter_.process(outputs[0], outputs[1], frames, getSampleRate());
             updateMeterOutputParameters();
             return;
@@ -554,8 +578,10 @@ protected:
 
         activateAllBanksMidiBank(midiEvents, midiEventCount, frames);
         HostMidiCursor cursor{midiEvents, midiEventCount, frames};
+        sampler_.setAuxOutputs(outputs + 2);
         sampler_.process(inputs[0], inputs[1], outputs[0], outputs[1], frames,
             midichopper::MidiEventSource{&cursor, &HostMidiCursor::next});
+        sampler_.setAuxOutputs(nullptr);
         // The output tap follows monitoring, pad voices, envelopes, and gain.
         outputMeter_.process(outputs[0], outputs[1], frames, getSampleRate());
         updateMeterOutputParameters();

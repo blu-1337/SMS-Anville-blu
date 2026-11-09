@@ -160,6 +160,9 @@ public:
     { return storagePool_.captureAllocationFailed(); }
     /** Audio owner: true only for a host-declared offline render. */
     void setOffline(bool offline) noexcept { storagePool_.setOffline(offline); }
+    /** Audio owner: 2 * kAuxOutputCount host buffers (L,R per bus) valid for the next
+     * process() calls, or nullptr to route every pad to the main output. */
+    void setAuxOutputs(float* const* buffers) noexcept { auxOutputs_ = buffers; }
     void reset() noexcept;
     void setSettings(const EngineSettings& settings) noexcept;
     [[nodiscard]] EngineSettings settings() const noexcept { return settings_; }
@@ -462,6 +465,7 @@ private:
         std::atomic<float> mixerReverse{0.0f};
         std::atomic<float> mixerGlobalMixer{1.0f};
         std::atomic<float> mixerChokeGroup{0.0f};
+        std::atomic<float> mixerOutputBus{0.0f};
         Pad() = default;
         Pad(const Pad&) = delete;
         Pad& operator=(const Pad&) = delete;
@@ -521,6 +525,7 @@ private:
                     std::int16_t triggerNote = -1) noexcept;
     void stopVoice(std::uint32_t pad) noexcept;
     void chokeGroupMembers(std::uint32_t pad) noexcept;
+    float* const* auxOutputs_ = nullptr;
     void hardStopVoice(std::uint32_t pad) noexcept;
     void refreshActiveVoiceSettings(std::uint32_t pad) noexcept;
     void updatePlaybackPositionOutput(std::uint32_t processedFrames) noexcept;

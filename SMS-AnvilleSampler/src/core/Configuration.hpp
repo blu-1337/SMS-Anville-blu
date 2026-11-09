@@ -14,6 +14,8 @@ inline constexpr std::array<std::uint8_t, 3> kPadsPerBankByLayout{16U, 12U, 8U};
 inline constexpr std::uint32_t kPadLayoutCount = kPadsPerBankByLayout.size();
 /** Linear fade applied to a voice cut by another pad in its choke group. */
 inline constexpr double kChokeFadeSeconds = 0.005;
+/** Auxiliary stereo outputs after the main pair (pad Output setting 1..16). */
+inline constexpr std::uint32_t kAuxOutputCount = 16U;
 
 enum class MidiBankMode : std::uint8_t { SelectedBank, AllBanks };
 inline constexpr std::uint32_t kMidiBankModeCount = 2U;

@@ -40,13 +40,18 @@ Audio process(PluginExporter& plugin, const Audio& input, const std::uint32_t fr
 {
     Audio output{};
     const float* inputs[]{input[0].data(), input[1].data()};
-    float* outputs[]{output[0].data(), output[1].data()};
+    std::array<std::array<float, kFrames>, DISTRHO_PLUGIN_NUM_OUTPUTS - 2> auxiliary{};
+    std::array<float*, DISTRHO_PLUGIN_NUM_OUTPUTS> outputs{};
+    outputs[0] = output[0].data();
+    outputs[1] = output[1].data();
+    for (std::size_t index = 0U; index < auxiliary.size(); ++index)
+        outputs[index + 2U] = auxiliary[index].data();
     DISTRHO::MidiEvent note{};
     note.size = 3U;
     note.data[0] = 0x90U;
     note.data[1] = midichopper::kDefaultBaseMidiNote;
     note.data[2] = 127U;
-    plugin.run(inputs, outputs, frames, trigger ? &note : nullptr, trigger ? 1U : 0U);
+    plugin.run(inputs, outputs.data(), frames, trigger ? &note : nullptr, trigger ? 1U : 0U);
     return output;
 }
 

@@ -2818,6 +2818,55 @@ void choke_groups()
     check(reverseDirection[40] == choked[40], "choke: group number does not matter");
 }
 
+void multi_output_routing()
+{
+    using namespace midichopper;
+    const auto run = [](const float bus, const bool withAux, std::vector<float>& main,
+                        std::vector<float>& aux3) {
+        SamplerEngine engine(1000.0, 1.0);
+        auto settings = engine.settings();
+        settings.monitorInput = false;
+        settings.playbackMode = PlaybackMode::Hold;
+        engine.setSettings(settings);
+        PadData source;
+        source.sampleRate = 1000.0;
+        source.frames = 50U;
+        source.stereo.assign(100U, 1.0f);
+        check(engine.importPad(0U, source), "routing import");
+        sms::dsp::SampleMixerSettings mixer;
+        mixer.outputBus = bus;
+        engine.setPadMixerSettings(0U, mixer);
+        std::vector<float> buffers(32U * 20U, 9.0f);
+        std::array<float*, 32> pointers{};
+        for (std::size_t index = 0U; index < pointers.size(); ++index)
+            pointers[index] = buffers.data() + index * 20U;
+        if (withAux)
+            engine.setAuxOutputs(pointers.data());
+        const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
+        std::vector<float> left(20U), right(20U);
+        engine.process(nullptr, nullptr, left.data(), right.data(), 20U, &on, 1U);
+        main = left;
+        aux3.assign(buffers.begin() + 4 * 20, buffers.begin() + 5 * 20);
+        if (withAux) {
+            bool others = true;
+            for (std::size_t index = 0U; index < pointers.size(); ++index)
+                if (index != 4U && index != 5U) {
+                    for (std::size_t frame = 0U; frame < 20U; ++frame)
+                        others = others && buffers[index * 20U + frame] == 0.0f;
+                }
+            check(others, "routing: unused auxiliary buses are written silent");
+        }
+    };
+    std::vector<float> main, aux;
+    run(0.0f, true, main, aux);
+    check(main[10] > 0.0f && aux[10] == 0.0f, "routing: Main pad stays on the main output");
+    const auto mainLevel = main[10];
+    run(3.0f, true, main, aux);
+    check(main[10] == 0.0f && aux[10] == mainLevel, "routing: Out 3 pad is silent on main, present on bus 3");
+    run(3.0f, false, main, aux);
+    check(main[10] == mainLevel, "routing: without auxiliary buffers the pad plays on main");
+}
+
 void pad_audition_lifecycle()
 {
     using namespace midichopper;
@@ -3666,6 +3715,7 @@ int main() {
     reverse_boundaries_and_envelopes();
     independent_pad_audition();
     choke_groups();
+    multi_output_routing();
     pad_audition_lifecycle();
     arm_stops_hold_without_interrupting_capture();
     sample_mixer_and_varispeed();

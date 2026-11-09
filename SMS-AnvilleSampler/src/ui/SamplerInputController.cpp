@@ -210,6 +210,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fSession.toggleSampleGlobalMixer();
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::padOutput)) {
+                fSession.cycleSampleOutput();
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::padChoke)) {
                 fSession.cycleSampleChokeGroup();
                 return true;

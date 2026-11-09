@@ -265,6 +265,28 @@ void drawChokeSelector(const ViewRenderContext& ctx)
     text(ctx, bounds.x + bounds.width * 0.5f, uiLayout::mixerKnob(4).y - 1.0f, "CHOKE", nullptr);
 }
 
+void drawOutputSelector(const ViewRenderContext& ctx)
+{
+    const auto& colors = sms::ui::dpf::theme();
+    const auto bounds = uiLayout::padOutput;
+    const int bus = static_cast<int>(ctx.state.mixerSettings.outputBus + 0.5f);
+    drawToggleFrame(ctx, bounds, InteractiveType::padOutput);
+    char label[8];
+    if (bus > 0)
+        std::snprintf(label, sizeof(label), "OUT %d", bus);
+    else
+        std::snprintf(label, sizeof(label), "MAIN");
+    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    ctx.canvas.fontSize(13.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    ctx.canvas.fillColor(bus > 0 ? colors.controlAccent : colors.contentSecondary.withAlpha(0.5f));
+    text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f, label, nullptr);
+    ctx.canvas.fontSize(9.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
+    ctx.canvas.fillColor(colors.contentSecondary);
+    text(ctx, bounds.x + bounds.width * 0.5f, bounds.y - 15.0f, "OUTPUT", nullptr);
+}
+
 void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
                      const InteractiveType type, const float slope)
 {

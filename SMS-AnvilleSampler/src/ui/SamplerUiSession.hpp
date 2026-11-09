@@ -133,6 +133,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void toggleSampleGlobalMixer();
     /** Cycles the selected pad's choke group Off, 1..8, Off. */
     void cycleSampleChokeGroup();
+    /** Cycles the selected pad's output Main, Out 1..16, Main. */
+    void cycleSampleOutput();
 
   private:
     [[nodiscard]] static int clampPad(float value);

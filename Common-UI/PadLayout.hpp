@@ -37,18 +37,17 @@ public:
         return visiblePadCount() / columns();
     }
 
+    /** Pads read like text: number 01 is top-left, then left to right, then down. */
     [[nodiscard]] constexpr int visualIndex(const int localPad) const noexcept
     {
-        const int rowFromBottom = localPad / columns();
-        return (rows() - rowFromBottom - 1) * columns() + localPad % columns();
+        return localPad;
     }
 
     [[nodiscard]] constexpr int localIndex(const int visualIndex) const noexcept
     {
         if (visualIndex < 0 || visualIndex >= visiblePadCount())
             return -1;
-        const int rowFromTop = visualIndex / columns();
-        return (rows() - rowFromTop - 1) * columns() + visualIndex % columns();
+        return visualIndex;
     }
 
     [[nodiscard]] constexpr PadGridLayout grid(const Rect bounds, const float gap) const noexcept

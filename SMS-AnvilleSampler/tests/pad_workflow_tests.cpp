@@ -1209,6 +1209,18 @@ void autoChopWorkflow()
     check(autoChopStatusCount(fixture) > 0U && fixture.observer.latest(kAutoChopStatusKey).find("ERROR") !=
           std::string::npos, "malformed auto-chop request is reported");
     std::filesystem::remove(path);
+
+    // Eight slices land on pads 01..08 in number order.
+    AutoChopRequest eight = equal;
+    eight.count = 8U;
+    eight.firstPad = 0U;
+    status = autoChop(fixture, eight);
+    session = fixture.main.session();
+    check(status.state == AutoChopState::ok && status.mask == 0xffU && session.slices.size() == 8U,
+          "eight slices fill pads 01..08");
+    for (std::uint32_t index = 0; index < 8U; ++index)
+        check((fixture.provenance(index) & 0xffffU) == session.slices[index].id,
+              "slice N lands on the pad labelled N");
 }
 
 int main()

@@ -58,7 +58,7 @@ remain headers.
   stereo LED geometry/level mapping and its NanoVG renderer; optional channel
   spacing leaves room for an overlaid fader.
 - `DPF/WaveformRenderer.hpp`: waveform, region, and ADSR drawing.
-- `PadLayout.hpp`: visible-pad counts, bottom-up index mapping, and grid geometry.
+- `PadLayout.hpp`: visible-pad counts, reading-order index mapping, and grid geometry.
 - `WaveformEditor.hpp`: renderer-independent waveform geometry, hit testing,
   value mapping, and drag behavior.
 - `WaveformViewport.hpp`: frame-range zoom, pan, source-to-screen mapping, and

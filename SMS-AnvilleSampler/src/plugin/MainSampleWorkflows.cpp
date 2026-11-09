@@ -625,8 +625,15 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
         regions = sms::analysis::randomSlices(context, want, beats, request.seed, request.snap);
         break;
     }
-    const auto targetCount = std::min<std::size_t>(
-        {regions.size(), want, static_cast<std::size_t>(kPadCount - request.firstPad)});
+    // Slices follow pad numbers across the visible sequence, skipping hidden slots.
+    const auto padFor = [&](const std::size_t index) noexcept {
+        return advanceVisiblePad(request.firstPad, static_cast<std::uint32_t>(index),
+                                 settings.padsPerBank, settings.midiBankMode);
+    };
+    std::size_t reachable = 0U;
+    while (reachable < regions.size() && padFor(reachable) < kPadCount)
+        ++reachable;
+    const auto targetCount = std::min<std::size_t>({regions.size(), want, reachable});
     regions.resize(targetCount);
     reply.found = static_cast<std::uint32_t>(targetCount);
     reply.requested = request.count;
@@ -639,7 +646,7 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
     std::uint64_t foreign = 0U;
     std::uint64_t targets = 0U;
     for (std::size_t index = 0; index < targetCount; ++index) {
-        const auto pad = request.firstPad + static_cast<std::uint32_t>(index);
+        const auto pad = padFor(index);
         const auto bit = std::uint64_t{1} << pad;
         targets |= bit;
         PadMetadata metadata;
@@ -675,7 +682,7 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
     std::vector<PadData> audio(targetCount);
     std::vector<PadImport> imports(targetCount);
     for (std::size_t index = 0; index < targetCount; ++index) {
-        const auto pad = request.firstPad + static_cast<std::uint32_t>(index);
+        const auto pad = padFor(index);
         imports[index].pad = pad;
         imports[index].audio = &audio[index];
         imports[index].provenance = link(edited.sourceId, created[index].id);

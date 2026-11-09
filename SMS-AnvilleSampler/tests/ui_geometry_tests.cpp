@@ -91,20 +91,20 @@ void padLayouts()
     const sms::ui::BankedPadLayout sixteen(0);
     check(sixteen.visiblePadCount() == 16 && sixteen.columns() == 4 && sixteen.rows() == 4,
           "four-by-four arrangement");
-    check(sixteen.visualIndex(0) == 12 && sixteen.localIndex(12) == 0,
-          "pad numbering starts at the lower-left");
+    check(sixteen.visualIndex(0) == 0 && sixteen.localIndex(12) == 12 && sixteen.visualIndex(5) == 5,
+          "pad numbering starts at the upper-left and reads left to right");
 
     const sms::ui::BankedPadLayout twelve(1);
     check(twelve.visiblePadCount() == 12 && twelve.columns() == 3 && twelve.rows() == 4,
           "three-by-four arrangement");
-    check(twelve.visualIndex(11) == 2 && twelve.localIndex(2) == 11,
+    check(twelve.visualIndex(11) == 11 && twelve.localIndex(2) == 2,
           "three-column arrangement is reversible");
 
     const sms::ui::BankedPadLayout eight(2);
     const auto grid = eight.grid({10.0f, 20.0f, 400.0f, 200.0f}, 10.0f);
     check(eight.visiblePadCount() == 8 && eight.columns() == 4 && eight.rows() == 2,
           "four-by-two arrangement");
-    check(grid.hit({15.0f, 25.0f}) == 0 && eight.localIndex(0) == 4,
+    check(grid.hit({15.0f, 25.0f}) == 0 && eight.localIndex(4) == 4 && eight.localIndex(0) == 0,
           "grid hit testing composes with pad mapping");
 }
 

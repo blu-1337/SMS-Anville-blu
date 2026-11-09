@@ -811,14 +811,14 @@ void splitPlanCoversAllVisibleBanks()
 
 
 struct MainSampleFixture {
-    SamplerEngine engine{48000, 0.001};
+    SamplerEngine engine;
     sms::audio::RealtimeCommandDispatcher dispatcher;
     Observer observer;
     PadWorkflows pads{engine, dispatcher, observer};
     MainSampleWorkflows main{engine, dispatcher, observer, pads.mutationMutex()};
     std::uint64_t sequence = 0U;
 
-    MainSampleFixture()
+    explicit MainSampleFixture(const double poolSeconds = 0.001) : engine(48000, poolSeconds)
     {
         engine.setControlDispatcher(&dispatcher,
             &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
@@ -1102,6 +1102,115 @@ void mainSampleAssignEditAndDelete()
 }
 }
 
+AutoChopStatus autoChop(MainSampleFixture& fixture, AutoChopRequest request)
+{
+    request.sequence = ++fixture.sequence;
+    fixture.main.handleAutoChop(encodeAutoChopRequest(request));
+    AutoChopStatus status;
+    check(decodeAutoChopStatus(fixture.observer.latest(kAutoChopStatusKey), status) &&
+          status.sequence == request.sequence, "auto-chop status decodes with its sequence");
+    return status;
+}
+
+std::size_t autoChopStatusCount(const MainSampleFixture& fixture)
+{
+    return static_cast<std::size_t>(std::count_if(fixture.observer.messages.begin(),
+        fixture.observer.messages.end(), [](const auto& message) {
+            return message.first == kAutoChopStatusKey;
+        }));
+}
+
+void autoChopWorkflow()
+{
+    MainSampleFixture fixture(12.0);
+    AutoChopRequest equal;
+    equal.mode = AutoChopMode::equal;
+    equal.count = 4U;
+    auto status = autoChop(fixture, equal);
+    check(status.state == AutoChopState::error && status.text == "Load a main sample first",
+          "auto chop needs a main sample");
+
+    const auto path = writeSourceWav("sms-auto-chop-workflow.wav", 192000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    static_cast<void>(fixture.send(load, 2U));
+    const auto sourceId = fixture.main.session().sourceId;
+
+    const auto mainBefore = fixture.statusCount();
+    status = autoChop(fixture, equal);
+    check(status.state == AutoChopState::ok && status.mask == 0xfU && status.found == 4U &&
+          status.requested == 4U && fixture.statusCount() == mainBefore + 1U,
+          "equal chop fills four pads with one status of each kind");
+    auto session = fixture.main.session();
+    check(session.slices.size() == 4U && fixture.main.analysisRuns() == 1U, "four slices, one analysis");
+    PadData pad;
+    for (std::uint32_t index = 0; index < 4U; ++index) {
+        const auto tag = fixture.provenance(index);
+        check((tag >> 16U) == sourceId && (tag & 0xffffU) == session.slices[index].id &&
+              fixture.engine.exportPublishedPad(index, pad) && pad.frames == 48000U &&
+              padHoldsSlice(fixture.engine, index, session.slices[index].start,
+                            session.slices[index].end), "chopped pad carries its slice and tag");
+    }
+    const auto firstIds = session.slices[0].id;
+
+    status = autoChop(fixture, equal);
+    session = fixture.main.session();
+    check(status.state == AutoChopState::ok && fixture.main.analysisRuns() == 1U &&
+          session.slices.size() == 4U && session.slices[0].id != firstIds,
+          "re-chopping own pads never asks, reuses the cache and issues new ids");
+
+    // A pad holding other audio needs a confirmation.
+    std::array<std::uint64_t, kPadCount> tags{};
+    std::array<std::uint64_t, kPadCount> generations{};
+    fixture.engine.padProvenance(tags, generations);
+    auto foreign = sample();
+    PadImport import;
+    import.pad = 5U;
+    import.audio = &foreign;
+    import.expectedGeneration = generations[5];
+    check(fixture.engine.importPads({&import, 1U}), "put foreign audio on pad 5");
+    equal.firstPad = 4U;
+    const auto before = fixture.statusCount();
+    status = autoChop(fixture, equal);
+    check(status.state == AutoChopState::confirm && status.mask == (1ULL << 5U) &&
+          status.found == 1U && fixture.statusCount() == before &&
+          fixture.provenance(5U) == 0U, "foreign audio asks before any change");
+    equal.confirm = true;
+    status = autoChop(fixture, equal);
+    check(status.state == AutoChopState::ok && status.mask == 0xf0U &&
+          (fixture.provenance(5U) >> 16U) == sourceId, "confirmed chop replaces the pad");
+    check(fixture.provenance(0U) == 0U, "pads left out lose their stale tag");
+
+    // Beat modes need a tempo.
+    AutoChopRequest beat;
+    beat.mode = AutoChopMode::beat;
+    beat.count = 4U;
+    beat.firstPad = 8U;
+    status = autoChop(fixture, beat);
+    check(status.state == AutoChopState::error && status.text == "No tempo", "beat mode without tempo is refused");
+    std::atomic<double> host{120.0};
+    fixture.main.setHostBpm(&host);
+    status = autoChop(fixture, beat);
+    check(status.state == AutoChopState::ok && fixture.engine.exportPublishedPad(8U, pad) &&
+          pad.frames == 24000U, "host tempo gives half-second beat slices");
+    beat.bpmCenti = 6000U;
+    status = autoChop(fixture, beat);
+    check(status.state == AutoChopState::ok && fixture.engine.exportPublishedPad(8U, pad) &&
+          pad.frames == 48000U, "an explicit tempo overrides the host");
+
+    // A reload invalidates the cache.
+    static_cast<void>(fixture.send(load, 2U));
+    equal.firstPad = 0U;
+    status = autoChop(fixture, equal);
+    check(status.state == AutoChopState::ok && fixture.main.analysisRuns() == 2U,
+          "a new source is analysed again");
+
+    fixture.main.handleAutoChop("AC1;bad");
+    check(autoChopStatusCount(fixture) > 0U && fixture.observer.latest(kAutoChopStatusKey).find("ERROR") !=
+          std::string::npos, "malformed auto-chop request is reported");
+    std::filesystem::remove(path);
+}
+
 int main()
 {
     clipboardSnapshotAndReplies();
@@ -1117,5 +1226,6 @@ int main()
     splitPlanCoversAllVisibleBanks();
     mainSampleLoadQueryWaveformAndClear();
     mainSampleAssignEditAndDelete();
+    autoChopWorkflow();
     std::cout << "Pad workflow tests passed\n";
 }

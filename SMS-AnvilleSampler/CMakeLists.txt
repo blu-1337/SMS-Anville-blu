@@ -252,7 +252,7 @@ foreach(anvillesampler_target IN LISTS anvillesampler_targets)
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui")
   target_link_libraries(${anvillesampler_target} PUBLIC sms_common_ui)
-  target_link_libraries(${anvillesampler_target}-dsp PRIVATE anvillesampler_core sms_file_io Threads::Threads)
+  target_link_libraries(${anvillesampler_target}-dsp PRIVATE anvillesampler_core sms_analysis sms_file_io Threads::Threads)
   target_link_libraries(${anvillesampler_target}-ui PRIVATE anvillesampler_ui_controllers)
   target_include_directories(${anvillesampler_target}-ui PRIVATE
     "${ANVILLESAMPLER_ARTWORK_DIR}")
@@ -466,7 +466,7 @@ if(BUILD_TESTING)
     ../Common-Src/Audio/WavCodec.cpp)
   target_include_directories(anvillesampler_pad_workflow_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
-  target_link_libraries(anvillesampler_pad_workflow_tests PRIVATE anvillesampler_core Threads::Threads)
+  target_link_libraries(anvillesampler_pad_workflow_tests PRIVATE anvillesampler_core sms_analysis Threads::Threads)
   add_test(NAME pad-workflows COMMAND anvillesampler_pad_workflow_tests)
 
   add_executable(anvillesampler_analysis_tests tests/analysis_tests.cpp)

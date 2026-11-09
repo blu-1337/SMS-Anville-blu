@@ -1,5 +1,7 @@
 #include "MainSampleWorkflows.hpp"
 
+#include "Analysis/SliceStrategies.hpp"
+#include "Analysis/TempoEstimate.hpp"
 #include "PadFileActions.hpp"
 #include "PadFingerprint.hpp"
 #include "StateCodec.hpp"
@@ -8,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <bit>
 #include <filesystem>
 #include <utility>
 
@@ -519,6 +522,189 @@ std::uint64_t MainSampleWorkflows::nextSourceId(const std::uint64_t current)
         id = makeMainSampleSourceId(clock ^ (++sourceCounter_ * 0x9e3779b97f4a7c15ULL));
     } while (id == current);
     return id;
+}
+
+void MainSampleWorkflows::publishAutoChop(const AutoChopStatus& status)
+{
+    const auto encoded = encodeAutoChopStatus(status);
+    observer_.publishUiState(kAutoChopStatusKey, encoded.c_str());
+}
+
+void MainSampleWorkflows::handleAutoChop(const std::string_view encoded)
+{
+    AutoChopRequest request;
+    if (!decodeAutoChopRequest(encoded, request)) {
+        AutoChopStatus status;
+        status.text = "Invalid auto chop request";
+        publishAutoChop(status);
+        return;
+    }
+    try {
+        autoChop(request);
+    } catch (...) {
+        AutoChopStatus status;
+        status.sequence = request.sequence;
+        status.text = "Auto chop failed";
+        publishAutoChop(status);
+    }
+}
+
+void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
+{
+    AutoChopStatus reply;
+    reply.sequence = request.sequence;
+    auto fail = [&](const char* text) {
+        reply.state = AutoChopState::error;
+        reply.text = text;
+        publishAutoChop(reply);
+    };
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        fail("Load a main sample first");
+        return;
+    }
+    EngineSettings settings;
+    controlDispatcher_.invoke([&]() noexcept { settings = sampler_.settings(); });
+    if (settings.armed) {
+        fail("Disarm recording first");
+        return;
+    }
+    // The analysis is keyed by the source id, so a reload or clear rebuilds it.
+    if (analysisCache_.sourceId != session_.sourceId) {
+        PadData whole;
+        std::uint64_t id = 0U;
+        if (!sampler_.exportSource(whole, &id) || id != session_.sourceId) {
+            fail("Main sample storage is unavailable");
+            return;
+        }
+        analysisCache_ = {};
+        analysisCache_.analysis = sms::analysis::analyzeOnsets(
+            whole.stereo, static_cast<double>(session_.sampleRate), {}, nullptr);
+        const auto tempo = sms::analysis::estimateTempo(analysisCache_.analysis.novelty,
+                                                        analysisCache_.analysis.hopSeconds);
+        analysisCache_.bpm = tempo.bpm;
+        analysisCache_.sourceId = session_.sourceId;
+        ++analysisRuns_;
+    }
+    const double host = hostBpm_ != nullptr ? hostBpm_->load(std::memory_order_relaxed) : 0.0;
+    const double requested = static_cast<double>(request.bpmCenti) / 100.0;
+    const double bpm = requested > 0.0 ? requested : host;
+    const bool beatMode = request.mode == AutoChopMode::beat || request.mode == AutoChopMode::random;
+    if (beatMode && !(bpm > 0.0)) {
+        fail("No tempo");
+        return;
+    }
+    const std::int64_t frames = session_.frames;
+    const std::int64_t rangeStart = std::min<std::int64_t>(request.rangeStart, frames);
+    const std::int64_t rangeEnd =
+        request.rangeEnd == 0U ? frames : std::min<std::int64_t>(request.rangeEnd, frames);
+    const std::int64_t minFrames =
+        std::max<std::int64_t>(1, static_cast<std::int64_t>(0.01 * session_.sampleRate));
+    const double contextBpm =
+        request.mode == AutoChopMode::findSamples && !(bpm > 0.0) ? analysisCache_.bpm : bpm;
+    const sms::analysis::SliceContext context{analysisCache_.analysis, rangeStart, rangeEnd,
+                                              minFrames, 0, contextBpm};
+    const std::size_t want = request.count;
+    const double beats = static_cast<double>(request.beatsMilli) / 1000.0;
+    std::vector<sms::analysis::SliceRegion> regions;
+    switch (request.mode) {
+    case AutoChopMode::transient:
+        regions = sms::analysis::transientSlices(context, want,
+            static_cast<float>(request.sensitivityPermille) / 1000.0F,
+            static_cast<double>(request.minGapMs) / 1000.0);
+        break;
+    case AutoChopMode::findSamples:
+        regions = sms::analysis::findSamples(context, want, request.seed);
+        break;
+    case AutoChopMode::equal: regions = sms::analysis::equalSlices(context, want); break;
+    case AutoChopMode::beat:
+        regions = sms::analysis::beatSlices(context, want, beats,
+            std::clamp<std::int64_t>(request.anchor, rangeStart, rangeEnd), request.snap);
+        break;
+    case AutoChopMode::random:
+        regions = sms::analysis::randomSlices(context, want, beats, request.seed, request.snap);
+        break;
+    }
+    const auto targetCount = std::min<std::size_t>(
+        {regions.size(), want, static_cast<std::size_t>(kPadCount - request.firstPad)});
+    regions.resize(targetCount);
+    reply.found = static_cast<std::uint32_t>(targetCount);
+    reply.requested = request.count;
+    if (targetCount == 0U) {
+        fail("No slices found");
+        return;
+    }
+
+    const auto pads = snapshotPads();
+    std::uint64_t foreign = 0U;
+    std::uint64_t targets = 0U;
+    for (std::size_t index = 0; index < targetCount; ++index) {
+        const auto pad = request.firstPad + static_cast<std::uint32_t>(index);
+        const auto bit = std::uint64_t{1} << pad;
+        targets |= bit;
+        PadMetadata metadata;
+        controlDispatcher_.invoke([&]() noexcept { metadata = sampler_.padMetadata(pad); });
+        if (metadata.recording) {
+            fail("Disarm recording first");
+            return;
+        }
+        const bool own = pads.provenance[pad] != 0U &&
+            (pads.provenance[pad] >> 16U) == session_.sourceId;
+        if (metadata.occupied && !own)
+            foreign |= bit;
+    }
+    if (foreign != 0U && !request.confirm) {
+        reply.state = AutoChopState::confirm;
+        reply.mask = foreign;
+        reply.found = static_cast<std::uint32_t>(std::popcount(foreign));
+        publishAutoChop(reply);
+        return;
+    }
+
+    // A fresh slice set replaces the old one; its ids are never reused.
+    auto edited = session_;
+    edited.slices.clear();
+    std::vector<MainSampleSlice> created(targetCount);
+    for (std::size_t index = 0; index < targetCount; ++index) {
+        if (!edited.addSlice(static_cast<std::uint32_t>(regions[index].start),
+                             static_cast<std::uint32_t>(regions[index].end), created[index])) {
+            fail("Invalid slice range");
+            return;
+        }
+    }
+    std::vector<PadData> audio(targetCount);
+    std::vector<PadImport> imports(targetCount);
+    for (std::size_t index = 0; index < targetCount; ++index) {
+        const auto pad = request.firstPad + static_cast<std::uint32_t>(index);
+        imports[index].pad = pad;
+        imports[index].audio = &audio[index];
+        imports[index].provenance = link(edited.sourceId, created[index].id);
+        imports[index].expectedGeneration = pads.generations[pad];
+        if (!sampler_.copySourceRange(edited.sourceId, created[index].start,
+                                      created[index].end - created[index].start, audio[index])) {
+            fail("Pads changed, try again");
+            return;
+        }
+    }
+    if (!sampler_.importPads(imports, &settings)) {
+        fail("Pads changed, try again");
+        return;
+    }
+    // Pads tied to the replaced slices that were not refilled keep their audio, minus the tag.
+    std::uint64_t affected = targets;
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        const auto bit = std::uint64_t{1} << pad;
+        if ((targets & bit) == 0U && pads.provenance[pad] != 0U &&
+            (pads.provenance[pad] >> 16U) == session_.sourceId &&
+            sampler_.setPadProvenance(pad, 0U, sampler_.padAudioFingerprint(pad)))
+            affected |= bit;
+    }
+    session_ = std::move(edited);
+    publishPadSettings(targets, true);
+    publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
+    reply.state = AutoChopState::ok;
+    reply.mask = targets;
+    publishAutoChop(reply);
 }
 
 } // namespace midichopper::plugin

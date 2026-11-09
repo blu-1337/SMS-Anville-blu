@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Analysis/OnsetAnalysis.hpp"
 #include "Audio/RealtimeCommandDispatcher.hpp"
+#include "AutoChopProtocol.hpp"
 #include "MainSampleProtocol.hpp"
 #include "MainSampleSession.hpp"
 #include "PadWorkflows.hpp"
@@ -34,6 +36,15 @@ public:
           mutationMutex_(mutationMutex) {}
 
     void handleRequest(std::string_view encoded);
+    /**
+     * AC1: re-chop the source into pads. Publishes one main_sample_status and
+     * one auto_chop_status (CONFIRM and ERROR publish only the latter).
+     */
+    void handleAutoChop(std::string_view encoded);
+    /** Host tempo in BPM (0 = unknown), read for mode B/R with bpm 0. Outlives this. */
+    void setHostBpm(const std::atomic<double>* bpm) noexcept { hostBpm_ = bpm; }
+    /** Number of full analyses run since construction (cache tests). */
+    [[nodiscard]] std::uint32_t analysisRuns() const noexcept { return analysisRuns_; }
     /** A copy taken under the mutation mutex. */
     [[nodiscard]] MainSampleSession session() const;
 
@@ -71,6 +82,8 @@ private:
     void assign(const MainSampleRequest& request);
     void remove(const MainSampleRequest& request);
     void waveform(const MainSampleRequest& request);
+    void autoChop(const AutoChopRequest& request);
+    void publishAutoChop(const AutoChopStatus& status);
 
     /** Re-cut every pad linked to one of sliceIds from target's slices. */
     [[nodiscard]] bool recutLinkedPads(const MainSampleSession& target,
@@ -94,6 +107,16 @@ private:
     std::atomic<std::uint64_t> latestLoadSequence_{0U};
     std::uint64_t sourceCounter_ = 0U;  // guarded by mutationMutex_
     MainSampleSession session_;         // guarded by mutationMutex_
+
+    // Onset analysis of the current source, built on first use and never saved.
+    struct AnalysisCache {
+        std::uint64_t sourceId = 0U;
+        sms::analysis::OnsetAnalysis analysis;
+        double bpm = 0.0;
+    };
+    AnalysisCache analysisCache_;       // guarded by mutationMutex_
+    std::uint32_t analysisRuns_ = 0U;   // guarded by mutationMutex_
+    const std::atomic<double>* hostBpm_ = nullptr;
 
     // Restore staging and the save cache, all guarded by mutationMutex_.
     struct StagedAudio {

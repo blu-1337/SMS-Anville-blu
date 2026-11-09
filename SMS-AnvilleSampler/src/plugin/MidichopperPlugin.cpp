@@ -93,6 +93,7 @@ public:
           padWorkflows_(sampler_, controlDispatcher_, *this),
           mainSampleWorkflows_(sampler_, controlDispatcher_, *this, padWorkflows_.mutationMutex())
     {
+        mainSampleWorkflows_.setHostBpm(&hostBpm_);
         sampler_.setControlDispatcher(&controlDispatcher_,
             &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
     }
@@ -276,7 +277,9 @@ protected:
         if (std::strcmp(key, kMainSampleRequestKey) == 0 ||
             std::strcmp(key, kMainPreviewRequestKey) == 0 ||
             std::strcmp(key, kMainSampleStatusKey) == 0 ||
-            std::strcmp(key, kMainSampleWaveformKey) == 0)
+            std::strcmp(key, kMainSampleWaveformKey) == 0 ||
+            std::strcmp(key, kAutoChopRequestKey) == 0 ||
+            std::strcmp(key, kAutoChopStatusKey) == 0)
             return String();
         return String();
     }
@@ -295,7 +298,8 @@ protected:
             std::strcmp(key, kChopApplyRequestKey) == 0 ||
             std::strcmp(key, kChopSnapshotRequestKey) == 0 ||
             std::strcmp(key, kPadStructureRequestKey) == 0 ||
-            std::strcmp(key, kMainSampleRequestKey) == 0;
+            std::strcmp(key, kMainSampleRequestKey) == 0 ||
+            std::strcmp(key, kAutoChopRequestKey) == 0;
         if (transient) {
             if (value == nullptr || value[0] == '\0')
                 return;
@@ -508,6 +512,13 @@ protected:
                 mainSampleWorkflows_.handleRequest(value);
             return;
         }
+        if (std::strcmp(key, kAutoChopRequestKey) == 0) {
+            if (value != nullptr && value[0] != '\0')
+                mainSampleWorkflows_.handleAutoChop(value);
+            return;
+        }
+        if (std::strcmp(key, kAutoChopStatusKey) == 0)
+            return;
         // main_preview_request is queued by controls_.queueStateCommand above.
         if (std::strcmp(key, kMainSampleStatusKey) == 0 ||
             std::strcmp(key, kMainSampleWaveformKey) == 0)
@@ -601,6 +612,14 @@ private:
             const auto status = "PS1;E;" + std::to_string(decoded ? request.planId : 0U) +
                 ";Pad action failed; retry";
             publishUiState(kPadStructureStatusKey, status.c_str());
+        } else if (std::strcmp(key, kAutoChopRequestKey) == 0) {
+            midichopper::plugin::AutoChopRequest request;
+            static_cast<void>(midichopper::plugin::decodeAutoChopRequest(value, request));
+            midichopper::plugin::AutoChopStatus status;
+            status.sequence = request.sequence;
+            status.text = "Auto chop failed; retry";
+            const auto encoded = midichopper::plugin::encodeAutoChopStatus(status);
+            publishUiState(kAutoChopStatusKey, encoded.c_str());
         } else if (std::strcmp(key, kMainSampleRequestKey) == 0) {
             // No session here: the worker may hold the mutation mutex for a
             // long load. ERROR never changes the session, so the UI keeps it.

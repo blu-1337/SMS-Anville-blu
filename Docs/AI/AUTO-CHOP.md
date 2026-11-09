@@ -32,3 +32,18 @@ Beat-based modes return nothing when the BPM is 0.
 ## Host tempo
 
 `DISTRHO_PLUGIN_WANT_TIMEPOS` makes `run()` store the host BPM (0 when the host gives none) in a lock-free `std::atomic<double> hostBpm_`. It adds no parameter or port: VST3 only gains process-context requirements, and LV2 already has the atom input. This is a separate commit; without it the Host button stays hidden.
+
+## AC1 protocol and workflow
+
+`AutoChopProtocol.hpp` (DPF-free). Request key `auto_chop_request` (worker, `kStateIsOnlyForDSP`): `AC1;<seq>;T|F|E|B|R;<firstPad>;<count 1..64>;<confirm 0|1>;<rangeStart>;<rangeEnd 0=all>;<mode params>`. Numbers are integers: T `sensitivity‰;minGapMs`, F `seed`, E none, B `bpm×100 (0=host);beats×1000;anchorFrame;snap`, R `bpm×100;lengthBeats×1000;seed;snap`. Status key `auto_chop_status` (UI-only): `OK;<maskHex>;<found>;<requested>`, `CONFIRM;<conflictMaskHex>;<count>`, `BUSY`, or `ERROR;<text>`.
+
+`MainSampleWorkflows::handleAutoChop` runs under the pad mutation mutex:
+
+1. Build the `AnalysisCache` (keyed by source id; built lazily from `exportSource`, so a restored project pays once; never saved). `analysisRuns()` counts builds for tests.
+2. Pick regions with the strategies. B and R use the request tempo, else the host tempo from `setHostBpm`; none gives `ERROR "No tempo"`. F falls back to the estimated tempo.
+3. Targets are pads `firstPad ..` in index order, one per region (at most `count`, never past pad 63).
+4. A target that holds audio not linked to this source needs `confirm=1`, else `CONFIRM` is published and nothing changes. Re-chopping this source's own pads never asks.
+5. The slice set is replaced with fresh ids. One `importPads` transaction fills the targets with default settings and the new provenance. Pads tied to the old slices but not refilled keep their audio and lose the tag.
+6. One `main_sample_status` (affected mask) and one `auto_chop_status` are published.
+
+The worker catch-all in `MidichopperPlugin.cpp` answers `ERROR` if the handler throws.

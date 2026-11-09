@@ -56,5 +56,8 @@ inline constexpr const char* kMainSampleWaveformKey = "main_sample_waveform";
 inline constexpr const char* kMainSampleAudioKey = "main_sample_audio";
 inline constexpr const char* kMainSampleSessionKey = "main_sample_session";
 inline constexpr const char* kMainSampleLinksKey = "main_sample_links";
+// Auto-chop (AC1): request to the worker, status to the UI (Docs/AI/AUTO-CHOP.md).
+inline constexpr const char* kAutoChopRequestKey = "auto_chop_request";
+inline constexpr const char* kAutoChopStatusKey = "auto_chop_status";
 
 } // namespace midichopper::plugin

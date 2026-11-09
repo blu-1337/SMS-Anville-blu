@@ -1,5 +1,6 @@
 // Main Sample codecs: MS1 requests/status, MW1 waveform tiles, MP1 preview,
 // MSS1 session and LK1 links, plus the session's slice model.
+#include "AutoChopProtocol.hpp"
 #include "MainSampleProtocol.hpp"
 #include "MainSampleSession.hpp"
 
@@ -234,6 +235,63 @@ void links()
 
 } // namespace
 
+void autoChop()
+{
+    AutoChopRequest r;
+    r.sequence = 9U;
+    r.firstPad = 3U;
+    r.count = 12U;
+    r.confirm = true;
+    r.rangeStart = 100U;
+    r.rangeEnd = 90000U;
+    for (const auto mode : {AutoChopMode::transient, AutoChopMode::findSamples, AutoChopMode::equal,
+                            AutoChopMode::beat, AutoChopMode::random}) {
+        r.mode = mode;
+        r.sensitivityPermille = 700U;
+        r.minGapMs = 80U;
+        r.seed = 123456789012ULL;
+        r.bpmCenti = 12050U;
+        r.beatsMilli = 500U;
+        r.anchor = 777U;
+        r.snap = true;
+        AutoChopRequest d;
+        const auto encoded = encodeAutoChopRequest(r);
+        check(decodeAutoChopRequest(encoded, d) && encodeAutoChopRequest(d) == encoded &&
+              d.mode == mode && d.firstPad == 3U && d.count == 12U && d.confirm &&
+              d.rangeEnd == 90000U, "AC1 request round-trip");
+    }
+    for (const char* bad : {"", "AC1;", "AC2;1;E;0;4;0;0;0", "AC1;1;X;0;4;0;0;0", "AC1;1;E;64;4;0;0;0",
+                            "AC1;1;E;0;0;0;0;0", "AC1;1;E;0;65;0;0;0", "AC1;1;E;0;4;2;0;0",
+                            "AC1;1;E;0;4;0;50;40", "AC1;1;E;0;4;0;0;0;9", "AC1;1;T;0;4;0;0;0;1001;5",
+                            "AC1;1;T;0;4;0;0;0;500", "AC1;1;B;0;4;0;0;0;0;0;0;2", "AC1;1;B;0;4;0;0;0;0;0;0;0",
+                            "AC1;1;R;0;4;0;0;0;12000;1000;5", "AC1;x;E;0;4;0;0;0"}) {
+        AutoChopRequest d;
+        check(!decodeAutoChopRequest(bad, d), "AC1 malformed request is refused");
+    }
+    AutoChopStatus s;
+    s.sequence = 4U;
+    s.state = AutoChopState::ok;
+    s.mask = 0xf0f0ULL;
+    s.found = 8U;
+    s.requested = 12U;
+    AutoChopStatus d;
+    check(encodeAutoChopStatus(s) == "AC1;4;OK;f0f0;8;12" &&
+          decodeAutoChopStatus(encodeAutoChopStatus(s), d) && d.mask == 0xf0f0ULL && d.found == 8U &&
+          d.requested == 12U, "AC1 OK status round-trip");
+    s.state = AutoChopState::confirm;
+    check(decodeAutoChopStatus(encodeAutoChopStatus(s), d) && d.state == AutoChopState::confirm &&
+          d.mask == 0xf0f0ULL, "AC1 CONFIRM status round-trip");
+    s.state = AutoChopState::busy;
+    check(encodeAutoChopStatus(s) == "AC1;4;BUSY" && decodeAutoChopStatus("AC1;4;BUSY", d) &&
+          d.state == AutoChopState::busy, "AC1 BUSY status round-trip");
+    s.state = AutoChopState::error;
+    s.text = "No tempo";
+    check(decodeAutoChopStatus(encodeAutoChopStatus(s), d) && d.text == "No tempo",
+          "AC1 ERROR status round-trip");
+    check(!decodeAutoChopStatus("AC1;4;OK;zz;1;1", d) && !decodeAutoChopStatus("AC1;4;MAYBE", d) &&
+          !decodeAutoChopStatus("AC1;4;BUSY;1", d), "AC1 malformed status is refused");
+}
+
 int main()
 {
     requests();
@@ -242,6 +300,7 @@ int main()
     previews();
     sessions();
     links();
+    autoChop();
     std::cout << "main sample protocol tests passed\n";
     return 0;
 }

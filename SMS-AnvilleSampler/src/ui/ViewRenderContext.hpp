@@ -30,4 +30,20 @@ inline void measureText(const ViewRenderContext& ctx, float x, float y, const ch
     return isTarget(ctx.state.hoveredTarget, type, index);
 }
 
+// A 2 px skin-accent outline around the pad a file drag would load.
+inline void drawDropHighlight(const ViewRenderContext& ctx, const sms::ui::Rect cell,
+                              const int pad, const float radius)
+{
+    if (pad != ctx.state.dropHoverPad)
+        return;
+    ctx.canvas.save();
+    ctx.canvas.beginPath();
+    ctx.canvas.roundedRect(cell.x - 2.0f, cell.y - 2.0f, cell.width + 4.0f, cell.height + 4.0f,
+                           radius + 2.0f);
+    ctx.canvas.strokeColor(sms::ui::dpf::theme().controlAccent);
+    ctx.canvas.strokeWidth(2.0f);
+    ctx.canvas.stroke();
+    ctx.canvas.restore();
+}
+
 } // namespace midichopper::ui::rendering

@@ -13,6 +13,8 @@
 #include "DPF/LogoGlow.hpp"
 #include "SkinCatalog.hpp"
 #include "SamplerInputController.hpp"
+#include "FileDropController.hpp"
+#include "FileDropTarget.hpp"
 #include "MidichopperView.hpp"
 #include "BrowserLauncher.hpp"
 #include "KnobPreference.hpp"
@@ -22,6 +24,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <optional>
 
 START_NAMESPACE_DISTRHO
@@ -41,7 +44,8 @@ KnobAdjustment knobAdjustment(const uint modifiers) noexcept
 
 class MidichopperUI final : public sms::ui::dpf::NanoUI,
     private SamplerUiHost, private MixerInteractionHost,
-    private ApplicationMenuHost, private SamplerInputHost {
+    private ApplicationMenuHost, private SamplerInputHost,
+    private sms::ui::FileDropListener, private FileDropHost {
 public:
     MidichopperUI()
         : NanoUI(uiLayout::canvasWidth, uiLayout::canvasHeight,
@@ -64,10 +68,13 @@ public:
 #ifndef DGL_NO_SHARED_RESOURCES
         loadSharedResources();
 #endif
+        attachFileDrop();
     }
 
     ~MidichopperUI() override
     {
+        fDropTarget.reset(); // Revoke OLE before any member it calls back into.
+        fFileDrop.cancel();
         fSession.stopEditorAudition();
         if (!fSession.chopEditor().active()) return;
 #if DISTRHO_PLUGIN_WANT_DIRECT_ACCESS
@@ -106,6 +113,8 @@ protected:
         }
         fInput.idle(now);
         fSession.idle(now, fMixer.effective(kParameterGlobalTuneSemitones, fSession.state().globalTune));
+        attachFileDrop();
+        fFileDrop.idle(fSession.padActions(), fSession.padActionContext(), now);
     }
 
     void onNanoDisplay() override
@@ -253,6 +262,7 @@ protected:
                 static_cast<std::size_t>(skinRows + 2)}, fMenu.skinOffset(),
             static_cast<int>(fSkinCatalog.entries.size()),
             fMixer.menu(), fMixer.settings(),
+            fFileDrop.highlightedPad() ? static_cast<int>(*fFileDrop.highlightedPad()) : -1,
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();
@@ -388,6 +398,34 @@ private:
     ApplicationMenuContext applicationMenuContext() const override
     { return {fSkinCatalog.selectable(), static_cast<int>(fSkinCatalog.entries.size()), fSelectedSkin}; }
 
+    // Native file drop: OLE calls arrive on this UI thread; drops only queue work.
+    void attachFileDrop()
+    {
+        const auto window = fDropAttached ? 0U : getWindow().getNativeWindowHandle();
+        if (window == 0U) return; // Retried from onUiIdle until the window exists.
+        fDropAttached = true;
+        fDropTarget = sms::ui::FileDropTarget::attach(window, *this);
+    }
+    DropTarget dropTarget(const sms::ui::FileDropPoint point) const
+    {
+        const auto target = fInput.targetAt(logicalPoint(DGL_NAMESPACE::Point<double>(point.x, point.y)));
+        return target.type == static_cast<int>(InteractiveType::pad)
+            ? FileDropController::padTarget(fSession.padActionContext(), target.index) : DropTarget{};
+    }
+    DropContext dropContext()
+    {
+        return {fSession.padActionContext(), fSession.state().currentPad >= 0, fSession.chopEditor().active(),
+                fSession.padActions().busy() || fSession.padActions().dialogPending()};
+    }
+    bool fileDragOver(const sms::ui::FileDropPoint point, const std::span<const std::string> paths) override
+    { return fFileDrop.hover(dropTarget(point), paths, dropContext()); }
+    void fileDragLeave() override { fFileDrop.leave(); }
+    void filesDropped(const sms::ui::FileDropPoint point, const std::span<const std::string> paths) override
+    { fFileDrop.enqueue(dropTarget(point), {paths.begin(), paths.end()}, dropContext()); }
+    void setFileDropStatus(const char* message) override { fSession.setLocalStatus(message); }
+    void repaintFileDrop() override { requestRepaint(); }
+    void releaseDroppedFile(const std::string& path) override { sms::ui::FileDropTarget::releaseDroppedFile(path); }
+
     const sms::ui::SkinCatalog fSkinCatalog;
     const std::filesystem::path fSkinPreferencePath;
     std::size_t fSelectedSkin = 0;
@@ -401,6 +439,9 @@ private:
     MixerInteractionController fMixer;
     ApplicationMenuController fMenu;
     SamplerInputController fInput;
+    FileDropController fFileDrop{*this};
+    std::unique_ptr<sms::ui::FileDropTarget> fDropTarget;
+    bool fDropAttached = false;
 #if DISTRHO_PLUGIN_WANT_DIRECT_ACCESS
     PluginUiBridge* fUiBridge = nullptr;
     std::uint64_t fUiMessageCursor = 0;

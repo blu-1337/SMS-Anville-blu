@@ -1,16 +1,11 @@
 #pragma once
 
 #include "DistrhoUI.hpp"
-
-#include <algorithm>
+#include "ViewportTransform.hpp"
 
 namespace sms::ui::dpf {
 
-struct ViewportTransform {
-    float scale = 1.0f;
-    float offsetX = 0.0f;
-    float offsetY = 0.0f;
-};
+using ViewportTransform = sms::ui::ViewportTransform;
 
 /** DPF/NanoVG base with a fixed logical canvas and host-safe repaint policy. */
 class NanoUI : public DISTRHO_NAMESPACE::UI {
@@ -29,21 +24,15 @@ public:
 protected:
     [[nodiscard]] ViewportTransform viewportTransform() const noexcept
     {
-        const float width = static_cast<float>(getWidth());
-        const float height = static_cast<float>(getHeight());
-        const float scale = std::max(0.1f,
-            std::min(width / logicalWidth_, height / logicalHeight_));
-        return {scale,
-                (width - logicalWidth_ * scale) * 0.5f,
-                (height - logicalHeight_ * scale) * 0.5f};
+        return fitViewport(static_cast<float>(getWidth()), static_cast<float>(getHeight()),
+                           logicalWidth_, logicalHeight_);
     }
 
     [[nodiscard]] DGL_NAMESPACE::Point<float>
     toLogicalPosition(const DGL_NAMESPACE::Point<double>& position) const noexcept
     {
-        const ViewportTransform transform = viewportTransform();
-        return {(static_cast<float>(position.getX()) - transform.offsetX) / transform.scale,
-                (static_cast<float>(position.getY()) - transform.offsetY) / transform.scale};
+        const auto logical = toLogical(viewportTransform(), position.getX(), position.getY());
+        return {logical.x, logical.y};
     }
 
     void beginLogicalDisplay()

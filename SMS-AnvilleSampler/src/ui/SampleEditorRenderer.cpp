@@ -220,6 +220,7 @@ void drawEditorPadPanel(const ViewRenderContext& ctx)
                                     {occupied, active, false, selected, padHovered,
                                      ctx.state.pressedPad == localPad, true, tint},
                                     6.0f);
+        drawDropHighlight(ctx, cell, pad, 6.0f);
         char label[12];
         std::snprintf(label, sizeof(label), sms::ui::dpf::themeFormat("%02d"), localPad + 1);
         ctx.canvas.fontSize(11.0f);

@@ -68,6 +68,7 @@ void drawPadPanel(const ViewRenderContext& ctx)
         sms::ui::dpf::drawRubberPad(ctx.canvas, cell,
                                     {occupied, playing, recording, selected, padHovered,
                                      ctx.state.pressedPad == localPad, true, tint});
+        drawDropHighlight(ctx, cell, pad, 9.0f);
 
         char padNumber[12];
         std::snprintf(padNumber, sizeof(padNumber), sms::ui::dpf::themeFormat("%02d"),

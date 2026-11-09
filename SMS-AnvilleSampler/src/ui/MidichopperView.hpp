@@ -99,6 +99,7 @@ struct ViewState {
     GlobalControlMenu globalControlMenu;
     std::array<plugin::GlobalValueSettings, 5> globalValueSettings =
         plugin::defaultGlobalValueSettings();
+    int dropHoverPad = -1; // Global pad a file drag would load, or -1.
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

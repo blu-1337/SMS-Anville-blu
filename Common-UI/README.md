@@ -21,6 +21,8 @@ remain headers.
   the MOVE-reported-as-NONE safety rule, and the `.wav`/`.wave` filter.
 
 - `DPF/NanoUI.hpp`: logical-canvas scaling and repaint lifecycle.
+- `ViewportTransform.hpp`: DPF-free canvas fit and window-to-logical mapping,
+  shared by mouse events and file-drop points.
 - `BrowserLauncher.hpp`: UI-thread browser dispatch through Windows
   `ShellExecuteW` (UTF-8 URLs) or Linux `xdg-open`; reports launch failures.
   Other platforms currently return failure.

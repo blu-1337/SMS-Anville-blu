@@ -19,6 +19,7 @@
 #include "LogoGlow.hpp"
 #include "PadLayout.hpp"
 #include "UI/Geometry.hpp"
+#include "ViewportTransform.hpp"
 #include "WaveformEditor.hpp"
 #include "WaveformViewport.hpp"
 #include "../src/plugin/DistrhoPluginInfo.h"
@@ -498,6 +499,44 @@ void spaceKeyTracking()
     key.reset();
     check(key.update(true, false, true) == SpaceAction::chop,
           "focus loss clears a held Space even if its release was missed");
+}
+
+// Mouse events and native file drops share the window-pixel transform, so a
+// drop point resolves to the same pad at every UI scale and letterbox.
+void scaledWindowPointsResolveToPads()
+{
+    namespace interaction = midichopper::ui;
+    namespace layout = midichopper::ui::layout;
+    sms::dsp::SamplePlaybackSettings settings;
+    sms::audio::WaveformSummary waveform;
+    const auto envelope = sms::ui::waveform::envelopeGeometry(layout::envelopeGraph, waveform, settings);
+    interaction::InteractionContext context;
+    context.padLayout = 0;
+    context.editorSettings = &settings;
+    context.envelope = &envelope;
+
+    const float logicalWidth = static_cast<float>(layout::canvasWidth);
+    const float logicalHeight = static_cast<float>(layout::canvasHeight);
+    const sms::ui::BankedPadLayout pads(0);
+    const auto grid = pads.grid(layout::mainPadBounds, 10.0f);
+    struct Window { float width; float height; float scale; };
+    for (const Window window : {Window{logicalWidth, logicalHeight, 1.0f},
+                                Window{logicalWidth * 1.5f, logicalHeight * 1.5f, 1.5f},
+                                Window{logicalWidth * 2.0f, logicalHeight * 2.0f, 2.0f},
+                                Window{logicalWidth * 1.5f + 200.0f, logicalHeight * 1.5f, 1.5f}}) {
+        const auto transform = sms::ui::fitViewport(window.width, window.height, logicalWidth, logicalHeight);
+        check(std::abs(transform.scale - window.scale) < 1.0e-4f, "the viewport scale matches the window");
+        for (const int localPad : {0, 5, 15}) {
+            const auto logical = center(grid.cell(pads.visualIndex(localPad)));
+            const double windowX = (logical.x + layout::contentOffsetX) * transform.scale + transform.offsetX;
+            const double windowY = logical.y * transform.scale + transform.offsetY;
+            const auto back = sms::ui::toLogical(transform, windowX, windowY);
+            check(interaction::isTarget(
+                      interaction::interactiveTargetAt({back.x - layout::contentOffsetX, back.y}, context),
+                      interaction::InteractiveType::pad, localPad),
+                  "a scaled window point resolves to the same local pad");
+        }
+    }
 }
 
 void interactionTargets()
@@ -2785,6 +2824,7 @@ int main()
     skinMenuGeometryAndTargets();
     layoutAndBankSubmenuTargets();
     interactionTargets();
+    scaledWindowPointsResolveToPads();
     spaceKeyTracking();
     padPressTracking();
     editorSnapshotCollection();

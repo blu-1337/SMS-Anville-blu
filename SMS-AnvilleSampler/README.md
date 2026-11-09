@@ -257,9 +257,9 @@ length slice per note-on.
 
 - Right-click a pad for **Color**; tint persists when empty.
 
-- See [WAV files](Docs/WAV-FILES.md) for import formats and requirements.
+- See [WAV files](Docs/WAV-FILES.md) for import, Windows drag-and-drop and formats.
 
-- DAW projects preserve float32 samples. [Formats and compatibility](Docs/WAV-FILES.md).
+- DAW projects preserve float32 samples.
 
 - Stereo LEDs show raw input/final output.
 

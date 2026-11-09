@@ -17,6 +17,22 @@ be split onto following pads. Imported audio is embedded in the DAW project,
 so the source file is not needed when the project is reopened. Large songs can
 make project files and save times substantially larger.
 
+## Drag and drop (Windows)
+
+Drag WAV files from Explorer, the DAW's browser, or FL Studio Edison onto a pad
+in Play or Sample Editor. The pad under the pointer is outlined while a drop is
+possible. One file replaces that pad, like **Import WAV...**. Several files
+fill the following visible pads in order, continuing into the next bank and
+skipping pads hidden by the layout; files past the last pad are skipped and the
+status shows how many loaded. If the files would replace other pads that hold
+audio, or pads in banks you cannot see, drop the same files on the same pad
+again within five seconds to confirm.
+
+Drops are refused while ARM or recording is active, in the cut-point editor,
+and while another pad action is running. Your original files are never moved
+or deleted; sources that only offer a move, such as Edison, are copied to a
+temporary folder first. Other platforms use **Import WAV...**.
+
 ## Stored sample rates
 
 All pad audio is stored at **96 kHz or below**, including live recordings,

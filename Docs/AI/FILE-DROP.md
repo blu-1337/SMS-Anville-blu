@@ -40,3 +40,37 @@ every platform.
   delete or reuse the file as soon as `Drop` returns, before the worker reads it.
 - `isSupportedAudioPath` accepts `.wav` and `.wave`, case-insensitively, with a
   non-empty file name.
+
+## Windows target
+
+[`FileDropTargetWin32.cpp`](../../Common-UI/FileDropTargetWin32.cpp) implements
+`IDropTarget`. OLE calls it on the thread that registered the window, which is
+the host UI thread that also delivers DPF events, so the listener needs no
+locking.
+
+- `attach` calls `OleInitialize` and balances it in the destructor, including
+  the `S_FALSE` case. `RPC_E_CHANGED_MODE` (a multithreaded UI thread) returns
+  null and logs once with `OutputDebugStringA`. `RegisterDragDrop` failure
+  returns null. The destructor clears the listener, revokes, releases the COM
+  object, then uninitializes; a late OLE call after detach rejects the drag.
+- `DragEnter` reads `CF_HDROP` (at most 1024 paths) with exact
+  `DragQueryFileW` lengths. Paths convert to UTF-8 with
+  `WC_ERR_INVALID_CHARS`; an invalid name is skipped rather than replaced.
+- `DragEnter` and `DragOver` convert the screen point with `ScreenToClient`,
+  ask `fileDragOver`, and answer `chooseDropEffect(*pdwEffect, accept)`.
+- `Drop` re-reads the paths from its own data object. For COPY it passes the
+  originals. For MOVE or LINK it copies each supported WAV with `CopyFileW` to
+  `%TEMP%\SMS-Anville\drops\<pid>-<counter>.wav`, refreshes the copy's write
+  time (`CopyFileW` keeps the source's), and passes the copies. The answer is
+  `reportedDropEffect`. A drop ends with exactly one of `filesDropped` or
+  `fileDragLeave`.
+- Every COM method catches exceptions and returns `E_UNEXPECTED` with
+  `DROPEFFECT_NONE`.
+- `attach` deletes private copies older than 24 hours, left by a crash or an
+  unfinished batch. `releaseDroppedFile` deletes only files in that folder
+  named `<digits>-<digits>.wav`.
+
+Tests drive the COM object with an in-memory `CF_HDROP` source: MOVE-only,
+COPY-preferred, rejected and null-effect cases, the private copy and its
+release, UTF-8 round trips, registration on a real window, the stale sweep,
+and revocation.

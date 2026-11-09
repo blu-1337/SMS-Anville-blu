@@ -13,8 +13,10 @@ remain headers.
 
 - `FileDropTarget.hpp`: framework-neutral native file-drop registration for an
   editor window; listener callbacks run on the UI thread with UTF-8 paths.
-  Unsupported platforms compile `FileDropTargetNull.cpp`, whose `attach` returns
-  null. See the [file-drop contract](../Docs/AI/FILE-DROP.md).
+  Windows compiles the OLE target `FileDropTargetWin32.cpp`; `FileDropWin32.hpp`
+  exposes its strict UTF-8 conversion and COM object to tests. Other platforms
+  compile `FileDropTargetNull.cpp`, whose `attach` returns null. See the
+  [file-drop contract](../Docs/AI/FILE-DROP.md).
 - `FileDropEffect.hpp`: pure drop-effect choice from the source's allowed mask,
   the MOVE-reported-as-NONE safety rule, and the `.wav`/`.wave` filter.
 

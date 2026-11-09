@@ -95,6 +95,15 @@ struct ChopMidiPreview {
     std::array<std::uint64_t, 3> sourceEndFrames{};
 };
 
+/** The Main Sample source; id 0 means there is none. */
+struct SourceInfo {
+    std::uint64_t id = 0U;
+    std::uint32_t frames = 0U;
+    double sampleRate = 48000.0;
+    float peak = 0.0f;
+    float rms = 0.0f;
+};
+
 /** One pad of an atomic importPads transaction. */
 struct PadImport {
     std::uint32_t pad = kPadCount;
@@ -253,6 +262,25 @@ public:
      */
     [[nodiscard]] bool importPads(std::span<const PadImport> imports,
                                   const EngineSettings* expectedSettings = nullptr);
+    static constexpr std::size_t kMaximumSourceSummaryTiles = 4U;
+    /**
+     * Install, or with nullptr clear, the Main Sample source. Storage is
+     * prepared with the pad frame cap (rates above 96 kHz are downsampled);
+     * one dispatch swaps it, then the old source is released and collected.
+     * The engine holds its own reference, so collection never frees the
+     * current source. The source is not a pad and does not use pad capacity.
+     * Audio needs a nonzero sourceId. Control thread only.
+     */
+    [[nodiscard]] bool setSource(const PadData* audio, std::uint64_t sourceId);
+    [[nodiscard]] SourceInfo sourceInfo() const;
+    /** Copy the whole source; sourceId (optional) receives its identifier. */
+    [[nodiscard]] bool exportSource(PadData& destination, std::uint64_t* sourceId = nullptr) const;
+    /** Copy [first, first + count) of the source; false if sourceId is no longer current. */
+    [[nodiscard]] bool copySourceRange(std::uint64_t sourceId, std::uint32_t first,
+                                       std::uint32_t count, PadData& destination) const;
+    /** Split [start, end) into tiles.size() (1..4) equal summaries binned like summarizeStereo. */
+    [[nodiscard]] bool summarizeSourceRange(std::uint64_t sourceId, std::uint32_t start,
+        std::uint32_t end, std::span<sms::audio::WaveformSummary> tiles) const;
     /**
      * Close the empty run containing targetPad by moving the immediately
      * following occupied run left. Complete pad contents and settings move
@@ -365,6 +393,9 @@ private:
     [[nodiscard]] float snapshotSample(const Snapshot& snapshot, std::uint32_t frame,
                                        std::uint32_t channel) const noexcept;
     void collectImportedStorage();
+    /** Pin the current source (any id when expectedId is 0) under the control
+     * mutex and return it unlocked; the caller scans, then releases one reference. */
+    [[nodiscard]] Storage* pinSource(std::uint64_t expectedId, SourceInfo& info) const;
     [[nodiscard]] Storage* prepareStorage(const PadData& source);
     void publishStorage(std::uint32_t pad, Storage* storage, bool resetSettings) noexcept;
     void setPadPlaybackSettingsDirect(std::uint32_t pad,
@@ -491,6 +522,10 @@ private:
     void* controlContext_ = nullptr;
     void (*controlDispatch_)(void*, void (*)(void*) noexcept, void*) = nullptr;
     std::uint32_t used_blocks_ = 0; // active pad capacity; retained readers use reserve blocks
+    // Main Sample source: written only inside a dispatch issued under
+    // storageControlMutex_, so control readers holding the mutex see it stably.
+    Storage* source_ = nullptr; // holds one engine reference
+    std::uint64_t sourceId_ = 0U;
     std::array<Pad, kPadCount> pads_{};
     std::uint32_t ringCapacityFrames_ = 0;
     std::vector<float> ring_;

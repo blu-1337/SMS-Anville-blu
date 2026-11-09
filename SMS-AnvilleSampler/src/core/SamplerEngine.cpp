@@ -19,6 +19,14 @@ constexpr std::uint32_t poolBlocks(const std::uint32_t captureFrames) noexcept {
         ((captureFrames + kSampleBlockFrames - 1U) / kSampleBlockFrames) +
         kPadsPerBank);
 }
+/** Releases a pinned source after an unlocked scan; collection stays on the control mutex. */
+struct SourceRelease {
+    SampleStoragePool::Storage* storage;
+    explicit SourceRelease(SampleStoragePool::Storage* pinned) noexcept : storage(pinned) {}
+    SourceRelease(const SourceRelease&) = delete;
+    SourceRelease& operator=(const SourceRelease&) = delete;
+    ~SourceRelease() { storage->references.fetch_sub(1U, std::memory_order_release); }
+};
 }
 
 SamplerEngine::SamplerEngine(double sampleRate, double maxRecordSeconds)
@@ -1439,6 +1447,120 @@ bool SamplerEngine::importPads(const std::span<const PadImport> imports,
     });
     collectImportedStorage();
     return applied;
+}
+
+bool SamplerEngine::setSource(const PadData* const audio, const std::uint64_t sourceId) {
+    if (audio && sourceId == 0U) return false;
+    const std::lock_guard lock(storageControlMutex_);
+    collectImportedStorage();
+    Storage* replacement = nullptr;
+    if (audio) {
+        replacement = storagePool_.prepareImport(*audio, sample_rate_, kMaximumPadFrames);
+        if (!replacement) { collectImportedStorage(); return false; }
+        replacement->references.fetch_add(1U, std::memory_order_relaxed); // engine reference
+    }
+    Storage* previous = nullptr;
+    dispatchControl([&]() noexcept {
+        previous = source_;
+        source_ = replacement;
+        sourceId_ = replacement ? sourceId : 0U;
+    });
+    if (previous) previous->references.fetch_sub(1U, std::memory_order_release);
+    collectImportedStorage();
+    return true;
+}
+
+SamplerEngine::Storage* SamplerEngine::pinSource(const std::uint64_t expectedId,
+                                                 SourceInfo& info) const {
+    const std::lock_guard lock(storageControlMutex_);
+    if (!source_ || (expectedId != 0U && expectedId != sourceId_)) return nullptr;
+    source_->references.fetch_add(1U, std::memory_order_relaxed);
+    info = {sourceId_, source_->frames, source_->sampleRate, source_->peak, source_->rms};
+    return source_;
+}
+
+SourceInfo SamplerEngine::sourceInfo() const {
+    const std::lock_guard lock(storageControlMutex_);
+    if (!source_) return {};
+    return {sourceId_, source_->frames, source_->sampleRate, source_->peak, source_->rms};
+}
+
+bool SamplerEngine::exportSource(PadData& destination, std::uint64_t* const sourceId) const {
+    SourceInfo info;
+    auto* source = pinSource(0U, info);
+    if (!source) return false;
+    const SourceRelease release{source};
+    destination.sampleRate = info.sampleRate;
+    destination.frames = info.frames;
+    destination.peak = info.peak;
+    destination.rms = info.rms;
+    destination.generation = 0U;
+    destination.stereo.resize(static_cast<std::size_t>(info.frames) * 2U);
+    storagePool_.copySamples(*source, 0U, destination.stereo);
+    if (sourceId) *sourceId = info.id;
+    return true;
+}
+
+bool SamplerEngine::copySourceRange(const std::uint64_t sourceId, const std::uint32_t first,
+    const std::uint32_t count, PadData& destination) const {
+    if (sourceId == 0U || count == 0U) return false;
+    SourceInfo info;
+    auto* source = pinSource(sourceId, info);
+    if (!source) return false;
+    const SourceRelease release{source};
+    if (first >= info.frames || count > info.frames - first) return false;
+    destination.sampleRate = info.sampleRate;
+    destination.frames = count;
+    destination.generation = 0U;
+    destination.stereo.resize(static_cast<std::size_t>(count) * 2U);
+    storagePool_.copySamples(*source, first, destination.stereo);
+    float peak = 0.0f;
+    double squares = 0.0;
+    for (const float sample : destination.stereo) {
+        peak = std::max(peak, std::abs(sample));
+        squares += static_cast<double>(sample) * sample;
+    }
+    destination.peak = peak;
+    destination.rms = static_cast<float>(std::sqrt(squares / (static_cast<double>(count) * 2.0)));
+    return true;
+}
+
+bool SamplerEngine::summarizeSourceRange(const std::uint64_t sourceId, const std::uint32_t start,
+    const std::uint32_t end, const std::span<sms::audio::WaveformSummary> tiles) const {
+    if (sourceId == 0U || start >= end || tiles.empty() ||
+        tiles.size() > kMaximumSourceSummaryTiles) return false;
+    SourceInfo info;
+    auto* source = pinSource(sourceId, info);
+    if (!source) return false;
+    const SourceRelease release{source};
+    if (end > info.frames) return false;
+    // Scan without the control mutex: a long source must not stall pad workflows.
+    SampleStoragePool::StereoReader read(storagePool_, source);
+    const std::uint64_t length = end - start;
+    for (std::size_t tile = 0; tile < tiles.size(); ++tile) {
+        const auto first = start + static_cast<std::uint32_t>(length * tile / tiles.size());
+        const auto last = start + static_cast<std::uint32_t>(length * (tile + 1U) / tiles.size());
+        auto& summary = tiles[tile];
+        summary = {};
+        summary.frames = last - first;
+        summary.sampleRate = info.sampleRate;
+        const std::uint64_t frames = summary.frames;
+        for (std::size_t bin = 0; frames != 0U && bin < sms::audio::kWaveformBins; ++bin) {
+            const auto binFirst = static_cast<std::uint32_t>(bin * frames / sms::audio::kWaveformBins);
+            const auto binLast = std::max(binFirst + 1U, static_cast<std::uint32_t>(
+                (bin + 1U) * frames / sms::audio::kWaveformBins));
+            float low = 1.0f;
+            float high = -1.0f;
+            for (std::uint32_t frame = binFirst; frame < std::min<std::uint64_t>(binLast, frames); ++frame) {
+                const auto sample = read(first + frame);
+                low = std::min({low, sample[0], sample[1]});
+                high = std::max({high, sample[0], sample[1]});
+            }
+            summary.minimum[bin] = std::clamp(low, -1.0f, 1.0f);
+            summary.maximum[bin] = std::clamp(high, -1.0f, 1.0f);
+        }
+    }
+    return true;
 }
 
 void SamplerEngine::movePadContents(const std::uint32_t source,

@@ -324,6 +324,10 @@ void mainSampleTransactionsNoAlloc()
     for (auto& import : imports)
         if (import.pad != 15U) import.audio = nullptr;
     check(engine.importPads(imports), "a 63-pad clear commits beside running audio");
+    // Source swaps only exchange pointers on the audio thread; frees stay on control.
+    for (std::uint32_t swap = 0; swap < 8U; ++swap)
+        check(engine.setSource(&slices[swap], swap + 1U), "a source swap beside running audio");
+    check(engine.setSource(nullptr, 0U), "a source clear beside running audio");
     audio.stop();
 }
 

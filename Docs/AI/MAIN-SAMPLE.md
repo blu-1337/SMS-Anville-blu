@@ -47,10 +47,29 @@ with its tag and supplied settings. On failure nothing changes and prepared
 storage is collected. Publication hard-stops a sounding pad, so a re-cut cuts
 that pad's voice; this is intended, not hidden.
 
+## Source
+
+`setSource(audio, sourceId)` stores one long source as imported storage
+(`prepareImport`, capped at `kMaximumPadFrames`, rates above 96 kHz stored at
+96 kHz); `nullptr` clears it and audio needs a nonzero id. The engine holds one
+reference, and the pointer swap runs in a dispatch, so the old source is freed
+on the control thread. Source storage does not count against pad capacity
+(`total_blocks_`); it survives collection and a bounded-pool rebuild.
+
+Readers pin the source under the control mutex (a reference plus a copy of its
+id, frames, rate, peak and RMS), unlock, read and release. Only collection,
+which also runs under the mutex, deletes storage, so a long scan never blocks
+pad workflows. `copySourceRange(id, first, count, out)` and
+`summarizeSourceRange(id, start, end, tiles)` refuse a stale id or an
+out-of-range request; copies measure their own peak and RMS, and 1 to 4 tiles
+split the range evenly, binned like `summarizeStereo`. `exportSource` copies
+the whole source and returns its id.
+
 ## Tests
 
 `main-sample-core` covers capture reuse, ranged copies, fingerprints, tags
 through restores, settings edits, collapse, import, paste, clear and
-recording, and `importPads` failures (stale generation, duplicate pad,
-capacity, layout, Arm). `sampler-transfer` checks that 64-pad `importPads`
-commits allocate and free nothing on the audio thread.
+recording, `importPads` failures (stale generation, duplicate pad,
+capacity, layout, Arm), and the source: capacity, collection, rebuild, ranges,
+tiles, rates and freeing. `sampler-transfer` checks that 64-pad `importPads`
+commits and source swaps allocate and free nothing on the audio thread.

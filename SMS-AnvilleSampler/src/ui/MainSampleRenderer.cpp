@@ -107,6 +107,32 @@ int padForSlice(const MainSampleController& main, const std::uint16_t sliceId) n
     return best;
 }
 
+DGL_NAMESPACE::Color darker(const DGL_NAMESPACE::Color& color) noexcept
+{
+    return DGL_NAMESPACE::Color(color.red * 0.55f, color.green * 0.55f, color.blue * 0.55f, 1.0f);
+}
+
+/** Slice-number tab next to a marker line; start tabs sit right of it, end tabs left, darker. */
+void drawMarkerTab(const ViewRenderContext& ctx, const float x, const sms::ui::Rect& bounds,
+                   const unsigned number, const bool endEdge, const bool isHovered,
+                   const DGL_NAMESPACE::Color& color)
+{
+    const auto& colors = sms::ui::dpf::theme();
+    const float width = isHovered ? 22.0f : 18.0f;
+    const float left = endEdge ? x - width : x;
+    ctx.canvas.beginPath();
+    ctx.canvas.roundedRect(left, bounds.y + 6.0f, width, isHovered ? 20.0f : 16.0f, 3.0f);
+    ctx.canvas.fillColor(endEdge ? darker(color) : color);
+    ctx.canvas.fill();
+    char label[8];
+    std::snprintf(label, sizeof(label), "%u", number);
+    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    ctx.canvas.fontSize(9.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    ctx.canvas.fillColor(endEdge ? colors.contentPrimary : colors.canvas);
+    text(ctx, left + width * 0.5f, bounds.y + 14.0f + (isHovered ? 2.0f : 0.0f), label, nullptr);
+}
+
 void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& main)
 {
     const auto& colors = sms::ui::dpf::theme();
@@ -182,6 +208,7 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         float x;
         int slice;
         int edge;
+        int endSlice; // slice whose end coincides with a start marker, or -1
     };
     std::array<Marker, kMaxMarkers * 2U> markers{};
     std::size_t markerTotal = 0U;
@@ -194,8 +221,12 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
                 shared = shared || slices[other].start == frame;
             if (shared || frame < viewport.start || frame > viewport.end)
                 continue;
+            int endSlice = -1;
+            for (std::size_t other = 0; edge == 0 && other < markerCount; ++other)
+                if (slices[other].end == frame && endSlice < 0)
+                    endSlice = static_cast<int>(other);
             markers[markerTotal++] = {viewport.xForFrame(static_cast<double>(frame), bounds),
-                                      static_cast<int>(index), edge};
+                                      static_cast<int>(index), edge, endSlice};
         }
     }
     std::sort(markers.begin(), markers.begin() + static_cast<std::ptrdiff_t>(markerTotal),
@@ -209,17 +240,29 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             room = std::min(room, markers[order + 1U].x - marker.x);
         const bool isHovered =
             hovered(ctx, InteractiveType::mainSampleMarker, marker.slice * 2 + marker.edge);
+        const auto sliceColor = [&](const int slice) {
+            const auto* tint = padTint(ctx, padForSlice(main, slices[static_cast<std::size_t>(slice)].id));
+            return tint != nullptr ? *tint : colors.selection;
+        };
         if (room >= 38.0f) {
-            char label[8];
-            std::snprintf(label, sizeof(label), marker.edge == 0 ? "%u" : "END",
-                          static_cast<unsigned>(marker.slice + 1));
-            sms::ui::dpf::drawCutHandle(ctx.canvas, marker.x, bounds.y, bounds.height, label, isHovered);
+            const auto lineColor = sliceColor(marker.slice);
+            ctx.canvas.beginPath();
+            ctx.canvas.moveTo(marker.x, bounds.y);
+            ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
+            ctx.canvas.strokeColor(marker.edge == 1 ? darker(lineColor) : lineColor);
+            ctx.canvas.strokeWidth(isHovered ? 4.0f : 2.0f);
+            ctx.canvas.stroke();
+            if (marker.endSlice >= 0)
+                drawMarkerTab(ctx, marker.x, bounds, static_cast<unsigned>(marker.endSlice + 1), true,
+                              false, sliceColor(marker.endSlice));
+            drawMarkerTab(ctx, marker.x, bounds, static_cast<unsigned>(marker.slice + 1), marker.edge == 1,
+                          isHovered, lineColor);
             continue;
         }
         ctx.canvas.beginPath();
         ctx.canvas.moveTo(marker.x, bounds.y);
         ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
-        ctx.canvas.strokeColor(colors.selection);
+        ctx.canvas.strokeColor(marker.edge == 1 ? darker(sliceColor(marker.slice)) : sliceColor(marker.slice));
         ctx.canvas.strokeWidth(isHovered ? 3.0f : 1.0f);
         ctx.canvas.stroke();
         if (marker.edge == 0 && (room >= 16.0f || isHovered)) {
@@ -228,7 +271,7 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
             ctx.canvas.fontSize(8.0f);
             ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-            ctx.canvas.fillColor(colors.selection);
+            ctx.canvas.fillColor(sliceColor(marker.slice));
             text(ctx, marker.x, bounds.y + 3.0f, label, nullptr);
         }
     }

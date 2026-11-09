@@ -3,6 +3,7 @@
 add_library(sms_analysis STATIC
   OnsetAnalysis.cpp
   RealFft.cpp
+  SliceStrategies.cpp
   TempoEstimate.cpp)
 target_include_directories(sms_analysis PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_compile_features(sms_analysis PUBLIC cxx_std_20)

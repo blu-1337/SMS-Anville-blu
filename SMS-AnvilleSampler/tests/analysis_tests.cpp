@@ -1,10 +1,12 @@
 // sms_analysis: FFT, PRNG, onsets, tempo and slice strategies.
 #include "Analysis/OnsetAnalysis.hpp"
 #include "Analysis/RealFft.hpp"
+#include "Analysis/SliceStrategies.hpp"
 #include "Analysis/SplitMix64.hpp"
 #include "Analysis/TempoEstimate.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 
@@ -241,6 +243,143 @@ void analysisSpeed()
     check(seconds < 1.0, "3 minutes analyze in under 1 s");
 #endif
 }
+// A looped hit pattern with varied amplitude, one burst per half beat.
+std::vector<float> drumLoop(const double rate, const double seconds, const double bpm, const std::uint64_t seed)
+{
+    auto x = noiseBed(static_cast<std::size_t>(rate * seconds), 0.002F, seed);
+    SplitMix64 rng(seed);
+    const double step = 30.0 / bpm * rate;
+    for (double t = 0.2 * rate; t < (seconds - 0.4) * rate; t += step) {
+        addBurst(x, rate, static_cast<std::int64_t>(t), static_cast<float>(0.2 + 0.6 * rng.nextUnit()));
+    }
+    return x;
+}
+
+void checkRegions(const std::vector<SliceRegion>& r, const SliceContext& ctx, const bool allowOverlap)
+{
+    for (std::size_t i = 0; i < r.size(); ++i) {
+        check(r[i].start >= ctx.rangeStart && r[i].end <= ctx.rangeEnd, "region inside range");
+        check(r[i].end - r[i].start >= ctx.minFrames, "region at least minFrames");
+        check(ctx.maxFrames == 0 || r[i].end - r[i].start <= ctx.maxFrames, "region at most maxFrames");
+        if (i > 0) {
+            check(r[i].start >= r[i - 1].start, "sorted by start");
+            check(allowOverlap || r[i].start >= r[i - 1].end, "no overlap");
+        }
+    }
+}
+
+void beatMathHasNoDrift()
+{
+    OnsetAnalysis empty;
+    empty.sourceRate = 48000.0;
+    SliceContext ctx{empty, 0, 48000 * 600, 1, 0, 120.0};
+    const auto beats = beatSlices(ctx, 8, 1.0, 0, false);
+    check(beats.size() == 8, "eight beat slices");
+    for (const auto& s : beats) {
+        check(s.end - s.start == 24000, "120 BPM at 48 kHz: one beat is 24000 frames");
+    }
+    empty.sourceRate = 44100.0;
+    SliceContext c2{empty, 0, 44100 * 600, 1, 0, 128.0};
+    const auto quarters = beatSlices(c2, 64, 0.25, 1000, false);
+    check(quarters.size() == 64, "64 quarter-beat slices");
+    const double step = 60.0 / 128.0 * 44100.0 / 4.0;
+    check(std::abs(static_cast<double>(quarters.back().end - 1000) - 64.0 * step) <= 0.5, "no drift over 64 slices");
+    check(beatSlices(SliceContext{empty, 0, 1000, 1, 0, 0.0}, 4, 1.0, 0, false).empty(), "no tempo, no beat slices");
+    const auto triplets = beatSlices(ctx, 3, 1.0 / 3.0, 0, false);
+    check(triplets.size() == 3 && triplets[0].end - triplets[0].start == 7350, "triplet third of a beat");
+}
+
+void equalAndTransientSlices()
+{
+    OnsetAnalysis empty;
+    empty.sourceRate = 44100.0;
+    SliceContext ctx{empty, 100, 100 + 1003, 1, 0, 0.0};
+    const auto eq = equalSlices(ctx, 8);
+    check(eq.size() == 8 && eq.front().start == 100 && eq.back().end == 1103, "equal slices cover the range");
+    for (std::size_t i = 1; i < eq.size(); ++i) {
+        check(eq[i].start == eq[i - 1].end, "equal slices are contiguous");
+    }
+    check(equalSlices(ctx, 0).empty(), "zero count");
+
+    const double rate = 44100.0;
+    auto x = noiseBed(static_cast<std::size_t>(rate * 14), 0.001F, 21);
+    std::vector<std::int64_t> truth;
+    for (int i = 0; i < 16; ++i) {
+        truth.push_back(static_cast<std::int64_t>(rate * (0.3 + 0.8 * i)));
+        addBurst(x, rate, truth.back(), 0.7F);
+    }
+    const auto a = analyzeOnsets(x, rate);
+    SliceContext tc{a, 0, a.sourceFrames, 1, 0, 0.0};
+    const auto eight = transientSlices(tc, 8, 0.6F, 0.05);
+    check(eight.size() == 8, "asked for 8, got 8");
+    checkRegions(eight, tc, false);
+    for (std::size_t i = 0; i + 1 < eight.size(); ++i) {
+        check(eight[i].end == eight[i + 1].start, "slice i ends where slice i+1 starts");
+    }
+    const auto all = transientSlices(tc, 64, 0.6F, 0.05);
+    check(all.size() == 16 && all.back().end == a.sourceFrames, "fewer onsets than asked: no invented cuts");
+}
+
+void findSamplesAndRandom()
+{
+    const double rate = 44100.0;
+    const auto x = drumLoop(rate, 40.0, 120.0, 4);
+    const auto a = analyzeOnsets(x, rate);
+    SliceContext ctx{a, 0, a.sourceFrames, 1, 0, 120.0};
+    const auto f1 = findSamples(ctx, 8, 0);
+    check(!f1.empty() && f1.size() <= 8, "find samples returns picks");
+    checkRegions(f1, ctx, false);
+    const auto beat = static_cast<std::int64_t>(rate * 0.5);
+    std::array<std::size_t, 4> quarters{};
+    for (std::size_t i = 0; i < f1.size(); ++i) {
+        ++quarters[std::min<std::size_t>(3, static_cast<std::size_t>(f1[i].start * 4 / a.sourceFrames))];
+        check(i == 0 || f1[i].start - f1[i - 1].start >= beat, "at least a beat between starts");
+    }
+    for (const auto q : quarters) {
+        check(q <= 2, "spread: at most ceil(N/4) per quarter");
+    }
+    const auto again = findSamples(ctx, 8, 0);
+    bool same = again.size() == f1.size();
+    for (std::size_t i = 0; same && i < f1.size(); ++i) {
+        same = again[i].start == f1[i].start && again[i].end == f1[i].end;
+    }
+    check(same, "same seed, same set");
+    const auto f2 = findSamples(ctx, 8, 7);
+    const auto f3 = findSamples(ctx, 8, 99);
+    auto differs = [](const std::vector<SliceRegion>& p, const std::vector<SliceRegion>& q) {
+        if (p.size() != q.size()) {
+            return true;
+        }
+        for (std::size_t i = 0; i < p.size(); ++i) {
+            if (p[i].start != q[i].start || p[i].end != q[i].end) {
+                return true;
+            }
+        }
+        return false;
+    };
+    check(differs(f1, f2) || differs(f1, f3) || differs(f2, f3), "a new seed gives a different set");
+
+    const std::vector<float> silence(static_cast<std::size_t>(rate * 10) * 2, 0.0F);
+    const auto sa = analyzeOnsets(silence, rate);
+    check(findSamples(SliceContext{sa, 0, sa.sourceFrames, 1, 0, 120.0}, 8, 0).empty(), "silence is rejected");
+
+    const auto r1 = randomSlices(ctx, 6, 2.0, 1, false);
+    check(r1.size() == 6, "six random slices");
+    checkRegions(r1, ctx, false);
+    for (const auto& s : r1) {
+        check(s.end - s.start == static_cast<std::int64_t>(rate), "random length is lengthBeats");
+    }
+    const auto r1b = randomSlices(ctx, 6, 2.0, 1, false);
+    const auto r2 = randomSlices(ctx, 6, 2.0, 2, false);
+    check(!differs(r1, r1b), "random is deterministic");
+    check(differs(r1, r2), "a new seed gives a different random set");
+    const auto snapped = randomSlices(ctx, 6, 2.0, 1, true);
+    checkRegions(snapped, ctx, false);
+    check(randomSlices(SliceContext{a, 0, a.sourceFrames, 1, 0, 0.0}, 4, 2.0, 1, false).empty(), "random needs a tempo");
+
+    SliceContext limited{a, 0, a.sourceFrames, 1, static_cast<std::int64_t>(rate), 120.0};
+    checkRegions(transientSlices(limited, 16, 0.6F, 0.05), limited, true);
+}
 } // namespace
 
 int main()
@@ -254,5 +393,8 @@ int main()
     determinismCancelAndEdges();
     tempoOnClickTracks();
     analysisSpeed();
+    beatMathHasNoDrift();
+    equalAndTransientSlices();
+    findSamplesAndRandom();
     return EXIT_SUCCESS;
 }

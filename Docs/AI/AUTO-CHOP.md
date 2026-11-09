@@ -16,3 +16,15 @@ Analysis runs once per source on the control worker and is never saved. Selectio
 - `TempoEstimate.hpp/.cpp`: autocorrelation of the novelty curve, scanned in 0.25 BPM steps with linear lag interpolation and a log-Gaussian prior at 120 BPM (sigma one octave).
 
 A cancelled analysis has `cancelled` set and must not be cached.
+
+## Slice strategies
+
+`SliceStrategies.hpp/.cpp` selects `SliceRegion{start,end}` frames from a cached `OnsetAnalysis`. The `SliceContext` carries the range, `minFrames`, `maxFrames` (`kMaximumPadFrames`) and the BPM. Results are sorted, clamped, and may be fewer than requested; nothing is invented.
+
+- Transient: first N onsets in time order; slice i ends at onset i+1, the last at the range end.
+- Find Samples: onsets at medium sensitivity, each 1, 2 or 4 beats long and ending before the next strong onset. Score is onset strength times length fit times RMS; regions under -40 dBFS are rejected. Greedy selection subtracts half the largest band-cosine similarity to picked regions, forbids overlap, requires one beat between starts and at most ceil(N/4) picks per range quarter. A nonzero seed jitters scores by 10%.
+- Equal: N equal parts; remainder spread by integer division.
+- Beat: boundaries `anchor + round(i * step)` computed cumulatively, so there is no drift; optional snap to an onset within 30 ms.
+- Random: seeded starts, optional snap within a quarter beat, bounded retries to avoid overlap.
+
+Beat-based modes return nothing when the BPM is 0.

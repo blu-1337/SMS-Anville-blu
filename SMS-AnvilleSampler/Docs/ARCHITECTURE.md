@@ -11,11 +11,12 @@
   `PadActionController` and `ChopEditorController`. `SamplerInputController` routes
   input and owns captures/waveform gestures; `MixerInteractionController` owns
   numeric/mixer/range editing; `ApplicationMenuController` owns layout/skin menus.
+  `FileDropController` queues dropped WAVs.
   `EditorSnapshotSession` matches replies; `WaveformDetailSession` owns zoom/detail;
   `PlaybackIndicator` tracks source positions. `MidichopperInteraction` resolves
   targets; `MidichopperView` composes renderers. Controllers exclude DPF.
 - `Common-Src` provides framework-neutral DSP, codecs, audio handoff, geometry,
-  and bounded atomic-merge defaults through `IO/DefaultsFile.*`.
+  and atomic-merge defaults (`IO/DefaultsFile.*`).
   `Common-UI` provides shared controls, pads, waveform editing and DPF rendering.
 
 Per-instance skins exclude DSP/project state. [Guide](SKINS.md).
@@ -31,7 +32,7 @@ reports pad/preview activity. Views follow bank, notes and selection.
 `PlaybackRequest.hpp` preserves legacy integers and adds Play, Loop, looping
 toggle, and Stop Audition through one atomic command. UI-local Play/Loop/Off
 replaces previous auditions within the voice limit. MIDI retrigger takes ownership;
-Stop Audition cannot cut its replacement. Stop All also supports host control.
+Stop Audition cannot cut its replacement. Stop All supports host control.
 All Banks caps the base note at 64, keeping layouts within MIDI 0–127.
 UI labels follow engine mapping. Selected Bank reuses one range,
 with `active_bank` choosing its target, and retains fixed 16-slot banks.
@@ -111,7 +112,7 @@ extrema with whole-source fallback. Pad/editor changes reset caches.
 [Editor detail](../../Docs/AI/CHOP-EDITOR.md).
 
 `pad_color_01..64` saves slot palette indices. Zero/unavailable indices mean no
-tint; colors stay with slots through sample edits and moves.
+tint; colors stay with slots through edits and moves.
 
 `pad_clear_request` publishes an atomic command consumed at the next block.
 **CLEAR PADS** preserves every global parameter, knob mode/range, layout, bank

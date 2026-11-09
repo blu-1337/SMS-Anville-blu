@@ -70,7 +70,40 @@ locking.
   unfinished batch. `releaseDroppedFile` deletes only files in that folder
   named `<digits>-<digits>.wav`.
 
-Tests drive the COM object with an in-memory `CF_HDROP` source: MOVE-only,
-COPY-preferred, rejected and null-effect cases, the private copy and its
-release, UTF-8 round trips, registration on a real window, the stale sweep,
-and revocation.
+## Controller rules
+
+[`FileDropController`](../../SMS-AnvilleSampler/src/ui/FileDropController.hpp)
+is DPF-free and lives in `anvillesampler_ui_controllers`.
+
+- **Accept** a visible pad of the current bank (`padTarget`) when at least one
+  path is a supported WAV. **Reject** while armed or capturing, while the Cut
+  Point Editor is active, while a pad action is busy or a dialog is pending,
+  while a previous batch is still loading, and for `mainSample` targets (that
+  view does not exist yet). An accepted hover highlights the drop pad.
+- **Order:** files keep the source's order and fill consecutive visible pads
+  from the drop pad (`advanceVisiblePad`), across banks, skipping hidden
+  layout slots. At most 64 files; files past the last pad are released at once
+  and the batch ends with "Loaded k of n files".
+- **Confirmation:** one file replaces its pad without asking, like Import.
+  When a batch would replace another pad that is occupied, or whose occupancy
+  the UI cannot see (another bank), the first drop only arms; dropping the same
+  number of files on the same pad within 5 seconds confirms. This follows the
+  existing click-again confirmations; there is no modal dialog.
+- **FIFO:** `idle` sends one file through `PadActionController::importFile`,
+  the same request as the Import dialog, only when no pad action is busy, no
+  import is in flight and no dialog is pending. Completion is the import's
+  result, not the busy flag, which can arrive late. A failed file still
+  advances. Arming stops the remaining files.
+- **Release:** every path goes back through `releaseDroppedFile` exactly once:
+  rejected and unsupported files at once, imported files when their result
+  arrives. Destruction releases queued files but not the one in flight, which
+  the worker may still be reading; the stale sweep removes it later.
+
+## Tests
+
+`ui-file-drop` checks every effect mask and drives the Windows COM object with
+an in-memory `CF_HDROP` source: MOVE-only, COPY-preferred, rejected and
+null-effect cases, the private copy and its release, UTF-8 round trips,
+registration on a real window, the stale sweep and revocation.
+`ui-file-drop-controller` covers acceptance, bank/layout mapping, hidden
+slots, FIFO gating, late busy flags, overflow, confirmation and release.

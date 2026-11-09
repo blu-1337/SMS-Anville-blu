@@ -90,6 +90,7 @@ add_library(anvillesampler_core STATIC
 # UI workflow/input logic has no DPF dependency and is tested without a window.
 add_library(anvillesampler_ui_controllers STATIC
   src/ui/ApplicationMenuController.cpp
+  src/ui/FileDropController.cpp
   src/ui/MixerInteractionController.cpp
   src/ui/PadActionController.cpp
   src/ui/SamplerInputController.cpp
@@ -517,6 +518,10 @@ if(BUILD_TESTING)
   add_executable(anvillesampler_file_drop_tests tests/file_drop_tests.cpp)
   target_link_libraries(anvillesampler_file_drop_tests PRIVATE sms_common_ui)
   add_test(NAME ui-file-drop COMMAND anvillesampler_file_drop_tests)
+
+  add_executable(anvillesampler_file_drop_controller_tests tests/file_drop_controller_tests.cpp)
+  target_link_libraries(anvillesampler_file_drop_controller_tests PRIVATE anvillesampler_ui_controllers)
+  add_test(NAME ui-file-drop-controller COMMAND anvillesampler_file_drop_controller_tests)
 
   add_executable(anvillesampler_pad_action_controller_tests
     tests/pad_action_controller_tests.cpp)

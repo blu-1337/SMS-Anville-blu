@@ -81,6 +81,7 @@ private:
     void edit(const MainSampleRequest& request);
     void assign(const MainSampleRequest& request);
     void remove(const MainSampleRequest& request);
+    void arrange(const MainSampleRequest& request);
     void waveform(const MainSampleRequest& request);
     void autoChop(const AutoChopRequest& request);
     void publishAutoChop(const AutoChopStatus& status);

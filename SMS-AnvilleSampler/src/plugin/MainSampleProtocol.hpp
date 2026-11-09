@@ -8,6 +8,7 @@
 #include "Configuration.hpp"
 #include "SourcePreviewRequest.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstddef>
@@ -168,7 +169,55 @@ private:
 
 } // namespace main_sample_detail
 
-enum class MainSampleVerb : std::uint8_t { load, clear, query, edit, assign, remove, waveform };
+enum class MainSampleVerb : std::uint8_t {
+    load, clear, query, edit, assign, remove, waveform, arrange };
+
+/** One pad whose audio and settings move to another pad. */
+struct ArrangeMove {
+    std::uint32_t from = 0U;
+    std::uint32_t to = 0U;
+    friend bool operator==(const ArrangeMove&, const ArrangeMove&) = default;
+};
+
+/**
+ * Arrange: the linked pads keep their set of pad numbers, but the slices in
+ * time order (earliest start, then id) take those pads in ascending order.
+ * Returns only the pads that change; the result is a permutation of the set.
+ */
+[[nodiscard]] inline std::vector<ArrangeMove> arrangeMoves(
+    const std::vector<MainSampleSlice>& slices, const std::vector<MainSampleLink>& links)
+{
+    struct Entry {
+        std::uint32_t pad;
+        MainSampleSlice slice;
+    };
+    std::vector<Entry> entries;
+    std::vector<std::uint32_t> pads;
+    for (const auto& link : links) {
+        for (const auto& slice : slices) {
+            if (slice.id != link.sliceId)
+                continue;
+            bool duplicate = false;
+            for (const auto pad : pads)
+                duplicate = duplicate || pad == link.pad;
+            if (!duplicate) {
+                entries.push_back({link.pad, slice});
+                pads.push_back(link.pad);
+            }
+            break;
+        }
+    }
+    std::sort(pads.begin(), pads.end());
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        return a.slice.start != b.slice.start ? a.slice.start < b.slice.start
+                                              : a.slice.id < b.slice.id;
+    });
+    std::vector<ArrangeMove> moves;
+    for (std::size_t index = 0; index < entries.size(); ++index)
+        if (entries[index].pad != pads[index])
+            moves.push_back({entries[index].pad, pads[index]});
+    return moves;
+}
 
 struct MainSampleRequest {
     std::uint64_t sequence = 0U;
@@ -197,6 +246,7 @@ struct MainSampleRequest {
     case MainSampleVerb::assign:
         return encoded + "A;" + std::to_string(request.pad) + ";" + std::to_string(request.start) +
                ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0");
+    case MainSampleVerb::arrange: return encoded + "R";
     case MainSampleVerb::remove: return encoded + "D;" + std::to_string(request.sliceId);
     case MainSampleVerb::waveform:
         return encoded + "W;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
@@ -227,9 +277,11 @@ struct MainSampleRequest {
     }
     case 'C':
     case 'Q':
+    case 'R':
         if (!fields.finished())
             return false;
-        decoded.verb = verb[0] == 'C' ? MainSampleVerb::clear : MainSampleVerb::query;
+        decoded.verb = verb[0] == 'C' ? MainSampleVerb::clear
+            : verb[0] == 'Q' ? MainSampleVerb::query : MainSampleVerb::arrange;
         break;
     case 'S': {
         std::string_view list;

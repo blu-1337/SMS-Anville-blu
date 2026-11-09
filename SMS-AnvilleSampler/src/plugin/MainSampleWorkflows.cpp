@@ -235,6 +235,7 @@ void MainSampleWorkflows::handleRequestImpl(const MainSampleRequest& request)
     case MainSampleVerb::assign: assign(request); return;
     case MainSampleVerb::remove: remove(request); return;
     case MainSampleVerb::waveform: waveform(request); return;
+    case MainSampleVerb::arrange: arrange(request); return;
     }
 }
 
@@ -386,6 +387,56 @@ void MainSampleWorkflows::remove(const MainSampleRequest& request)
             affected |= std::uint64_t{1} << pad;
     }
     session_ = std::move(edited);
+    publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
+}
+
+void MainSampleWorkflows::arrange(const MainSampleRequest& request)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
+        return;
+    }
+    const auto settings = engineSettings();
+    if (settings.armed) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Disarm recording first");
+        return;
+    }
+    const auto pads = snapshotPads();
+    std::vector<MainSampleLink> links;
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        const auto provenance = pads.provenance[pad];
+        if (provenance != 0U && (provenance >> 16U) == session_.sourceId)
+            links.push_back({pad, static_cast<std::uint16_t>(provenance & kSliceMask)});
+    }
+    const auto moves = arrangeMoves(session_.slices, links);
+    if (moves.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::ready, "Pads already in order");
+        return;
+    }
+    // Every moved pad is both a source and a destination, so one transaction replaces them all.
+    std::vector<PadData> audio(moves.size());
+    std::vector<PadImport> imports(moves.size());
+    std::uint64_t affected = 0U;
+    for (std::size_t index = 0; index < moves.size(); ++index) {
+        const auto from = moves[index].from;
+        const auto to = moves[index].to;
+        auto& import = imports[index];
+        import.pad = to;
+        import.audio = &audio[index];
+        if (!sampler_.exportPad(from, audio[index], &import.playback, &import.mixer)) {
+            publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+            return;
+        }
+        import.provenance = pads.provenance[from];
+        import.expectedGeneration = pads.generations[to];
+        affected |= std::uint64_t{1} << to;
+    }
+    if (!sampler_.importPads(imports, &settings)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+        return;
+    }
+    publishPadSettings(affected, true);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
 }
 

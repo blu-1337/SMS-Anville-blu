@@ -3,6 +3,7 @@
 #include "../plugin/StateKeys.hpp"
 
 #include <algorithm>
+#include <utility>
 
 namespace midichopper::ui {
 
@@ -79,6 +80,12 @@ bool MainSampleController::acceptStatus(const std::string_view encoded, const Ti
     }
 
     const auto state = decoded.state;
+    if (fArrangeSequence != 0U && decoded.sequence == fArrangeSequence) {
+        if (state == MainSampleState::ready)
+            fArrangeConfirmed = std::move(fArrangeMoves);
+        fArrangeMoves.clear();
+        fArrangeSequence = 0U;
+    }
     if (state == MainSampleState::loading || state == MainSampleState::error ||
         state == MainSampleState::confirm) {
         // These carry a message, not the session; keep the mirrored source.
@@ -248,6 +255,26 @@ bool MainSampleController::confirmAssign(const bool confirm)
     }
     fHost.repaintMainSample();
     return true;
+}
+
+bool MainSampleController::arrange()
+{
+    if (!hasSource())
+        return false;
+    auto moves = plugin::arrangeMoves(fStatus.slices, fStatus.links);
+    if (moves.empty())
+        return false;
+    MainSampleRequest request;
+    request.verb = MainSampleVerb::arrange;
+    send(request);
+    fArrangeMoves = std::move(moves);
+    fArrangeSequence = fSequence;
+    return true;
+}
+
+std::vector<plugin::ArrangeMove> MainSampleController::takeArrangedMoves()
+{
+    return std::exchange(fArrangeConfirmed, {});
 }
 
 bool MainSampleController::deleteSlice(const std::uint16_t sliceId)

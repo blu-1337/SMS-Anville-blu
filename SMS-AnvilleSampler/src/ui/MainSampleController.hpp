@@ -63,6 +63,14 @@ public:
     /** First visible (local) pad, in pad-number order, with no sample ('0' or '.'); -1 if none. */
     [[nodiscard]] static int firstFreePad(std::string_view padState, int visiblePads) noexcept;
     bool confirmAssign(bool confirm);
+    /**
+     * Arrange: asks the plug-in to renumber the linked pads in slice time order.
+     * False (and nothing sent) when there is nothing to move. The moves are kept
+     * until takeArrangedMoves() so the session can carry pad colours along.
+     */
+    bool arrange();
+    /** Moves of the arrange the plug-in confirmed; empty until its reply. Consumed once. */
+    [[nodiscard]] std::vector<plugin::ArrangeMove> takeArrangedMoves();
     bool deleteSlice(std::uint16_t sliceId);
     bool preview(std::uint32_t start, std::uint32_t end, bool loop);
     void stopPreview();
@@ -183,6 +191,9 @@ private:
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;
     std::uint16_t fSelectedSlice = 0U;
+    std::vector<plugin::ArrangeMove> fArrangeMoves;   // sent, awaiting the reply
+    std::uint64_t fArrangeSequence = 0U;
+    std::vector<plugin::ArrangeMove> fArrangeConfirmed;
     std::optional<Drag> fDrag;
     int fSelectionEdge = 0; // 1 = start, 2 = end of the selection while right-dragging
     std::optional<PendingAssign> fConfirm;

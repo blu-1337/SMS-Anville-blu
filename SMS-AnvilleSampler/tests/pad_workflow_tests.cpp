@@ -1223,6 +1223,33 @@ void autoChopWorkflow()
               "slice N lands on the pad labelled N");
 }
 
+void mainSampleArrange()
+{
+    MainSampleFixture fixture;
+    const auto path = writeSourceWav("sms-main-sample-arrange.wav", 1000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    const auto sourceId = fixture.send(load, 2U).sourceId;
+    check(fixture.send(assignRequest(0U, 600U, 800U)).state == MainSampleState::ready, "assign late slice");
+    check(fixture.send(assignRequest(1U, 0U, 300U)).state == MainSampleState::ready, "assign early slice");
+    check(fixture.send(assignRequest(3U, 300U, 600U)).state == MainSampleState::ready, "assign middle slice");
+    auto mixer = fixture.engine.padMixerSettings(0U);
+    mixer.gainDecibels = -9;
+    fixture.engine.setPadMixerSettings(0U, mixer);
+    const auto lateProvenance = fixture.provenance(0U);
+
+    auto status = fixture.send(mainRequest(MainSampleVerb::arrange));
+    check(status.state == MainSampleState::ready && status.affectedMask == 0xBU &&
+          padHoldsSlice(fixture.engine, 0U, 0U, 300U) && padHoldsSlice(fixture.engine, 1U, 300U, 600U) &&
+          padHoldsSlice(fixture.engine, 3U, 600U, 800U),
+          "arrange moves the audio so pad order follows time order in one transaction");
+    check(fixture.provenance(3U) == lateProvenance && (fixture.provenance(0U) >> 16U) == sourceId &&
+          sameMixer(fixture.engine.padMixerSettings(3U), mixer),
+          "links and mixer settings travel with the audio");
+    status = fixture.send(mainRequest(MainSampleVerb::arrange));
+    check(status.state == MainSampleState::ready && status.affectedMask == 0U, "a second arrange changes nothing");
+}
+
 int main()
 {
     clipboardSnapshotAndReplies();
@@ -1239,5 +1266,6 @@ int main()
     mainSampleLoadQueryWaveformAndClear();
     mainSampleAssignEditAndDelete();
     autoChopWorkflow();
+    mainSampleArrange();
     std::cout << "Pad workflow tests passed\n";
 }

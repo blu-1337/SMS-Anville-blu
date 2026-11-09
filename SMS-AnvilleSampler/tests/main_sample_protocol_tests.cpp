@@ -4,6 +4,7 @@
 #include "MainSampleProtocol.hpp"
 #include "MainSampleSession.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -66,13 +67,17 @@ void requests()
     remove.sliceId = 65535U;
     check(roundTrip(remove).sliceId == 65535U, "remove round-trips");
 
+    MainSampleRequest arrange;
+    arrange.verb = MainSampleVerb::arrange;
+    check(roundTrip(arrange).verb == MainSampleVerb::arrange, "arrange round-trips");
+
     MainSampleRequest ignored;
     for (const char* bad : {"MS1;99999999999999999999;Q", "MS1;1;Q;x", "MS1;1;C;", "MS1;1;D;5;",
                             "MS1;1;A;3;0;10", "MS1;1;A;64;0;10;0", "MS1;1;A;3;10;10;0",
                             "MS1;1;A;3;0;10;2", "MS1;1;W;0;10;5", "MS1;1;W;0;10;0",
                             "MS1;1;S;1:0:5,1:5:9", "MS1;1;S;1:0:5,2:5:9,3:9:12", "MS1;1;S;",
                             "MS1;1;S;1:0:5,", "MS1;1;D;0", "MS1;1;L;", "MS1;1;L", "MS1;1;X",
-                            "MS1;1;QQ", "MS2;1;Q", "MS1;-1;Q", "MS1;1;D;65536", "MS1;1;S;0:0:5"})
+                            "MS1;1;QQ", "MS1;1;R;", "MS2;1;Q", "MS1;-1;Q", "MS1;1;D;65536", "MS1;1;S;0:0:5"})
         check(!decodeMainSampleRequest(bad, ignored), bad);
 }
 
@@ -292,9 +297,32 @@ void autoChop()
           !decodeAutoChopStatus("AC1;4;BUSY;1", d), "AC1 malformed status is refused");
 }
 
+void arrangement()
+{
+    // Pads 2, 5, 9 hold the slices at times 600, 0, 300: time order must be 5, 9, 2 -> pads 2, 5, 9.
+    const std::vector<MainSampleSlice> slices{{1U, 600U, 800U}, {2U, 0U, 300U}, {3U, 300U, 600U}};
+    const std::vector<MainSampleLink> links{{2U, 1U}, {5U, 2U}, {9U, 3U}};
+    const auto moves = arrangeMoves(slices, links);
+    check(moves.size() == 3U && moves[0] == ArrangeMove{5U, 2U} && moves[1] == ArrangeMove{9U, 5U} &&
+          moves[2] == ArrangeMove{2U, 9U}, "arrange gives slices in time order the lowest used pads");
+    std::vector<std::uint32_t> from;
+    std::vector<std::uint32_t> to;
+    for (const auto& move : moves) { from.push_back(move.from); to.push_back(move.to); }
+    std::sort(from.begin(), from.end());
+    std::sort(to.begin(), to.end());
+    check(from == to, "arrange permutes the used pad set");
+    check(arrangeMoves(slices, {{2U, 2U}, {5U, 3U}, {9U, 1U}}).empty(), "ordered pads need no moves");
+    check(arrangeMoves(slices, {{7U, 99U}}).empty() && arrangeMoves(slices, {}).empty(),
+          "unknown slices and empty links are ignored");
+    const auto swapped = arrangeMoves(slices, {{4U, 2U}, {1U, 1U}});
+    check(swapped.size() == 2U && swapped[0] == ArrangeMove{4U, 1U} && swapped[1] == ArrangeMove{1U, 4U},
+          "unlinked pads stay out of the set and two pads can swap");
+}
+
 int main()
 {
     requests();
+    arrangement();
     statuses();
     waveforms();
     previews();

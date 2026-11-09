@@ -318,6 +318,8 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             }
             if (isTarget(clicked, InteractiveType::mainSampleAction)) {
                 if (clicked.index == 0) assignSelectionToFreePad();
+                else if (clicked.index == 1 && !main.arrange())
+                    fSession.setLocalStatus("Pads already in order");
                 fHost.repaintSamplerInput();
                 return true;
             }

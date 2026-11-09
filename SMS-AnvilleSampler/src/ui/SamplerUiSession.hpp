@@ -170,6 +170,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void beginPadSampleEditor(int pad) override;
     void refreshPadWaveform() override;
     void setPadColor(int pad, int color) override;
+    /** Pad colours follow Arrange: each destination takes its source pad's colour. */
+    void applyArrangedColors(const std::vector<plugin::ArrangeMove>& moves);
     void sendMainSampleState(const char *key, const std::string &value) override;
     void repaintMainSample() override;
 

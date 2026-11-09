@@ -256,7 +256,7 @@ inline constexpr sms::ui::Rect mainSampleLoad{994.0f, 462.0f, 104.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleClear{1112.0f, 462.0f, 104.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleStatus{994.0f, 506.0f, 222.0f, 40.0f};
 // Slice tools below the status text: 0 ASSIGN, 1 ARRANGE, 2 AUTO COLOR, 3 CLEAR COLORS.
-inline constexpr int kMainSampleActionCount = 1;
+inline constexpr int kMainSampleActionCount = 2;
 [[nodiscard]] constexpr sms::ui::Rect mainSampleAction(const int index) noexcept
 {
     return {994.0f + static_cast<float>(index % 2) * 114.0f,

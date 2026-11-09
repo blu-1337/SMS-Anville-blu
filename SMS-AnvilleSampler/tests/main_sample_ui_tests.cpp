@@ -254,6 +254,24 @@ void transportPlaysSelectedSlice()
     check(controller.sliceIndexAt(399U) == 0 && controller.sliceIndexAt(400U) == 1, "slice lookup by frame");
 }
 
+void zoomHelpers()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.acceptStatus(status(1U), now);
+    check(!controller.viewport().zoomed(), "a new source starts fitted");
+    check(controller.zoomToRange(400U, 800U, now) && controller.viewport().zoomed() &&
+          controller.viewport().start <= 400U && controller.viewport().end >= 800U &&
+          controller.viewport().end - controller.viewport().start < 1000U,
+          "zoom to a slice shows it with a small margin");
+    check(controller.zoomFit(now) && !controller.viewport().zoomed() && !controller.zoomFit(now),
+          "Fit restores the whole sample");
+    const sms::ui::Rect bounds{0.0f, 0.0f, 100.0f, 10.0f};
+    check(controller.zoom(1.0f, 50.0f, bounds, now) && controller.viewport().end -
+          controller.viewport().start == 500U, "zoom in halves the window around the pointer");
+}
+
 void padChangesRequery()
 {
     Host host;
@@ -380,6 +398,7 @@ int main()
     markerDragSendsOneEdit();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();
+    zoomHelpers();
     padChangesRequery();
     sessionRouting();
     layoutRects();

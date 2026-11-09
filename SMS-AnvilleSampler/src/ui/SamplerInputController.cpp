@@ -272,6 +272,12 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             if (isTarget(clicked, InteractiveType::mainSampleTransport)) {
                 if (clicked.index == 0) main.togglePlay();
                 else if (clicked.index == 1) main.toggleLoop();
+                else if (clicked.index == 4) main.zoomFit(Clock::now());
+                else if (clicked.index >= 2) {
+                    const auto& waveform = uiLayout::mainSampleWaveform;
+                    main.zoom(clicked.index == 3 ? 1.0f : -1.0f, waveform.x + waveform.width * 0.5f,
+                              waveform, Clock::now());
+                }
                 fHost.repaintSamplerInput();
                 return true;
             }
@@ -452,12 +458,13 @@ bool SamplerInputController::scroll(const sms::ui::Point position, const float d
         return fMixer.wheel(mixerContext(), hovered, delta, adjustment);
     auto& chop = fSession.chopEditor();
     auto& detail = fSession.detail();
-    if (s.mainSampleMode && !s.editorMode && !chop.active() && (control || shift) &&
+    if (s.mainSampleMode && !s.editorMode && !chop.active() &&
         fSession.mainSample().hasSource() && !fSession.mainSample().confirmPending() &&
         (uiLayout::mainSampleWaveform.contains(position) || uiLayout::mainSampleOverview.contains(position))) {
         auto& main = fSession.mainSample();
-        const bool changed = control ? main.zoom(delta, position.x, uiLayout::mainSampleWaveform, Clock::now())
-            : main.pan(delta, Clock::now());
+        // The wheel zooms around the pointer; Shift pans.
+        const bool changed = shift ? main.pan(delta, Clock::now())
+            : main.zoom(delta, position.x, uiLayout::mainSampleWaveform, Clock::now());
         if (changed) fHost.repaintSamplerInput();
         return true;
     }
@@ -658,6 +665,11 @@ bool SamplerInputController::beginMainSampleWaveform(const sms::ui::Point positi
         main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform)));
     fMainSampleOriginX = position.x;
     fMainSampleMoved = false;
+    const auto now = Clock::now();
+    fMainSampleDouble = now - fMainSampleClickTime < std::chrono::milliseconds(400) &&
+                        std::abs(position.x - fMainSampleClickX) < 5.0f;
+    fMainSampleClickTime = fMainSampleDouble ? Clock::time_point{} : now;
+    fMainSampleClickX = position.x;
     fMainSampleDrag = MainSampleDrag::selecting;
     fHost.repaintSamplerInput();
     return true;
@@ -696,7 +708,19 @@ bool SamplerInputController::endMainSampleDrag(const sms::ui::Point position)
     else if (drag == MainSampleDrag::selecting) {
         const auto frame = static_cast<std::uint32_t>(
             main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform));
-        if (!fMainSampleMoved) {
+        if (!fMainSampleMoved && fMainSampleDouble) {
+            // Double-click zooms to the slice under the pointer, or fits when there is none.
+            main.clearSelection();
+            main.stopPreview();
+            const int index = main.sliceIndexAt(frame);
+            if (index >= 0) {
+                const auto& slice = main.displaySlices()[static_cast<std::size_t>(index)];
+                main.selectSlice(slice.id);
+                main.zoomToRange(slice.start, slice.end, Clock::now());
+            } else {
+                main.zoomFit(Clock::now());
+            }
+        } else if (!fMainSampleMoved) {
             main.clearSelection();
             const int index = main.sliceIndexAt(frame);
             main.selectSlice(index >= 0 ? main.displaySlices()[static_cast<std::size_t>(index)].id : 0U);

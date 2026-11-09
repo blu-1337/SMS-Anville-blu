@@ -5,6 +5,7 @@
 #include "DPF/WaveformRenderer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 
@@ -168,7 +169,15 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
     }
     ctx.canvas.resetScissor();
 
-    // Markers: one handle per distinct boundary, labelled with the slice number.
+    // Markers: one per distinct boundary. Wide spacing gets the labelled handle; crowded
+    // spacing shrinks to a thin line, with the slice number only where it fits.
+    struct Marker {
+        float x;
+        int slice;
+        int edge;
+    };
+    std::array<Marker, kMaxMarkers * 2U> markers{};
+    std::size_t markerTotal = 0U;
     for (std::size_t index = 0; index < markerCount; ++index) {
         const auto& slice = slices[index];
         for (int edge = 0; edge < 2; ++edge) {
@@ -178,12 +187,42 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
                 shared = shared || slices[other].start == frame;
             if (shared || frame < viewport.start || frame > viewport.end)
                 continue;
+            markers[markerTotal++] = {viewport.xForFrame(static_cast<double>(frame), bounds),
+                                      static_cast<int>(index), edge};
+        }
+    }
+    std::sort(markers.begin(), markers.begin() + static_cast<std::ptrdiff_t>(markerTotal),
+              [](const Marker& left, const Marker& right) { return left.x < right.x; });
+    for (std::size_t order = 0; order < markerTotal; ++order) {
+        const auto& marker = markers[order];
+        float room = bounds.width;
+        if (order > 0U)
+            room = std::min(room, marker.x - markers[order - 1U].x);
+        if (order + 1U < markerTotal)
+            room = std::min(room, markers[order + 1U].x - marker.x);
+        const bool isHovered =
+            hovered(ctx, InteractiveType::mainSampleMarker, marker.slice * 2 + marker.edge);
+        if (room >= 38.0f) {
             char label[8];
-            std::snprintf(label, sizeof(label), edge == 0 ? "%u" : "END", static_cast<unsigned>(index + 1U));
-            sms::ui::dpf::drawCutHandle(
-                ctx.canvas, viewport.xForFrame(static_cast<double>(frame), bounds), bounds.y,
-                bounds.height, label,
-                hovered(ctx, InteractiveType::mainSampleMarker, static_cast<int>(index) * 2 + edge));
+            std::snprintf(label, sizeof(label), marker.edge == 0 ? "%u" : "END",
+                          static_cast<unsigned>(marker.slice + 1));
+            sms::ui::dpf::drawCutHandle(ctx.canvas, marker.x, bounds.y, bounds.height, label, isHovered);
+            continue;
+        }
+        ctx.canvas.beginPath();
+        ctx.canvas.moveTo(marker.x, bounds.y);
+        ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
+        ctx.canvas.strokeColor(colors.selection);
+        ctx.canvas.strokeWidth(isHovered ? 3.0f : 1.0f);
+        ctx.canvas.stroke();
+        if (marker.edge == 0 && (room >= 16.0f || isHovered)) {
+            char label[8];
+            std::snprintf(label, sizeof(label), "%u", static_cast<unsigned>(marker.slice + 1));
+            ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+            ctx.canvas.fontSize(8.0f);
+            ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
+            ctx.canvas.fillColor(colors.selection);
+            text(ctx, marker.x, bounds.y + 3.0f, label, nullptr);
         }
     }
 
@@ -420,6 +459,9 @@ void drawMainSampleView(const ViewRenderContext& ctx)
         };
         drawTransport(0, main.playing() ? "STOP" : "PLAY", main.playing());
         drawTransport(1, "LOOP", main.looping());
+        drawTransport(2, "-", false);
+        drawTransport(3, "+", false);
+        drawTransport(4, "FIT", main.viewport().zoomed());
     }
 
     drawWaveformArea(ctx, main);

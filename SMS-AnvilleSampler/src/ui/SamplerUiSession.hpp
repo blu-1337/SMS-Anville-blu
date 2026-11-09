@@ -109,6 +109,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void closeSampleEditor();
     // The Sample Editor and Cut Point Editor draw above it, so closing them returns here.
     void openMainSample();
+    [[nodiscard]] bool canOpenMainSample() const noexcept { return fCapabilities.stateTransport; }
     void closeMainSample();
     /** Opens the file browser for Load; the pick goes to the Main Sample, not a pad. */
     bool browseMainSample();

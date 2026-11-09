@@ -417,17 +417,11 @@ private:
     {
         const auto logical = logicalPoint(DGL_NAMESPACE::Point<double>(point.x, point.y));
         const auto target = fInput.targetAt(logical);
-        if (target.type == static_cast<int>(InteractiveType::mainSampleWaveform) ||
-            target.type == static_cast<int>(InteractiveType::mainSampleMarker) ||
-            target.type == static_cast<int>(InteractiveType::mainSampleOverview))
-            return DropTarget{DropTarget::Kind::mainSample, DropTarget{}.globalPad};
-        // An empty Main Sample view has no waveform targets yet; its waveform and
-        // overview areas must still accept the first drop.
-        if (fSession.state().mainSampleMode && target.type == sms::ui::kNoInteractiveTarget.type &&
-            (uiLayout::mainSampleWaveform.contains(logical) || uiLayout::mainSampleOverview.contains(logical)))
-            return DropTarget{DropTarget::Kind::mainSample, DropTarget{}.globalPad};
-        return target.type == static_cast<int>(InteractiveType::pad)
-            ? FileDropController::padTarget(fSession.padActionContext(), target.index) : DropTarget{};
+        if (target.type == static_cast<int>(InteractiveType::pad))
+            return FileDropController::padTarget(fSession.padActionContext(), target.index);
+        // Anything that is not a pad (waveform, empty window, panels) loads the Main Sample.
+        return fSession.canOpenMainSample()
+            ? DropTarget{DropTarget::Kind::mainSample, DropTarget{}.globalPad} : DropTarget{};
     }
     DropContext dropContext()
     {
@@ -443,6 +437,7 @@ private:
     void repaintFileDrop() override { requestRepaint(); }
     bool loadDroppedMainSample(const std::string& path) override
     {
+        fSession.openMainSample();
         if (!fSession.state().mainSampleMode) return false;
         fSession.mainSample().load(path);
         fMainSampleDropSequence = fSession.mainSample().lastSentSequence();

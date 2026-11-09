@@ -195,8 +195,20 @@ public:
         const sms::dsp::SamplePlaybackSettings* playback = nullptr,
         const sms::dsp::SampleMixerSettings* mixer = nullptr,
         std::optional<std::uint64_t> expectedGeneration = {});
-    /** Durable state may arrive while an active host has suspended callbacks. */
-    [[nodiscard]] bool restorePad(std::uint32_t pad, const PadData* audio);
+    /** Durable state may arrive while an active host has suspended callbacks.
+     * A nonzero provenance restores a main-sample link with the audio. */
+    [[nodiscard]] bool restorePad(std::uint32_t pad, const PadData* audio,
+                                  std::uint64_t provenance = 0U);
+    /** Link tags of the newest pad audio, pending restores first; 0 = unlinked
+     * or empty. Optional generations (kPadCount entries) come from the same
+     * published snapshot, for a later expectedGeneration check. Control thread. */
+    void padProvenance(std::span<std::uint64_t, kPadCount> provenance,
+                       std::span<std::uint64_t> generations = {}) const;
+    /** fingerprint() of the newest pad audio (PadFingerprint.hpp). Control thread. */
+    [[nodiscard]] std::uint64_t padAudioFingerprint(std::uint32_t pad) const;
+    /** Tag the newest pad audio if its fingerprint matches; 0 unlinks. Control thread. */
+    [[nodiscard]] bool setPadProvenance(std::uint32_t pad, std::uint64_t provenance,
+                                        std::uint64_t expectedFingerprint);
     void restorePadPlaybackSettings(std::uint32_t pad,
         const sms::dsp::SamplePlaybackSettings& settings);
     void restorePadMixerSettings(std::uint32_t pad,
@@ -403,6 +415,9 @@ private:
         }
     };
     void capturePublishedSnapshot(std::uint32_t pad, Snapshot& snapshot) const;
+    /** Published snapshot with pending restores applied; caller holds storageControlMutex_. */
+    void captureNewestSnapshot(std::uint32_t pad, Snapshot& snapshot) const;
+    [[nodiscard]] std::uint64_t snapshotFingerprint(const Snapshot& snapshot) const;
     void copySnapshot(const Snapshot& snapshot, PadData& destination,
         sms::dsp::SamplePlaybackSettings* playback,
         sms::dsp::SampleMixerSettings* mixer) const;

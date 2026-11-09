@@ -462,6 +462,10 @@ if(BUILD_TESTING)
   target_link_libraries(anvillesampler_core_tests PRIVATE anvillesampler_core)
   add_test(NAME sampler-core COMMAND anvillesampler_core_tests)
 
+  add_executable(anvillesampler_main_sample_core_tests tests/main_sample_core_tests.cpp)
+  target_link_libraries(anvillesampler_main_sample_core_tests PRIVATE anvillesampler_core)
+  add_test(NAME main-sample-core COMMAND anvillesampler_main_sample_core_tests)
+
   add_executable(anvillesampler_playback_voice_tests tests/playback_voice_tests.cpp)
   target_link_libraries(anvillesampler_playback_voice_tests PRIVATE anvillesampler_core)
   add_test(NAME playback-voice COMMAND anvillesampler_playback_voice_tests)

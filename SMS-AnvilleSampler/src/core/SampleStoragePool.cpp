@@ -212,8 +212,11 @@ SampleStoragePool::Storage* SampleStoragePool::acquireCapture() noexcept {
     for (auto& storage : capture_) {
         if (storage.allocatedBlocks != 0U) continue;
         std::uint32_t expected = 0U;
-        if (storage.references.compare_exchange_strong(expected, 1U, std::memory_order_acq_rel))
+        if (storage.references.compare_exchange_strong(expected, 1U, std::memory_order_acq_rel)) {
+            // Descriptors are reused; a new recording is never linked.
+            storage.provenance.store(0U, std::memory_order_relaxed);
             return &storage;
+        }
     }
     return nullptr;
 }
@@ -297,6 +300,25 @@ void SampleStoragePool::copySamples(const Storage* storage,
             destination[i] = sample(storage, static_cast<std::uint32_t>(i / 2U),
                                     static_cast<std::uint32_t>(i % 2U));
     }
+}
+
+void SampleStoragePool::copySamples(const Storage& storage, const std::uint32_t firstFrame,
+    const std::span<float> interleavedOut) const {
+    const std::size_t available = firstFrame < storage.frames ? storage.frames - firstFrame : 0U;
+    const std::size_t copied = std::min(interleavedOut.size() / 2U, available);
+    if (copied != 0U && !storage.isCapture()) {
+        std::copy_n(storage.stereo.data() + static_cast<std::size_t>(firstFrame) * 2U,
+                    copied * 2U, interleavedOut.data());
+    } else if (copied != 0U) {
+        StereoReader read(*this, &storage);
+        for (std::size_t frame = 0; frame < copied; ++frame) {
+            const auto sample = read(static_cast<std::uint32_t>(firstFrame + frame));
+            interleavedOut[frame * 2U] = sample[0];
+            interleavedOut[frame * 2U + 1U] = sample[1];
+        }
+    }
+    std::fill(interleavedOut.begin() + static_cast<std::ptrdiff_t>(copied * 2U),
+              interleavedOut.end(), 0.0f);
 }
 
 SampleStoragePool::Storage* SampleStoragePool::prepareImport(const PadData& source,

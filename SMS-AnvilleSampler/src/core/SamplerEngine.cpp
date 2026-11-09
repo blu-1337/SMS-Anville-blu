@@ -1,4 +1,5 @@
 #include "SamplerEngine.hpp"
+#include "PadFingerprint.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -68,9 +69,12 @@ void SamplerEngine::setSampleRate(double sampleRate) {
         std::array<sms::dsp::SamplePlaybackSettings, kPadCount> playbackSettings;
         std::array<sms::dsp::SampleMixerSettings, kPadCount> mixerSettings;
         std::array<bool, kPadCount> occupied{};
+        std::array<std::uint64_t, kPadCount> provenance{};
         for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
             occupied[pad] = pads_[pad].occupied.load(std::memory_order_acquire);
             if (occupied[pad]) {
+                if (pads_[pad].storage)
+                    provenance[pad] = pads_[pad].storage->provenance.load(std::memory_order_acquire);
                 static_cast<void>(exportPad(pad, snapshots[pad]));
                 playbackSettings[pad] = padPlaybackSettings(pad);
                 mixerSettings[pad] = padMixerSettings(pad);
@@ -97,6 +101,8 @@ void SamplerEngine::setSampleRate(double sampleRate) {
         for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
             if (occupied[pad]) {
                 static_cast<void>(importPad(pad, snapshots[pad], false));
+                if (pads_[pad].storage) // a rebuilt pool keeps main-sample links
+                    pads_[pad].storage->provenance.store(provenance[pad], std::memory_order_release);
                 setPadPlaybackSettingsDirect(pad, playbackSettings[pad]);
                 setPadMixerSettingsDirect(pad, mixerSettings[pad]);
             }
@@ -338,13 +344,16 @@ void SamplerEngine::enqueuePendingState(const std::uint32_t pad,
     }
 }
 
-bool SamplerEngine::restorePad(const std::uint32_t pad, const PadData* audio) {
+bool SamplerEngine::restorePad(const std::uint32_t pad, const PadData* audio,
+                               const std::uint64_t provenance) {
     if (pad >= kPadCount) return false;
     const std::lock_guard lock(storageControlMutex_);
     collectImportedStorage();
     auto state = preparePendingState();
     state->storage = audio ? prepareStorage(*audio) : nullptr;
     if (audio && !state->storage) return false;
+    // PendingState carries the prepared Storage*, so the tag travels with it.
+    if (state->storage) state->storage->provenance.store(provenance, std::memory_order_relaxed);
     state->replaceAudio = true;
     if (!audio) {
         state->replacePlayback = state->replaceMixer = true;
@@ -1122,6 +1131,50 @@ void SamplerEngine::capturePublishedSnapshot(const std::uint32_t pad, Snapshot& 
         }
         if (storage) storage->references.fetch_sub(1U, std::memory_order_release);
     }
+}
+
+void SamplerEngine::captureNewestSnapshot(const std::uint32_t pad, Snapshot& snapshot) const {
+    capturePublishedSnapshot(pad, snapshot);
+    overlayPendingState(pad, snapshot);
+}
+
+std::uint64_t SamplerEngine::snapshotFingerprint(const Snapshot& snapshot) const {
+    SampleStoragePool::StereoReader read(storagePool_, snapshot.storage);
+    return fingerprintAudio(snapshot.storage ? snapshot.metadata.frames : 0U,
+        snapshot.metadata.sampleRate, [&read](const std::uint32_t frame) { return read(frame); });
+}
+
+void SamplerEngine::padProvenance(const std::span<std::uint64_t, kPadCount> provenance,
+    const std::span<std::uint64_t> generations) const {
+    const std::lock_guard lock(storageControlMutex_);
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        Snapshot snapshot;
+        captureNewestSnapshot(pad, snapshot);
+        provenance[pad] = snapshot.storage
+            ? snapshot.storage->provenance.load(std::memory_order_acquire) : 0U;
+        if (generations.size() == kPadCount) generations[pad] = snapshot.metadata.generation;
+    }
+}
+
+std::uint64_t SamplerEngine::padAudioFingerprint(const std::uint32_t pad) const {
+    if (pad >= kPadCount) return 0U;
+    const std::lock_guard lock(storageControlMutex_);
+    Snapshot snapshot;
+    captureNewestSnapshot(pad, snapshot);
+    return snapshotFingerprint(snapshot);
+}
+
+bool SamplerEngine::setPadProvenance(const std::uint32_t pad, const std::uint64_t provenance,
+                                     const std::uint64_t expectedFingerprint) {
+    if (pad >= kPadCount) return false;
+    const std::lock_guard lock(storageControlMutex_);
+    Snapshot snapshot;
+    captureNewestSnapshot(pad, snapshot);
+    // The snapshot reference pins the descriptor, so a capture cannot be reused
+    // (and reset) while it is tagged. A later replacement simply drops the tag.
+    if (!snapshot.storage || snapshotFingerprint(snapshot) != expectedFingerprint) return false;
+    snapshot.storage->provenance.store(provenance, std::memory_order_release);
+    return true;
 }
 
 bool SamplerEngine::exportPublishedPad(const std::uint32_t pad, PadData& destination,

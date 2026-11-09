@@ -34,6 +34,10 @@ public:
         double sampleRate = 48000.0;
         float peak = 0.0f;
         float rms = 0.0f;
+        /** Main-sample link `(sourceId48 << 16) | sliceId16`; 0 = unlinked.
+         * Set before publication. It belongs to this PCM, so whole-pad moves
+         * keep it and any new storage (record, import, paste, split) starts at 0. */
+        std::atomic<std::uint64_t> provenance{0};
         [[nodiscard]] bool isCapture() const noexcept { return mapping != nullptr; }
     private:
         friend class SampleStoragePool;
@@ -81,6 +85,9 @@ public:
     void writeCapture(Storage& storage, std::uint32_t frame, float left, float right) noexcept;
     /** Control reader retains completed storage; destination holds at most frames * 2 samples. */
     void copySamples(const Storage* storage, std::span<float> destination) const;
+    /** Same ownership as above: interleaved frames from firstFrame; zero past the end. */
+    void copySamples(const Storage& storage, std::uint32_t firstFrame,
+        std::span<float> interleavedOut) const;
     /** Audio owner or a reader retaining a completed immutable descriptor. */
     [[nodiscard]] float sample(const Storage* storage, std::uint32_t frame,
         std::uint32_t channel) const noexcept;

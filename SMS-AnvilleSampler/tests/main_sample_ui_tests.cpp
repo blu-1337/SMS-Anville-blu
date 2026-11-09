@@ -290,6 +290,50 @@ void layoutRects()
 }
 } // namespace
 
+void autoChopPanel()
+{
+    Host host;
+    MainSampleController controller(host);
+    check(!controller.autoChop(), "auto chop needs a source");
+    controller.acceptStatus(status(1U));
+    host.sent.clear();
+    controller.cycleAutoChopMode();
+    controller.adjustAutoChopCount(-3);
+    controller.adjustAutoChopFirstPad(4);
+    check(controller.autoChop(), "auto chop sends");
+    AutoChopRequest request;
+    check(host.sent.size() == 1U && host.sent[0].first == kAutoChopRequestKey &&
+          decodeAutoChopRequest(host.sent[0].second, request) &&
+          request.mode == AutoChopMode::findSamples && request.count == 5U &&
+          request.firstPad == 4U && !request.confirm, "request carries the panel settings");
+    AutoChopStatus reply;
+    reply.sequence = request.sequence + 5U;
+    reply.state = AutoChopState::ok;
+    check(!controller.acceptAutoChopStatus(encodeAutoChopStatus(reply)), "stale status is ignored");
+    reply.sequence = request.sequence;
+    reply.state = AutoChopState::confirm;
+    reply.mask = 0x10U;
+    reply.found = 1U;
+    check(controller.acceptAutoChopStatus(encodeAutoChopStatus(reply)) && controller.confirmPending() &&
+          controller.autoChopConfirmPending(), "CONFIRM opens the modal");
+    host.sent.clear();
+    check(controller.confirmAssign(true) && host.sent.size() == 1U &&
+          decodeAutoChopRequest(host.sent[0].second, request) && request.confirm &&
+          !controller.confirmPending(), "confirming resends with confirm=1");
+    reply.sequence = request.sequence;
+    reply.state = AutoChopState::ok;
+    reply.found = 3U;
+    reply.requested = 5U;
+    check(controller.acceptAutoChopStatus(encodeAutoChopStatus(reply)) &&
+          controller.autoChopMessage() == "Found 3 of 5", "OK reports shortfalls");
+    controller.autoChop();
+    host.sent.clear();
+    reply.sequence = controller.lastSentSequence();
+    reply.state = AutoChopState::confirm;
+    controller.acceptAutoChopStatus(encodeAutoChopStatus(reply));
+    check(controller.confirmAssign(false) && host.sent.empty(), "cancel sends nothing");
+}
+
 int main()
 {
     queriesAndStaleReplies();
@@ -299,5 +343,6 @@ int main()
     padChangesRequery();
     sessionRouting();
     layoutRects();
+    autoChopPanel();
     std::cout << "Main Sample UI tests passed\n";
 }

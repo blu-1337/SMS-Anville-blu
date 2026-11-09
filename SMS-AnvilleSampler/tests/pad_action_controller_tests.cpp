@@ -205,6 +205,45 @@ void dialogsAndFileCompletion()
           "failed Save is remembered while Import remains enabled");
 }
 
+void directImportMatchesDialog()
+{
+    Fixture dialog;
+    dialog.context.firstPad = 16;
+    dialog.open(21);
+    dialog.invoke(PadMenuAction::import);
+    dialog.actions.fileSelected("C:\\Samples\\Kick 01.wav");
+    check(!dialog.actions.dialogPending() && dialog.actions.busy() &&
+          dialog.host.messages.back().first == "pad_file_request",
+          "dialog import consumes its remembered pad");
+    const auto dialogRequest = dialog.host.messages.back().second;
+
+    Fixture direct;
+    check(direct.actions.importFile(21U, "C:\\Samples\\Kick 01.wav") && direct.actions.busy() &&
+          direct.actions.importInFlight() && direct.host.status == "Importing WAV...",
+          "direct import starts the shared file workflow");
+    check(direct.host.messages.back().first == "pad_file_request" &&
+          direct.host.messages.back().second == dialogRequest,
+          "direct import sends the dialog's byte-identical request");
+    const auto sent = direct.host.messages.size();
+    check(!direct.actions.importFile(22U, "C:\\Samples\\Snare.wav") &&
+          direct.host.messages.size() == sent, "direct import is rejected while busy");
+    direct.parameter(kParameterPadFileResultEvent,
+                     padFileResultEventValue(PadFileResultCode::failed, false));
+    check(!direct.actions.busy() && !direct.actions.importInFlight() &&
+          !direct.actions.lastImportSucceeded(), "a failed direct import completes");
+    check(direct.actions.importFile(22U, "C:\\Samples\\Snare.wav"), "next import starts");
+    direct.state("pad_file_status", "WAV imported");
+    check(!direct.actions.importInFlight() && direct.actions.lastImportSucceeded(),
+          "state completion reports the import result");
+    check(!direct.actions.importFile(kPadCount, "C:\\x.wav") &&
+          !direct.actions.importFile(0U, ""), "invalid pad or empty path is rejected");
+
+    direct.open(3);
+    direct.invoke(PadMenuAction::import);
+    check(direct.actions.dialogPending() && !direct.actions.importFile(3U, "C:\\x.wav"),
+          "direct import waits for a pending Import dialog");
+}
+
 void clipboardCompletion()
 {
     Fixture f;
@@ -293,6 +332,7 @@ int main()
 {
     eligibilityAndConfirmation();
     dialogsAndFileCompletion();
+    directImportMatchesDialog();
     clipboardCompletion();
     structureReplies();
     std::cout << "Pad action controller tests passed\n";

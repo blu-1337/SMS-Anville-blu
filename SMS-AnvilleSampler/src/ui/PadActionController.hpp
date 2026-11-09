@@ -108,6 +108,12 @@ public:
     bool acceptParameter(const PadActionContext&, std::uint32_t index, float value);
     bool acceptState(const PadActionContext&, std::string_view key, const char* value);
     void fileSelected(const char* filename);
+    /** Import a WAV into a global pad through the same request as the Import dialog.
+     * Returns false while busy, while a dialog is pending, or for an invalid pad/path.
+     */
+    [[nodiscard]] bool importFile(std::uint32_t globalPad, std::string_view utf8Path);
+    [[nodiscard]] bool importInFlight() const noexcept { return fActiveFileAction == PadFileDialog::import; }
+    [[nodiscard]] bool lastImportSucceeded() const noexcept { return fLastImportSucceeded; }
     void idle(Clock::time_point now);
     void invalidatePendingStructure() noexcept;
     void setStructureBusy(bool busy) noexcept { fStructureBusy = busy; }
@@ -123,6 +129,7 @@ private:
     void requestSplitPlan(const PadActionContext&, int pad);
     void requestCollapseGap(const PadActionContext&, int pad);
     void openFileDialog(const PadActionContext&, PadFileDialog action);
+    void submitFileRequest(PadFileDialog action, int pad, const std::string& path);
     void requestClipboard(plugin::PadClipboardAction action);
     void requestClear();
     void clearPendingSplit() noexcept;
@@ -162,6 +169,7 @@ private:
     int fPendingFilePad = -1;
     PadFileDialog fActiveFileAction = PadFileDialog::none;
     int fActiveFilePad = -1;
+    bool fLastImportSucceeded = false;
     plugin::PadFileResultEventTracker fFileResultEvents;
     plugin::PadClipboardResultEventTracker fClipboardResultEvents;
 };

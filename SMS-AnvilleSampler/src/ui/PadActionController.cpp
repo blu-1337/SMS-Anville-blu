@@ -460,6 +460,8 @@ bool PadActionController::acceptParameter(const PadActionContext& context,
             return true;
         const bool wasImport = fActiveFileAction == PadFileDialog::import;
         const int completedPad = fActiveFilePad;
+        if (wasImport)
+            fLastImportSucceeded = result == midichopper::plugin::PadFileResultCode::importSucceeded;
         if (fActiveFileAction != PadFileDialog::none)
         {
             if (result == midichopper::plugin::PadFileResultCode::failed)
@@ -587,6 +589,8 @@ bool PadActionController::acceptState(const PadActionContext& context,
     {
         fFileBusy = false;
         fHost.setPadActionStatus(value);
+        if (fActiveFileAction == PadFileDialog::import)
+            fLastImportSucceeded = std::strcmp(value, "WAV imported") == 0;
         if (fActiveFileAction == PadFileDialog::import &&
             fActiveFilePad == context.selectedPad && std::strcmp(value, "WAV imported") == 0) {
             fHost.refreshPadWaveform();
@@ -623,7 +627,22 @@ void PadActionController::fileSelected(const char* const filename)
     if (pad < 0 || pad >= static_cast<int>(midichopper::kPadCount) ||
         action == PadFileDialog::none)
         return;
+    submitFileRequest(action, pad, path);
+}
 
+bool PadActionController::importFile(const std::uint32_t globalPad, const std::string_view utf8Path)
+{
+    if (busy() || dialogPending() || globalPad >= midichopper::kPadCount || utf8Path.empty())
+        return false;
+    submitFileRequest(PadFileDialog::import, static_cast<int>(globalPad), std::string(utf8Path));
+    return true;
+}
+
+void PadActionController::submitFileRequest(const PadFileDialog action, const int pad,
+                                            const std::string& path)
+{
+    const bool exporting = action == PadFileDialog::exportRaw ||
+                           action == PadFileDialog::exportProcessed;
     midichopper::plugin::PadFileAction fileAction =
         midichopper::plugin::PadFileAction::import;
     if (action == PadFileDialog::exportRaw)

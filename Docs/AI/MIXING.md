@@ -89,10 +89,3 @@ Filter coefficients are updated at block boundaries as live settings change.
 They and all per-voice state are preallocated; the audio callback performs no
 allocation, I/O, lock, or state serialization. Source/sample state copying
 uses the retained-snapshot and bounded-commit [storage contract](PAD-STORAGE.md).
-
-## Choke groups
-
-`SampleMixerSettings::chokeGroup` (0 = off, 1..8) is stored in `MX5` (older `MX1`-`MX4` decode as
-off). `SamplerEngine::startVoice` calls `chokeGroupMembers`, which gives other playing pads in the
-group a `PlaybackVoice::choke` fade (`kChokeFadeSeconds`, linear, freed at the end). Choking
-voices are not counted by `enforceVoiceLimit`. The UI cycles the group in `SamplerUiSession`.

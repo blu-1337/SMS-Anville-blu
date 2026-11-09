@@ -31,6 +31,7 @@ struct Host final : PadActionHost, ChopEditorHost, FileDropHost {
     std::string status;
     int repaints = 0;
     std::vector<std::string> released;
+    std::vector<std::string> mainSampleLoads;
     PadActionController* actions = nullptr;
 
     void sendPadActionState(const char* key, const std::string& value) override
@@ -55,6 +56,7 @@ struct Host final : PadActionHost, ChopEditorHost, FileDropHost {
     void setFileDropStatus(const char* message) override { status = message; }
     void repaintFileDrop() override { ++repaints; }
     void releaseDroppedFile(const std::string& path) override { released.push_back(path); }
+    bool loadDroppedMainSample(const std::string& path) override { mainSampleLoads.push_back(path); return true; }
 };
 
 struct Fixture {
@@ -159,8 +161,6 @@ void acceptAndReject()
     check(!f.drop.hover(f.local(3), mp3, f.context) && !f.drop.highlightedPad(),
           "no supported file, no drop");
     check(!f.drop.hover({}, wav, f.context), "a point off the pads is rejected");
-    check(!f.drop.hover({DropTarget::Kind::mainSample, 0U}, wav, f.context),
-          "the Main Sample view does not exist on this branch");
     const auto rejectedWhen = [&](auto&& change, const char* message) {
         Fixture g;
         change(g.context);
@@ -367,8 +367,32 @@ void cancelAndDestruction()
 
 } // namespace
 
+void mainSampleTarget()
+{
+    Fixture f;
+    const DropTarget target{DropTarget::Kind::mainSample, kPadCount};
+    const std::vector<std::string> one{"C:/drop/a.wav"};
+    check(f.drop.hover(target, one, f.context) && !f.drop.highlightedPad(),
+          "a Main Sample target accepts WAV files without a pad highlight");
+    const std::vector<std::string> text{"C:/drop/a.txt"};
+    check(!f.drop.hover(target, text, f.context), "a Main Sample target rejects non-WAV files");
+
+    f.drop.enqueue(target, {"C:/drop/a.wav", "C:/drop/b.wav", "C:/drop/c.txt"}, f.context, f.now);
+    check(f.host.mainSampleLoads.size() == 1U && f.host.mainSampleLoads[0] == "C:/drop/a.wav",
+          "only the first file loads");
+    check(f.host.status == "Loading the first dropped file only", "the status says only one file is used");
+    check(f.host.released.size() == 2U, "unused files are released at once");
+    check(f.drop.mainSampleLoadPending() && !f.drop.hover(target, one, f.context),
+          "a second drop waits for the load");
+    f.drop.mainSampleSettled();
+    check(!f.drop.mainSampleLoadPending() && f.host.released.back() == "C:/drop/a.wav",
+          "the loaded file is released once the load settles");
+    check(!f.drop.active(), "no pad import was queued");
+}
+
 int main()
 {
+    mainSampleTarget();
     acceptAndReject();
     consecutiveVisiblePads();
     fifoIsGatedAndAdvancesOnFailure();

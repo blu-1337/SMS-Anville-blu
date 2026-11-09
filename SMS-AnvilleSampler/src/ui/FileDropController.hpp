@@ -13,7 +13,7 @@
 
 namespace midichopper::ui {
 
-/** What a drop point is over. Main Sample targets are rejected until that view exists. */
+/** What a drop point is over. A mainSample target is the Main Sample waveform or overview. */
 struct DropTarget {
     enum class Kind : std::uint8_t { none, pad, mainSample };
     Kind kind = Kind::none;
@@ -35,6 +35,8 @@ public:
     virtual void setFileDropStatus(const char* message) = 0;
     virtual void repaintFileDrop() = 0;
     virtual void releaseDroppedFile(const std::string& utf8Path) = 0;
+    /** Sends MS1;L for a dropped file; the path stays valid until mainSampleSettled(). */
+    virtual bool loadDroppedMainSample(const std::string& utf8Path) = 0;
 };
 
 /** Turns dropped WAV paths into one-at-a-time pad imports through
@@ -55,6 +57,9 @@ public:
     /** Updates the highlight and returns whether a drop here would be accepted. */
     bool hover(DropTarget, std::span<const std::string> utf8Paths, const DropContext&);
     void leave();
+    /** The Main Sample load finished (not LOADING): releases its dropped file. */
+    void mainSampleSettled();
+    [[nodiscard]] bool mainSampleLoadPending() const noexcept { return !fMainSamplePath.empty(); }
     /** Queues the supported paths; every path is released through the host eventually. */
     void enqueue(DropTarget, std::vector<std::string> utf8Paths, const DropContext&,
                  Clock::time_point now = Clock::now());
@@ -90,6 +95,7 @@ private:
     std::string fInFlightPath;
     std::size_t fBatchTotal = 0;
     std::size_t fBatchLoaded = 0;
+    std::string fMainSamplePath;
     std::vector<std::string> fPending;
     std::uint32_t fPendingPad = kPadCount;
     std::size_t fPendingCount = 0;

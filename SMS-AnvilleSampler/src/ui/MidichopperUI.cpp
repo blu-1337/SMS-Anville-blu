@@ -115,6 +115,11 @@ protected:
         fSession.idle(now, fMixer.effective(kParameterGlobalTuneSemitones, fSession.state().globalTune));
         attachFileDrop();
         fFileDrop.idle(fSession.padActions(), fSession.padActionContext(), now);
+        if (fFileDrop.mainSampleLoadPending()) {
+            const auto& status = fSession.mainSample().status();
+            if (status.sequence >= fMainSampleDropSequence && status.state != MainSampleState::loading)
+                fFileDrop.mainSampleSettled();
+        }
     }
 
     void onNanoDisplay() override
@@ -411,6 +416,10 @@ private:
     DropTarget dropTarget(const sms::ui::FileDropPoint point) const
     {
         const auto target = fInput.targetAt(logicalPoint(DGL_NAMESPACE::Point<double>(point.x, point.y)));
+        if (target.type == static_cast<int>(InteractiveType::mainSampleWaveform) ||
+            target.type == static_cast<int>(InteractiveType::mainSampleMarker) ||
+            target.type == static_cast<int>(InteractiveType::mainSampleOverview))
+            return DropTarget{DropTarget::Kind::mainSample, DropTarget{}.globalPad};
         return target.type == static_cast<int>(InteractiveType::pad)
             ? FileDropController::padTarget(fSession.padActionContext(), target.index) : DropTarget{};
     }
@@ -426,6 +435,13 @@ private:
     { fFileDrop.enqueue(dropTarget(point), {paths.begin(), paths.end()}, dropContext()); }
     void setFileDropStatus(const char* message) override { fSession.setLocalStatus(message); }
     void repaintFileDrop() override { requestRepaint(); }
+    bool loadDroppedMainSample(const std::string& path) override
+    {
+        if (!fSession.state().mainSampleMode) return false;
+        fSession.mainSample().load(path);
+        fMainSampleDropSequence = fSession.mainSample().lastSentSequence();
+        return true;
+    }
     void releaseDroppedFile(const std::string& path) override { sms::ui::FileDropTarget::releaseDroppedFile(path); }
 
     const sms::ui::SkinCatalog fSkinCatalog;
@@ -442,6 +458,7 @@ private:
     ApplicationMenuController fMenu;
     SamplerInputController fInput;
     FileDropController fFileDrop{*this};
+    std::uint32_t fMainSampleDropSequence = 0U;
     std::unique_ptr<sms::ui::FileDropTarget> fDropTarget;
     bool fDropAttached = false;
 #if DISTRHO_PLUGIN_WANT_DIRECT_ACCESS

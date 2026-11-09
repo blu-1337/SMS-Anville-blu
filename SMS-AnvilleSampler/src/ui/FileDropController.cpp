@@ -21,6 +21,9 @@ const char* FileDropController::rejection(const DropTarget target, const std::si
 {
     if (supportedCount == 0U)
         return "Only WAV files can be dropped";
+    if (target.kind == DropTarget::Kind::mainSample)
+        return context.padActionsBusy || active() || mainSampleLoadPending()
+            ? "Wait for the current load" : nullptr;
     if (target.kind != DropTarget::Kind::pad || target.globalPad >= kPadCount)
         return "Drop WAV files onto a pad";
     if (context.pads.armed || context.captureActive)
@@ -39,7 +42,8 @@ bool FileDropController::hover(const DropTarget target, const std::span<const st
         utf8Paths.begin(), utf8Paths.end(),
         [](const std::string& path) { return sms::ui::isSupportedAudioPath(path); }));
     const bool accepted = rejection(target, supported, context) == nullptr;
-    setHighlight(accepted ? std::optional<std::uint32_t>(target.globalPad) : std::nullopt);
+    setHighlight(accepted && target.kind == DropTarget::Kind::pad
+                     ? std::optional<std::uint32_t>(target.globalPad) : std::nullopt);
     return accepted;
 }
 
@@ -65,6 +69,19 @@ void FileDropController::enqueue(const DropTarget target, std::vector<std::strin
     }
 
     const auto total = supported.size();
+    if (target.kind == DropTarget::Kind::mainSample) {
+        auto first = std::move(supported.front());
+        supported.erase(supported.begin());
+        release(supported);
+        if (fHost.loadDroppedMainSample(first)) {
+            fMainSamplePath = std::move(first);
+            if (total > 1U)
+                fHost.setFileDropStatus("Loading the first dropped file only");
+        } else {
+            fHost.releaseDroppedFile(first);
+        }
+        return;
+    }
     const auto padsPerBank = static_cast<std::uint8_t>(context.pads.visibleCount);
     std::vector<Item> items;
     items.reserve(std::min(total, kMaximumFiles));
@@ -144,6 +161,14 @@ void FileDropController::idle(PadActionController& actions, const PadActionConte
     }
     if (fBatchTotal > 0U)
         finishBatch();
+}
+
+void FileDropController::mainSampleSettled()
+{
+    if (fMainSamplePath.empty())
+        return;
+    fHost.releaseDroppedFile(fMainSamplePath);
+    fMainSamplePath.clear();
 }
 
 void FileDropController::cancel()

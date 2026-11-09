@@ -22,7 +22,7 @@ implements `MainSampleHost` (send state, repaint). Requests are MS1 on
 
 ## Waveforms
 
-The overview is one `W` over the whole source (4 tiles) per source id. The
+The overview is one `W` over the whole source (4 tiles). The
 detail is a `W` for the zoomed viewport, debounced 50 ms. Both retry every
 250 ms until a matching reply arrives.
 
@@ -49,6 +49,7 @@ Main Sample, main; CONFIRM captures all.
 Gestures: empty waveform previews, Space toggles, drag selects, a pad click
 assigns or auditions, a pad double-click opens the Sample Editor, marker
 drag edits, Delete removes, Ctrl+wheel zooms, Shift+wheel pans. Load uses
-the pad file browser.
+the pad file browser. Dropping a WAV on the waveform or overview loads
+the first (`Kind::mainSample`).
 
 Tests: `main-sample-ui`, `ui-input-routing`.

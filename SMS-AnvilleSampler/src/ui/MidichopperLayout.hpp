@@ -237,4 +237,18 @@ inline constexpr sms::ui::Rect clearAction{1146.0f, 610.0f, 70.0f, 34.0f};
     return {46.0f + static_cast<float>(index) * 300.0f, 450.0f, 290.0f, 82.0f};
 }
 
+// Main Sample view (Docs/AI/MAIN-SAMPLE-UI.md). The side panel keeps y 154-380
+// free for the auto-chop panel.
+inline constexpr sms::ui::Rect mainSampleWaveform{46.0f, 158.0f, 890.0f, 208.0f};
+inline constexpr sms::ui::Rect mainSampleOverview{46.0f, 374.0f, 890.0f, 20.0f};
+inline constexpr sms::ui::Rect mainSamplePads{46.0f, 402.0f, 890.0f, 264.0f};
+inline constexpr sms::ui::Rect mainSampleClose{994.0f, 112.0f, 222.0f, 32.0f};
+inline constexpr sms::ui::Rect mainSampleInfo{994.0f, 392.0f, 222.0f, 60.0f};
+inline constexpr sms::ui::Rect mainSampleLoad{994.0f, 462.0f, 104.0f, 32.0f};
+inline constexpr sms::ui::Rect mainSampleClear{1112.0f, 462.0f, 104.0f, 32.0f};
+inline constexpr sms::ui::Rect mainSampleStatus{994.0f, 506.0f, 222.0f, 40.0f};
+inline constexpr std::array<sms::ui::Rect, 8> mainSampleRects{
+    mainSampleWaveform, mainSampleOverview, mainSamplePads, mainSampleClose,
+    mainSampleInfo, mainSampleLoad, mainSampleClear, mainSampleStatus};
+
 } // namespace midichopper::ui::layout

@@ -3,6 +3,7 @@
 #include "SamplerUiState.hpp"
 #include "ChopEditorController.hpp"
 #include "EditorSnapshotSession.hpp"
+#include "MainSampleController.hpp"
 #include "MidichopperInteraction.hpp"
 #include "PadActionController.hpp"
 #include "PlaybackIndicator.hpp"
@@ -49,7 +50,8 @@ struct SamplerUiCapabilities {
 };
 
 /** Sampler selection, audition and editor synchronization, independent of DPF. */
-class SamplerUiSession final : private ChopEditorHost, private PadActionHost
+class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
+                               private MainSampleHost
 {
   public:
     using Clock = std::chrono::steady_clock;
@@ -70,6 +72,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost
     [[nodiscard]] const PadActionController &padActions() const noexcept { return fPadActions; }
     [[nodiscard]] ChopEditorController &chopEditor() noexcept { return fChopEditor; }
     [[nodiscard]] const ChopEditorController &chopEditor() const noexcept { return fChopEditor; }
+    [[nodiscard]] MainSampleController &mainSample() noexcept { return fMainSample; }
+    [[nodiscard]] const MainSampleController &mainSample() const noexcept { return fMainSample; }
     [[nodiscard]] PadActionContext padActionContext() const noexcept;
 
     void acceptParameter(std::uint32_t index, float value, Time now = Clock::now());
@@ -103,6 +107,9 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost
     void selectEditorPad(int pad, bool stopAudition = true);
     void openSampleEditor(int pad);
     void closeSampleEditor();
+    // The Sample Editor and Cut Point Editor draw above it, so closing them returns here.
+    void openMainSample();
+    void closeMainSample();
     void pressPlaybackPad(int localPad);
     void releasePlaybackPad();
     void captureSpace();
@@ -154,6 +161,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost
     void beginPadSampleEditor(int pad) override;
     void refreshPadWaveform() override;
     void setPadColor(int pad, int color) override;
+    void sendMainSampleState(const char *key, const std::string &value) override;
+    void repaintMainSample() override;
 
     SamplerUiHost &fHost;
     const SamplerUiCapabilities fCapabilities;
@@ -169,6 +178,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost
     PlaybackIndicator fPlaybackIndicator;
     ChopEditorController fChopEditor;
     PadActionController fPadActions;
+    MainSampleController fMainSample{*this};
     bool fMeterRepaintPending = false;
     bool fCaptureStorageExhausted = false;
     Time fNextMeterRepaint{};

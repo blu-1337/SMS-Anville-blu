@@ -41,6 +41,7 @@ struct SamplerUiState {
     int lastPlayedPad = -1;
     int currentPad = -1;
     bool editorMode = false;
+    bool mainSampleMode = false; // Below the chop and Sample Editor views.
     EditorAuditionMode editorAuditionMode = EditorAuditionMode::Play;
     bool anyPlaybackActive = false;
 

@@ -91,6 +91,7 @@ add_library(anvillesampler_core STATIC
 add_library(anvillesampler_ui_controllers STATIC
   src/ui/ApplicationMenuController.cpp
   src/ui/FileDropController.cpp
+  src/ui/MainSampleController.cpp
   src/ui/MixerInteractionController.cpp
   src/ui/PadActionController.cpp
   src/ui/SamplerInputController.cpp
@@ -551,6 +552,10 @@ if(BUILD_TESTING)
   add_executable(anvillesampler_ui_session_tests tests/ui_session_tests.cpp)
   target_link_libraries(anvillesampler_ui_session_tests PRIVATE anvillesampler_ui_controllers)
   add_test(NAME ui-session COMMAND anvillesampler_ui_session_tests)
+
+  add_executable(anvillesampler_main_sample_ui_tests tests/main_sample_ui_tests.cpp)
+  target_link_libraries(anvillesampler_main_sample_ui_tests PRIVATE anvillesampler_ui_controllers)
+  add_test(NAME main-sample-ui COMMAND anvillesampler_main_sample_ui_tests)
 
   add_executable(anvillesampler_mixer_interaction_controller_tests tests/mixer_interaction_controller_tests.cpp)
   target_link_libraries(anvillesampler_mixer_interaction_controller_tests PRIVATE anvillesampler_ui_controllers)

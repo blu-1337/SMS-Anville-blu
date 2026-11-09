@@ -97,6 +97,10 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
     }
     if (fPadActions.acceptParameter(padActionContext(), index, value))
         return;
+    if (index == kParameterMainSamplePreviewPosition) {
+        static_cast<void>(fMainSample.acceptPreviewPosition(value));
+        return;
+    }
     if (index == kParameterChopPreviewPosition) {
         fChopEditor.acceptPreviewPosition(value);
         fHost.repaintUi();
@@ -410,8 +414,13 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
     if (key == nullptr || value == nullptr)
         return false;
 
+    if (std::strcmp(key, kMainSampleStatusKey) == 0)
+        return fMainSample.acceptStatus(value);
+    if (std::strcmp(key, kMainSampleWaveformKey) == 0)
+        return fMainSample.acceptWaveform(value);
     if (std::strcmp(key, "pad_mask") == 0) {
         parsePadMask(value, fState.padState);
+        fMainSample.padsChanged(Clock::now());
         fPadActions.closeMenu();
     } else if (std::strcmp(key, "pad_status") == 0)
         copyChars(fState.padStatus, value);
@@ -1124,6 +1133,8 @@ void SamplerUiSession::idle(const Time now, const float effectiveGlobalTune)
     if (fWaveformDetail.requestDue(now))
         requestWaveformDetail();
     updateLocalPlayhead(now, effectiveGlobalTune);
+    if (fCapabilities.stateTransport)
+        fMainSample.idle(now);
 }
 
 void SamplerUiSession::rendered(const Time now) noexcept
@@ -1138,6 +1149,8 @@ void SamplerUiSession::missedReplies()
     if (fChopEditor.split() || fChopEditor.applying())
         fChopEditor.cancel();
     requestWaveform();
+    if (fCapabilities.stateTransport)
+        fMainSample.missedReplies();
     setLocalStatus("UI replies were missed; check the pad and retry");
 }
 
@@ -1204,6 +1217,32 @@ void SamplerUiSession::sendChopState(const char *key, const std::string &value)
 {
     if (fCapabilities.stateTransport)
         fHost.sendUiState(key, value);
+}
+
+void SamplerUiSession::sendMainSampleState(const char *key, const std::string &value)
+{
+    sendChopState(key, value);
+}
+
+void SamplerUiSession::repaintMainSample()
+{
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::openMainSample()
+{
+    if (!fCapabilities.stateTransport || fState.mainSampleMode)
+        return;
+    fState.mainSampleMode = true;
+    fMainSample.open();
+}
+
+void SamplerUiSession::closeMainSample()
+{
+    if (!fState.mainSampleMode)
+        return;
+    fState.mainSampleMode = false;
+    fMainSample.close();
 }
 
 void SamplerUiSession::sendPadActionState(const char *key, const std::string &value)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Configuration.hpp"
+#include "../plugin/AutoChopProtocol.hpp"
 #include "../plugin/MainSampleProtocol.hpp"
 #include "UI/Geometry.hpp"
 #include "WaveformViewport.hpp"
@@ -65,6 +66,20 @@ public:
     void stopPreview();
     bool previewFrom(std::uint32_t frame);
 
+    // Auto chop (AC1): panel settings, request and reply. Pad and slice effects
+    // arrive through the usual main_sample_status.
+    void cycleAutoChopMode() noexcept;
+    void adjustAutoChopCount(int delta) noexcept;
+    void adjustAutoChopFirstPad(int delta) noexcept;
+    bool autoChop(bool confirm = false);
+    bool acceptAutoChopStatus(std::string_view encoded);
+    [[nodiscard]] plugin::AutoChopMode autoChopMode() const noexcept { return fAutoMode; }
+    [[nodiscard]] std::uint32_t autoChopCount() const noexcept { return fAutoCount; }
+    [[nodiscard]] std::uint32_t autoChopFirstPad() const noexcept { return fAutoFirstPad; }
+    [[nodiscard]] bool autoChopConfirmPending() const noexcept { return fAutoConfirm; }
+    [[nodiscard]] const std::string& autoChopMessage() const noexcept { return fAutoMessage; }
+    [[nodiscard]] const char* autoChopModeName() const noexcept;
+
     // Selection (source frames) on empty waveform.
     void beginSelection(std::uint32_t frame) noexcept;
     void extendSelection(std::uint32_t frame) noexcept;
@@ -101,7 +116,8 @@ public:
     [[nodiscard]] const MainSampleWaveformView& detail() const noexcept { return fDetail; }
     /** 0 = idle, else 1 + frame / source frames (kParameterMainSamplePreviewPosition). */
     [[nodiscard]] float previewPosition() const noexcept { return fPreviewPosition; }
-    [[nodiscard]] bool confirmPending() const noexcept { return fConfirm.has_value(); }
+    [[nodiscard]] bool confirmPending() const noexcept
+    { return fConfirm.has_value() || fAutoConfirm; }
     [[nodiscard]] int sliceForPad(std::uint32_t pad) const noexcept;
     [[nodiscard]] std::uint64_t lastSentSequence() const noexcept { return fSequence; }
 
@@ -149,6 +165,12 @@ private:
     bool fDetailDirty = false;
     Time fDetailDeadline{};
     Time fOverviewDeadline{};
+    plugin::AutoChopMode fAutoMode = plugin::AutoChopMode::transient;
+    std::uint32_t fAutoCount = 8U;
+    std::uint32_t fAutoFirstPad = 0U;
+    std::uint64_t fAutoSequence = 0U;
+    bool fAutoConfirm = false;
+    std::string fAutoMessage;
     bool fQueryDue = false;
     Time fQueryDeadline{};
 };

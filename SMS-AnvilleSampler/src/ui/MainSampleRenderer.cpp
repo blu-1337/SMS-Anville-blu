@@ -324,6 +324,31 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
                               colors.intentDanger, hovered(ctx, InteractiveType::mainSampleClear),
                               main.hasSource());
 
+    if (main.hasSource()) {
+        char line[48];
+        const auto drawButton = [&](const sms::ui::Rect& rect, const char* label, const int index) {
+            sms::ui::dpf::drawSegment(ctx.canvas, rect, label, false, colors.activityPlayback,
+                                      hovered(ctx, InteractiveType::mainSampleAutoChop, index));
+        };
+        drawButton(uiLayout::autoChopMode, main.autoChopModeName(), 0);
+        drawButton(uiLayout::autoChopCountMinus, "-", 1);
+        drawButton(uiLayout::autoChopCountPlus, "+", 2);
+        drawButton(uiLayout::autoChopPadMinus, "-", 3);
+        drawButton(uiLayout::autoChopPadPlus, "+", 4);
+        drawButton(uiLayout::autoChopApply, "AUTO CHOP", 5);
+        ctx.canvas.fontSize(10.0f);
+        ctx.canvas.fillColor(colors.contentSecondary);
+        std::snprintf(line, sizeof(line), "COUNT %u", static_cast<unsigned>(main.autoChopCount()));
+        text(ctx, uiLayout::autoChopCountMinus.x + 54.0f, uiLayout::autoChopCountMinus.y + 8.0f, line, nullptr);
+        std::snprintf(line, sizeof(line), "FIRST PAD %u", static_cast<unsigned>(main.autoChopFirstPad() + 1U));
+        text(ctx, uiLayout::autoChopPadMinus.x + 54.0f, uiLayout::autoChopPadMinus.y + 8.0f, line, nullptr);
+        ctx.canvas.save();
+        const auto msg = uiLayout::autoChopMessage;
+        ctx.canvas.scissor(msg.x, msg.y, msg.width, msg.height);
+        text(ctx, msg.x, msg.y, main.autoChopMessage().c_str(), nullptr);
+        ctx.canvas.restore();
+    }
+
     const auto status = uiLayout::mainSampleStatus;
     const auto state = main.status().state;
     const char* heading = state == plugin::MainSampleState::loading ? "LOADING"
@@ -358,7 +383,8 @@ void drawConfirmModal(const ViewRenderContext& ctx, const MainSampleController& 
     ctx.canvas.fillColor(colors.contentPrimary);
     text(ctx, uiLayout::mainSampleModal.x + uiLayout::mainSampleModal.width * 0.5f,
          uiLayout::mainSampleModal.y + 50.0f,
-         main.status().text.empty() ? "Replace this pad?" : main.status().text.c_str(), nullptr);
+         main.autoChopConfirmPending() ? main.autoChopMessage().c_str()
+             : main.status().text.empty() ? "Replace this pad?" : main.status().text.c_str(), nullptr);
     sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleConfirm, "CONFIRM", false,
                               colors.intentDanger,
                               hovered(ctx, InteractiveType::mainSampleConfirm, 0));

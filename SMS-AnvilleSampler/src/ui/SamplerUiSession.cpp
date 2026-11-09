@@ -418,6 +418,8 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
         return fMainSample.acceptStatus(value);
     if (std::strcmp(key, kMainSampleWaveformKey) == 0)
         return fMainSample.acceptWaveform(value);
+    if (std::strcmp(key, kAutoChopStatusKey) == 0)
+        return fMainSample.acceptAutoChopStatus(value);
     if (std::strcmp(key, "pad_mask") == 0) {
         parsePadMask(value, fState.padState);
         fMainSample.padsChanged(Clock::now());

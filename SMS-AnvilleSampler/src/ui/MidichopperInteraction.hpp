@@ -89,6 +89,7 @@ enum class InteractiveType : int {
     mainSampleLoad,
     mainSampleClear,
     mainSampleConfirm,
+    mainSampleAutoChop,
     menuMainSample,
 };
 
@@ -717,6 +718,15 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::mainSampleLoad);
         if (context.mainSampleHasSource && uiLayout::mainSampleClear.contains(point))
             return target(InteractiveType::mainSampleClear);
+        if (context.mainSampleHasSource) {
+            const sms::ui::Rect autoChopRects[] = {
+                uiLayout::autoChopMode, uiLayout::autoChopCountMinus, uiLayout::autoChopCountPlus,
+                uiLayout::autoChopPadMinus, uiLayout::autoChopPadPlus, uiLayout::autoChopApply};
+            for (int index = 0; index < 6; ++index) {
+                if (autoChopRects[index].contains(point))
+                    return target(InteractiveType::mainSampleAutoChop, index);
+            }
+        }
         for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
             if (uiLayout::mainBank(bank).contains(point))
                 return target(InteractiveType::bank, bank);

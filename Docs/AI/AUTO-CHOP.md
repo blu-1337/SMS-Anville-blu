@@ -47,3 +47,7 @@ Beat-based modes return nothing when the BPM is 0.
 6. One `main_sample_status` (affected mask) and one `auto_chop_status` are published.
 
 The worker catch-all in `MidichopperPlugin.cpp` answers `ERROR` if the handler throws.
+
+## Auto-chop panel (UI)
+
+`MainSampleController` holds the panel state (mode, count 1..64, first pad) and sends `auto_chop_request` with fixed defaults: sensitivity 0.5, minimum gap 50 ms, host tempo, one beat, snap on. `SamplerUiSession::acceptState` routes `auto_chop_status` to `acceptAutoChopStatus`; only the newest sequence is accepted. CONFIRM reuses the existing modal (`confirmPending()` includes the auto-chop case) and CONFIRM resends with `confirm=1`. Layout rects `autoChop*` sit in the column right of the waveform; the hit target is `InteractiveType::mainSampleAutoChop` (index 0 mode, 1/2 count, 3/4 first pad, 5 apply).

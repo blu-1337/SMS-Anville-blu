@@ -217,6 +217,13 @@ bool MainSampleController::assignSelection(const std::uint32_t pad)
 
 bool MainSampleController::confirmAssign(const bool confirm)
 {
+    if (fAutoConfirm) {
+        fAutoConfirm = false;
+        if (confirm)
+            autoChop(true);
+        fHost.repaintMainSample();
+        return true;
+    }
     if (!fConfirm)
         return false;
     const auto pending = *fConfirm;
@@ -423,6 +430,96 @@ int MainSampleController::sliceForPad(const std::uint32_t pad) const noexcept
                 return static_cast<int>(index);
     }
     return -1;
+}
+
+} // namespace midichopper::ui
+
+namespace midichopper::ui {
+
+const char* MainSampleController::autoChopModeName() const noexcept
+{
+    switch (fAutoMode) {
+    case plugin::AutoChopMode::transient: return "TRANSIENT";
+    case plugin::AutoChopMode::findSamples: return "FIND SAMPLES";
+    case plugin::AutoChopMode::equal: return "EQUAL";
+    case plugin::AutoChopMode::beat: return "BEAT";
+    case plugin::AutoChopMode::random: return "RANDOM";
+    }
+    return "";
+}
+
+void MainSampleController::cycleAutoChopMode() noexcept
+{
+    constexpr plugin::AutoChopMode order[] = {
+        plugin::AutoChopMode::transient, plugin::AutoChopMode::findSamples,
+        plugin::AutoChopMode::equal, plugin::AutoChopMode::beat, plugin::AutoChopMode::random};
+    std::size_t index = 0;
+    while (index < 5U && order[index] != fAutoMode)
+        ++index;
+    fAutoMode = order[(index + 1U) % 5U];
+    fHost.repaintMainSample();
+}
+
+void MainSampleController::adjustAutoChopCount(const int delta) noexcept
+{
+    const int value = static_cast<int>(fAutoCount) + delta;
+    fAutoCount = static_cast<std::uint32_t>(
+        std::clamp(value, 1, static_cast<int>(plugin::kAutoChopMaxCount)));
+    fHost.repaintMainSample();
+}
+
+void MainSampleController::adjustAutoChopFirstPad(const int delta) noexcept
+{
+    const int value = static_cast<int>(fAutoFirstPad) + delta;
+    fAutoFirstPad = static_cast<std::uint32_t>(
+        std::clamp(value, 0, static_cast<int>(kPadCount) - 1));
+    fHost.repaintMainSample();
+}
+
+bool MainSampleController::autoChop(const bool confirm)
+{
+    if (!hasSource())
+        return false;
+    plugin::AutoChopRequest request;
+    request.sequence = ++fSequence;
+    request.mode = fAutoMode;
+    request.firstPad = fAutoFirstPad;
+    request.count = fAutoCount;
+    request.confirm = confirm;
+    request.sensitivityPermille = 500U;
+    request.minGapMs = 50U;
+    request.bpmCenti = 0U; // host tempo
+    request.beatsMilli = 1000U;
+    request.snap = true;
+    fAutoSequence = request.sequence;
+    fAutoConfirm = false;
+    fAutoMessage = "Chopping...";
+    fHost.sendMainSampleState(plugin::kAutoChopRequestKey, plugin::encodeAutoChopRequest(request));
+    fHost.repaintMainSample();
+    return true;
+}
+
+bool MainSampleController::acceptAutoChopStatus(const std::string_view encoded)
+{
+    plugin::AutoChopStatus status;
+    if (!plugin::decodeAutoChopStatus(encoded, status) || status.sequence != fAutoSequence)
+        return false;
+    fAutoConfirm = false;
+    switch (status.state) {
+    case plugin::AutoChopState::ok:
+        fAutoMessage = status.found < status.requested
+            ? "Found " + std::to_string(status.found) + " of " + std::to_string(status.requested)
+            : "Chopped " + std::to_string(status.found) + " slices";
+        break;
+    case plugin::AutoChopState::confirm:
+        fAutoConfirm = true;
+        fAutoMessage = "Replace " + std::to_string(status.found) + " pads with other audio?";
+        break;
+    case plugin::AutoChopState::busy: fAutoMessage = "Busy, try again"; break;
+    case plugin::AutoChopState::error: fAutoMessage = status.text; break;
+    }
+    fHost.repaintMainSample();
+    return true;
 }
 
 } // namespace midichopper::ui

@@ -256,6 +256,14 @@ inline constexpr sms::ui::Rect mainSampleStatus{994.0f, 506.0f, 222.0f, 40.0f};
 inline constexpr sms::ui::Rect mainSampleModal{300.0f, 270.0f, 380.0f, 150.0f};
 inline constexpr sms::ui::Rect mainSampleConfirm{330.0f, 366.0f, 150.0f, 34.0f};
 inline constexpr sms::ui::Rect mainSampleCancel{500.0f, 366.0f, 150.0f, 34.0f};
+// Auto chop panel in the free column right of the waveform.
+inline constexpr sms::ui::Rect autoChopMode{994.0f, 166.0f, 222.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopCountMinus{994.0f, 202.0f, 44.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopCountPlus{1172.0f, 202.0f, 44.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopPadMinus{994.0f, 238.0f, 44.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopPadPlus{1172.0f, 238.0f, 44.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopApply{994.0f, 274.0f, 222.0f, 32.0f};
+inline constexpr sms::ui::Rect autoChopMessage{994.0f, 312.0f, 222.0f, 48.0f};
 inline constexpr std::array<sms::ui::Rect, 8> mainSampleRects{
     mainSampleWaveform, mainSampleOverview, mainSamplePads, mainSampleClose,
     mainSampleInfo, mainSampleLoad, mainSampleClear, mainSampleStatus};

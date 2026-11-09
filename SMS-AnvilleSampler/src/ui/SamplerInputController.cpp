@@ -258,6 +258,17 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             }
             if (main.confirmPending()) return true;
             if (isTarget(clicked, InteractiveType::mainSampleClose)) { fSession.closeMainSample(); return true; }
+            if (isTarget(clicked, InteractiveType::mainSampleAutoChop)) {
+                switch (clicked.index) {
+                case 0: main.cycleAutoChopMode(); break;
+                case 1: main.adjustAutoChopCount(-1); break;
+                case 2: main.adjustAutoChopCount(1); break;
+                case 3: main.adjustAutoChopFirstPad(-1); break;
+                case 4: main.adjustAutoChopFirstPad(1); break;
+                default: main.autoChop(); break;
+                }
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::mainSampleLoad)) { fSession.browseMainSample(); return true; }
             if (isTarget(clicked, InteractiveType::mainSampleClear)) { main.clear(); return true; }
             if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }

@@ -80,6 +80,19 @@ public:
     [[nodiscard]] const std::string& autoChopMessage() const noexcept { return fAutoMessage; }
     [[nodiscard]] const char* autoChopModeName() const noexcept;
 
+    // Transport (Play/Stop, Loop) and zoom helpers for the header buttons.
+    /** Plays the selection, else the selected slice, else the whole sample; stops when playing. */
+    bool togglePlay();
+    [[nodiscard]] bool playing() const noexcept { return fPreviewPosition > 0.0f; }
+    void toggleLoop();
+    [[nodiscard]] bool looping() const noexcept { return fLoop; }
+    /** Index into displaySlices() of the slice holding the frame, or -1. */
+    [[nodiscard]] int sliceIndexAt(std::uint32_t frame) const noexcept;
+    /** Selects the 1-based slice number (keys 1-9); false when there is none. */
+    bool selectSliceNumber(std::size_t number) noexcept;
+    bool zoomFit(Time now) noexcept;
+    bool zoomToRange(std::uint32_t start, std::uint32_t end, Time now) noexcept;
+
     // Selection (source frames) on empty waveform.
     void beginSelection(std::uint32_t frame) noexcept;
     void extendSelection(std::uint32_t frame) noexcept;
@@ -89,7 +102,12 @@ public:
     [[nodiscard]] std::uint32_t selectionEnd() const noexcept { return fSelectionEnd; }
 
     // Slice chosen by the last marker press (0 = none); Delete removes it.
-    void selectSlice(std::uint16_t sliceId) noexcept { fSelectedSlice = sliceId; }
+    void selectSlice(std::uint16_t sliceId) noexcept
+    {
+        fSelectedSlice = sliceId;
+        if (sliceId != 0U)
+            clearSelection();
+    }
     [[nodiscard]] std::uint16_t selectedSlice() const noexcept { return fSelectedSlice; }
 
     // Marker drags: boundary of one slice; a shared boundary moves both slices.
@@ -99,7 +117,7 @@ public:
     void cancelDrag() noexcept;
     [[nodiscard]] bool dragging() const noexcept { return fDrag.has_value(); }
 
-    // Viewport over the source (Ctrl+wheel zoom, Shift+wheel or overview pan).
+    // Viewport over the source (wheel zoom, Shift+wheel or overview pan).
     bool zoom(float delta, float anchorX, sms::ui::Rect bounds, Time now) noexcept;
     bool pan(float delta, Time now) noexcept;
     bool setScrollPosition(float position, Time now) noexcept;
@@ -149,6 +167,9 @@ private:
     std::uint64_t fAcceptedSequence = 0U;  // newest status accepted
     bool fOpen = false;
     bool fStarted = false;
+    bool fLoop = false;
+    std::uint32_t fPlayStart = 0U;
+    std::uint32_t fPlayEnd = 0U;
     float fPreviewPosition = 0.0f;
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;

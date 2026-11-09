@@ -307,7 +307,10 @@ protected:
             : isMixerValueCommitKey(ev.key) ? InputKey::commit
             : ev.key == DGL_NAMESPACE::kKeyTab ? InputKey::tab
             : ev.key == DGL_NAMESPACE::kKeyBackspace ? InputKey::backspace
-            : ev.key == DGL_NAMESPACE::kKeyDelete ? InputKey::deleteText : InputKey::other;
+            : ev.key == DGL_NAMESPACE::kKeyDelete ? InputKey::deleteText
+            : (ev.key >= '1' && ev.key <= '9' && (ev.mod & (DGL_NAMESPACE::kModifierControl | DGL_NAMESPACE::kModifierAlt)) == 0U)
+                ? static_cast<InputKey>(static_cast<int>(InputKey::digit1) + static_cast<int>(ev.key - '1'))
+                : InputKey::other;
         return fInput.keyboard(key, ev.press, (ev.mod & DGL_NAMESPACE::kModifierShift) != 0U);
     }
     bool onCharacterInput(const CharacterInputEvent& ev) override { return fInput.character(ev.character); }

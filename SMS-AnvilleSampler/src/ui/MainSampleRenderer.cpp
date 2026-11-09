@@ -411,7 +411,16 @@ void drawMainSampleView(const ViewRenderContext& ctx)
     text(ctx, 46.0f, 120.0f, "MAIN SAMPLE", nullptr);
     ctx.canvas.fontSize(10.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-    text(ctx, 936.0f, 122.0f, "CLICK PREVIEW  /  DRAG SELECT, THEN CLICK A PAD", nullptr);
+    text(ctx, 936.0f, 122.0f, "SPACE PLAY/STOP   1-9 PICK SLICE   DRAG SELECT, THEN CLICK A PAD", nullptr);
+    if (main.hasSource()) {
+        const auto drawTransport = [&](const int index, const char* label, const bool active) {
+            sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleTransport[static_cast<std::size_t>(index)],
+                                      label, active, colors.activityPlayback,
+                                      hovered(ctx, InteractiveType::mainSampleTransport, index));
+        };
+        drawTransport(0, main.playing() ? "STOP" : "PLAY", main.playing());
+        drawTransport(1, "LOOP", main.looping());
+    }
 
     drawWaveformArea(ctx, main);
     drawOverview(ctx, main);

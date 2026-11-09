@@ -8,7 +8,8 @@
 namespace midichopper::ui {
 
 enum class InputButton { left, middle, right, other };
-enum class InputKey { other, space, escape, commit, tab, backspace, deleteText };
+enum class InputKey { other, space, escape, commit, tab, backspace, deleteText,
+                      digit1, digit2, digit3, digit4, digit5, digit6, digit7, digit8, digit9 };
 
 class SamplerInputHost {
 public:

@@ -258,6 +258,8 @@ bool MainSampleController::preview(const std::uint32_t start, const std::uint32_
 {
     if (!hasSource() || start >= end || end > fStatus.frames)
         return false;
+    fPlayStart = start;
+    fPlayEnd = end;
     fHost.sendMainSampleState(plugin::kMainPreviewRequestKey,
         plugin::encodeSourcePreviewRequest({true, loop, fStatus.sourceId, start, end}));
     return true;
@@ -276,6 +278,78 @@ bool MainSampleController::previewFrom(const std::uint32_t frame)
         if (slice.start <= frame && frame < slice.end)
             end = std::min(end, slice.end);
     return preview(frame, end, false);
+}
+
+bool MainSampleController::togglePlay()
+{
+    if (playing()) {
+        stopPreview();
+        return true;
+    }
+    if (!hasSource())
+        return false;
+    std::uint32_t start = 0U;
+    std::uint32_t end = fStatus.frames;
+    if (hasSelection()) {
+        start = fSelectionStart;
+        end = fSelectionEnd;
+    } else {
+        for (const auto& slice : fDisplaySlices)
+            if (slice.id == fSelectedSlice && fSelectedSlice != 0U) {
+                start = slice.start;
+                end = slice.end;
+            }
+    }
+    return preview(start, end, fLoop);
+}
+
+void MainSampleController::toggleLoop()
+{
+    fLoop = !fLoop;
+    // A running preview restarts so the new mode applies at once.
+    if (playing() && fPlayEnd > fPlayStart)
+        preview(fPlayStart, fPlayEnd, fLoop);
+    fHost.repaintMainSample();
+}
+
+int MainSampleController::sliceIndexAt(const std::uint32_t frame) const noexcept
+{
+    for (std::size_t index = 0; index < fDisplaySlices.size(); ++index)
+        if (fDisplaySlices[index].start <= frame && frame < fDisplaySlices[index].end)
+            return static_cast<int>(index);
+    return -1;
+}
+
+bool MainSampleController::selectSliceNumber(const std::size_t number) noexcept
+{
+    if (number == 0U || number > fDisplaySlices.size())
+        return false;
+    selectSlice(fDisplaySlices[number - 1U].id);
+    fHost.repaintMainSample();
+    return true;
+}
+
+bool MainSampleController::zoomFit(const Time now) noexcept
+{
+    const auto before = fViewport;
+    fViewport.reset(fStatus.frames);
+    return scheduleDetail(before.start != fViewport.start || before.end != fViewport.end, now);
+}
+
+bool MainSampleController::zoomToRange(const std::uint32_t start, const std::uint32_t end,
+                                       const Time now) noexcept
+{
+    if (!hasSource() || end <= start)
+        return false;
+    const std::uint64_t margin = (end - start) / 20U;
+    const std::uint64_t first = start > margin ? start - margin : 0U;
+    const std::uint64_t last = std::min<std::uint64_t>(fStatus.frames, std::uint64_t{end} + margin);
+    if (last - first < 16U)
+        return false;
+    const auto before = fViewport;
+    fViewport.start = first;
+    fViewport.end = last;
+    return scheduleDetail(before.start != first || before.end != last, now);
 }
 
 std::uint32_t MainSampleController::clampFrame(const std::uint32_t frame) const noexcept

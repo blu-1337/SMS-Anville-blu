@@ -215,6 +215,45 @@ void assignConfirmDeleteAndPreview()
           !controller.acceptPreviewPosition(1.5f), "the playhead follows the parameter");
 }
 
+void transportPlaysSelectedSlice()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.acceptStatus(status(1U), now);
+    SourcePreviewRequest preview;
+    auto last = [&] { return decodeSourcePreviewRequest(host.sent.back().second, preview); };
+
+    check(controller.togglePlay() && last() && preview.play && preview.start == 0U &&
+          preview.end == 1000U && !preview.loop, "Play with nothing selected plays the whole sample");
+    controller.acceptPreviewPosition(1.1f);
+    check(controller.playing() && controller.togglePlay() && last() && !preview.play,
+          "Play while playing stops");
+    controller.acceptPreviewPosition(0.0f);
+
+    check(controller.selectSliceNumber(2U) && !controller.selectSliceNumber(3U) &&
+          controller.selectedSlice() == 2U, "number keys pick slices that exist");
+    controller.togglePlay();
+    check(last() && preview.start == 400U && preview.end == 1000U, "Play plays exactly the selected slice");
+
+    controller.acceptPreviewPosition(0.0f);
+    controller.toggleLoop();
+    controller.selectSliceNumber(1U);
+    controller.togglePlay();
+    check(last() && preview.loop && preview.start == 0U && preview.end == 400U, "Loop applies to the slice");
+    controller.acceptPreviewPosition(1.1f);
+    controller.toggleLoop();
+    check(last() && preview.play && !preview.loop && preview.end == 400U,
+          "turning Loop off restarts the running slice without looping");
+
+    controller.acceptPreviewPosition(0.0f);
+    controller.beginSelection(100U);
+    controller.extendSelection(300U);
+    controller.togglePlay();
+    check(last() && preview.start == 100U && preview.end == 300U, "a drag selection wins over the slice");
+    check(controller.sliceIndexAt(399U) == 0 && controller.sliceIndexAt(400U) == 1, "slice lookup by frame");
+}
+
 void padChangesRequery()
 {
     Host host;
@@ -340,6 +379,7 @@ int main()
     waveformRequests();
     markerDragSendsOneEdit();
     assignConfirmDeleteAndPreview();
+    transportPlaysSelectedSlice();
     padChangesRequery();
     sessionRouting();
     layoutRects();

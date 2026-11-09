@@ -269,6 +269,12 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 }
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::mainSampleTransport)) {
+                if (clicked.index == 0) main.togglePlay();
+                else if (clicked.index == 1) main.toggleLoop();
+                fHost.repaintSamplerInput();
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::mainSampleLoad)) { fSession.browseMainSample(); return true; }
             if (isTarget(clicked, InteractiveType::mainSampleClear)) { main.clear(); return true; }
             if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }
@@ -537,6 +543,14 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
         fHost.repaintSamplerInput();
         return true;
     }
+    if (mainSampleTop && press && key >= InputKey::digit1 && key <= InputKey::digit9 &&
+        !fSession.mainSample().confirmPending() && !fMenu.open() && !fSession.padActions().menuOpen()) {
+        // Keys 1-9 pick slice 1-9; Space or Play then plays exactly that slice.
+        fSession.mainSample().selectSliceNumber(
+            static_cast<std::size_t>(key) - static_cast<std::size_t>(InputKey::digit1) + 1U);
+        fHost.repaintSamplerInput();
+        return true;
+    }
     if (!press || key != InputKey::escape) return false;
     if (fSession.padActions().menuOpen()) {
         fSession.padActions().closeMenu();
@@ -625,6 +639,8 @@ bool SamplerInputController::pressMainSamplePad(const int localPad)
     }
     fMainSamplePad = pad;
     fMainSamplePadTime = now;
+    if (const int slice = main.sliceForPad(static_cast<std::uint32_t>(pad)); slice >= 0)
+        main.selectSlice(main.status().slices[static_cast<std::size_t>(slice)].id);
     fSession.pressPlaybackPad(localPad);
     fHost.repaintSamplerInput();
     return true;
@@ -632,10 +648,7 @@ bool SamplerInputController::pressMainSamplePad(const int localPad)
 
 void SamplerInputController::toggleMainSamplePreview()
 {
-    auto& main = fSession.mainSample();
-    if (main.previewPosition() > 0.0f) main.stopPreview();
-    else if (main.hasSelection()) main.preview(main.selectionStart(), main.selectionEnd(), false);
-    else if (main.hasSource()) main.preview(0U, main.status().frames, false);
+    fSession.mainSample().togglePlay();
 }
 
 bool SamplerInputController::beginMainSampleWaveform(const sms::ui::Point position)
@@ -685,6 +698,8 @@ bool SamplerInputController::endMainSampleDrag(const sms::ui::Point position)
             main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform));
         if (!fMainSampleMoved) {
             main.clearSelection();
+            const int index = main.sliceIndexAt(frame);
+            main.selectSlice(index >= 0 ? main.displaySlices()[static_cast<std::size_t>(index)].id : 0U);
             main.previewFrom(frame);
         } else if (main.hasSelection()) {
             const auto dropped = targetAt(position);

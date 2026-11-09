@@ -123,6 +123,29 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return false;
     }
     if (button == InputButton::right) {
+        if (!press && fMainSampleRightDrag) {
+            fMainSampleRightDrag = false;
+            fMainSampleDrag = MainSampleDrag::none;
+            fSession.mainSample().endDrag();
+            fHost.repaintSamplerInput();
+            return true;
+        }
+        if (press && s.mainSampleMode && !s.editorMode && !fMenu.open() && !actions.menuOpen() &&
+            !fSession.mainSample().confirmPending() && fSession.mainSample().hasSource() &&
+            uiLayout::mainSampleWaveform.contains(position) && !isTarget(targetAt(position), InteractiveType::mainSamplePad)) {
+            auto& main = fSession.mainSample();
+            const auto& viewport = main.viewport();
+            const double perPixel = static_cast<double>(viewport.end - viewport.start) /
+                                    static_cast<double>(uiLayout::mainSampleWaveform.width);
+            const auto frame = static_cast<std::uint32_t>(viewport.frameAt(position.x, uiLayout::mainSampleWaveform));
+            const auto tolerance = static_cast<std::uint32_t>(perPixel * 8.0);
+            if (main.beginEdgeDrag(frame, tolerance)) {
+                fMainSampleDrag = MainSampleDrag::marker;
+                fMainSampleRightDrag = true;
+                fHost.repaintSamplerInput();
+            }
+            return true; // A plain right-click on the waveform does nothing.
+        }
         if (fMenu.open()) {
             if (press) fMenu.rightPress();
             return true;

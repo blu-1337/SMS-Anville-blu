@@ -391,11 +391,46 @@ void autoChopPanel()
     check(controller.confirmAssign(false) && host.sent.empty(), "cancel sends nothing");
 }
 
+void rightDragEdges()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    check(controller.acceptStatus(status(1U), now), "source arrives");
+    const auto count = host.requests().size();
+
+    check(!controller.beginEdgeDrag(200U, 10U), "no edge near the middle of a slice");
+    check(controller.beginEdgeDrag(395U, 10U), "grab the shared boundary near its end side");
+    controller.dragTo(450U);
+    check(controller.endDrag() && host.requests().size() == count + 1U &&
+          host.requests().back().editCount == 2U && host.requests().back().edits[0].end == 450U,
+          "edge drag sends one re-cut request");
+
+    check(controller.beginEdgeDrag(2U, 10U), "grab the first start");
+    controller.dragTo(0U);
+    check(!controller.endDrag(), "unmoved edge sends nothing");
+
+    controller.beginSelection(100U);
+    controller.extendSelection(300U);
+    const auto before = host.requests().size();
+    check(controller.beginEdgeDrag(105U, 10U), "selection start edge is grabbed");
+    controller.dragTo(150U);
+    check(!controller.endDrag() && controller.selectionStart() == 150U &&
+          controller.selectionEnd() == 300U && host.requests().size() == before,
+          "selection edge moves locally without a request");
+    check(controller.beginEdgeDrag(298U, 10U), "selection end edge is grabbed");
+    controller.dragTo(100U);
+    controller.endDrag();
+    check(controller.selectionEnd() == 151U, "selection keeps one frame");
+}
+
 int main()
 {
     queriesAndStaleReplies();
     waveformRequests();
     markerDragSendsOneEdit();
+    rightDragEdges();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();
     zoomHelpers();

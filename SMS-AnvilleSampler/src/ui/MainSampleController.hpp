@@ -115,9 +115,14 @@ public:
     // Marker drags: boundary of one slice; a shared boundary moves both slices.
     bool beginMarkerDrag(std::uint16_t sliceId, bool endEdge) noexcept;
     void dragTo(std::uint32_t frame) noexcept;
+    /**
+     * Right-drag editing: picks the slice edge (or selection edge) nearest to the frame within
+     * the tolerance and starts dragging it with dragTo()/endDrag(). False when none is near.
+     */
+    bool beginEdgeDrag(std::uint32_t frame, std::uint32_t toleranceFrames) noexcept;
     bool endDrag();
     void cancelDrag() noexcept;
-    [[nodiscard]] bool dragging() const noexcept { return fDrag.has_value(); }
+    [[nodiscard]] bool dragging() const noexcept { return fDrag.has_value() || fSelectionEdge != 0; }
 
     // Viewport over the source (wheel zoom, Shift+wheel or overview pan).
     bool zoom(float delta, float anchorX, sms::ui::Rect bounds, Time now) noexcept;
@@ -177,6 +182,7 @@ private:
     std::uint32_t fSelectionEnd = 0U;
     std::uint16_t fSelectedSlice = 0U;
     std::optional<Drag> fDrag;
+    int fSelectionEdge = 0; // 1 = start, 2 = end of the selection while right-dragging
     std::optional<PendingAssign> fConfirm;
     std::optional<PendingAssign> fLastAssign;
 

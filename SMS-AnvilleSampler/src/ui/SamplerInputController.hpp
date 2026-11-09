@@ -83,6 +83,7 @@ private:
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;
     bool fMainSampleMoved = false;
+    bool fMainSampleRightDrag = false;
     bool fMainSampleDouble = false;
     float fMainSampleClickX = 0.0f;
     Clock::time_point fMainSampleClickTime{};

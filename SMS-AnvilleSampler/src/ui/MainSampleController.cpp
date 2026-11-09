@@ -401,8 +401,52 @@ bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bo
     return true;
 }
 
+bool MainSampleController::beginEdgeDrag(const std::uint32_t frame,
+                                         const std::uint32_t toleranceFrames) noexcept
+{
+    if (!hasSource())
+        return false;
+    const auto distance = [&](const std::uint32_t edge) {
+        return edge > frame ? edge - frame : frame - edge;
+    };
+    std::uint32_t best = toleranceFrames + 1U;
+    std::uint16_t sliceId = 0U;
+    bool endEdge = false;
+    int selection = 0;
+    if (hasSelection()) {
+        if (distance(fSelectionStart) < best) { best = distance(fSelectionStart); selection = 1; }
+        if (distance(fSelectionEnd) < best) { best = distance(fSelectionEnd); selection = 2; }
+    }
+    for (const auto& slice : fStatus.slices) {
+        if (distance(slice.start) < best) {
+            best = distance(slice.start); sliceId = slice.id; endEdge = false; selection = 0;
+        }
+        if (distance(slice.end) < best) {
+            best = distance(slice.end); sliceId = slice.id; endEdge = true; selection = 0;
+        }
+    }
+    if (best > toleranceFrames)
+        return false;
+    if (selection != 0) {
+        fDrag.reset();
+        fSelectionEdge = selection;
+        return true;
+    }
+    selectSlice(sliceId);
+    return beginMarkerDrag(sliceId, endEdge);
+}
+
 void MainSampleController::dragTo(const std::uint32_t frame) noexcept
 {
+    if (fSelectionEdge != 0) {
+        const auto clamped = clampFrame(frame);
+        if (fSelectionEdge == 1)
+            fSelectionStart = std::min(clamped, fSelectionEnd - 1U);
+        else
+            fSelectionEnd = std::max(clamped, fSelectionStart + 1U);
+        fHost.repaintMainSample();
+        return;
+    }
     if (!fDrag)
         return;
     // Each slice touching the boundary keeps at least one frame.
@@ -423,6 +467,10 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
 
 bool MainSampleController::endDrag()
 {
+    if (fSelectionEdge != 0) {
+        fSelectionEdge = 0;
+        return false;
+    }
     if (!fDrag)
         return false;
     const auto drag = *fDrag;
@@ -458,6 +506,7 @@ bool MainSampleController::endDrag()
 
 void MainSampleController::cancelDrag() noexcept
 {
+    fSelectionEdge = 0;
     if (!fDrag)
         return;
     fDrag.reset();

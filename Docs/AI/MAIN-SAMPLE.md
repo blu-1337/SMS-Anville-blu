@@ -65,11 +65,27 @@ out-of-range request; copies measure their own peak and RMS, and 1 to 4 tiles
 split the range evenly, binned like `summarizeStereo`. `exportSource` copies
 the whole source and returns its id.
 
+## Source preview
+
+`startSourcePreview(id, start, end, loop)`, `stopSourcePreview` and
+`sourcePreviewPosition` run on the audio thread only. The preview shares the
+chop preview's linear interpolation (`mixInterpolated`) but reads `source_`
+with a double frame position over `[start, end)`, so it is frame-exact on long
+sources; `PlaybackVoice` is not used. A loop wraps exactly and interpolates its
+last frame toward the loop start. Starting either raw preview stops the other.
+Arm, `stopAllPlayback`, `reset`, `setSampleRate` and `setSource` (inside its
+swap dispatch) stop it; a stale id, Arm or a bad range starts nothing. It
+counts in `anyPlaybackActive`, not toward `maxVoices`, does not stop pad
+voices, and the playback gain applies. The position is 0 when stopped,
+otherwise 1 plus frame / source frames.
+
 ## Tests
 
 `main-sample-core` covers capture reuse, ranged copies, fingerprints, tags
 through restores, settings edits, collapse, import, paste, clear and
 recording, `importPads` failures (stale generation, duplicate pad,
-capacity, layout, Arm), and the source: capacity, collection, rebuild, ranges,
-tiles, rates and freeing. `sampler-transfer` checks that 64-pad `importPads`
-commits and source swaps allocate and free nothing on the audio thread.
+capacity, layout, Arm), the source (capacity, collection, rebuild, ranges,
+tiles, rates, freeing) and its preview (exact one-shot, loop and rate-converted
+output, stale ids, exclusivity and every stop). `sampler-transfer` checks that
+64-pad `importPads` commits, source swaps and preview start, render and stop
+allocate and free nothing on the audio thread.

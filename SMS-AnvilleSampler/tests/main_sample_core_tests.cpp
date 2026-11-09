@@ -386,6 +386,98 @@ void source_rates_and_lifetime()
           "a cleared source is freed");
 }
 
+struct Rendered {
+    std::array<float, 64> left{};
+    std::array<float, 64> right{};
+};
+
+Rendered render(SamplerEngine& engine, const std::uint32_t frames)
+{
+    Rendered out;
+    engine.process(nullptr, nullptr, out.left.data(), out.right.data(), std::min(frames, 64U));
+    return out;
+}
+
+void source_preview()
+{
+    SamplerEngine engine(1000.0, 1.0);
+    const auto source = ramp(100U, 0.0f); // engine and source rates match: one frame per frame
+    check(engine.setSource(&source, 9U), "store a source to preview");
+    const auto at = [&](const std::uint32_t frame) { return source.stereo[frame * 2U]; };
+
+    engine.startSourcePreview(9U, 10U, 14U, false);
+    check(engine.sourcePreviewActive() && engine.anyPlaybackActive() &&
+          engine.sourcePreviewPosition() == 1.0 + 10.0 / 100.0, "a preview starts at its first frame");
+    auto out = render(engine, 6U);
+    check(out.left[0] == at(10U) && out.left[3] == at(13U) && out.right[3] == -at(13U) &&
+          out.left[4] == 0.0f && out.left[5] == 0.0f, "a one-shot preview is frame-exact");
+    check(!engine.sourcePreviewActive() && !engine.anyPlaybackActive() &&
+          engine.sourcePreviewPosition() == 0.0, "a one-shot preview stops at its end");
+
+    engine.startSourcePreview(9U, 10U, 13U, true);
+    out = render(engine, 7U);
+    check(out.left[0] == at(10U) && out.left[2] == at(12U) && out.left[3] == at(10U) &&
+          out.left[6] == at(10U) && engine.sourcePreviewPosition() == 1.0 + 11.0 / 100.0,
+          "a looping preview wraps exactly");
+    engine.stopAllPlayback();
+    check(!engine.sourcePreviewActive(), "stopAllPlayback stops the preview");
+
+    engine.startSourcePreview(8U, 0U, 10U, false);
+    check(!engine.sourcePreviewActive(), "a stale source id starts nothing");
+    engine.startSourcePreview(9U, 10U, 10U, false);
+    engine.startSourcePreview(9U, 90U, 101U, false);
+    check(!engine.sourcePreviewActive(), "a bad range starts nothing");
+
+    // The two raw previews are mutually exclusive.
+    const auto pad = ramp(16U, 0.5f);
+    check(engine.restorePad(0U, &pad), "restore a pad for the chop preview");
+    processBlock(engine);
+    engine.startSourcePreview(9U, 0U, 50U, false);
+    engine.startChopPreview(0U, 1U, 0U, 8U);
+    check(!engine.sourcePreviewActive() && engine.chopPreviewPosition() != 0.0f,
+          "the chop preview stops the source preview");
+    engine.startSourcePreview(9U, 0U, 50U, false);
+    check(engine.sourcePreviewActive() && engine.chopPreviewPosition() == 0.0f,
+          "the source preview stops the chop preview");
+    // The preview is not a voice: with maxVoices 1 a looping pad keeps sounding beside it.
+    check(engine.settings().maxVoices == 1U, "a single voice is allowed");
+    engine.auditionPad(0U, true);
+    engine.startSourcePreview(9U, 0U, 50U, true);
+    processBlock(engine);
+    check(engine.padMetadata(0U).active && engine.sourcePreviewActive(),
+          "the preview takes no voice and stops no pad");
+    engine.stopAllPlayback();
+    check(!engine.anyPlaybackActive(), "stopAllPlayback stops the pad and the preview");
+    engine.startSourcePreview(9U, 0U, 50U, false);
+
+    auto settings = engine.settings();
+    settings.armed = true;
+    engine.setSettings(settings);
+    check(!engine.sourcePreviewActive(), "Arm stops the preview");
+    engine.startSourcePreview(9U, 0U, 50U, false);
+    check(!engine.sourcePreviewActive(), "a preview cannot start while armed");
+    settings.armed = false;
+    engine.setSettings(settings);
+    processBlock(engine);
+
+    engine.startSourcePreview(9U, 0U, 50U, false);
+    engine.reset();
+    check(!engine.sourcePreviewActive(), "reset stops the preview");
+    check(engine.setSource(&source, 9U), "store the source again");
+    engine.startSourcePreview(9U, 0U, 50U, false);
+    check(engine.setSource(&source, 10U) && !engine.sourcePreviewActive(),
+          "replacing the source stops the preview");
+
+    engine.startSourcePreview(10U, 0U, 50U, false);
+    engine.setSampleRate(2000.0);
+    check(!engine.sourcePreviewActive(), "a rate change stops the preview");
+    engine.startSourcePreview(10U, 10U, 12U, false); // half a source frame per output frame
+    out = render(engine, 5U);
+    check(out.left[0] == at(10U) && std::abs(out.left[1] - (at(10U) + at(11U)) * 0.5f) < 1.0e-6f &&
+          out.left[2] == at(11U) && out.left[3] == at(11U) && out.left[4] == 0.0f,
+          "a rate-converted preview interpolates and holds its last frame");
+}
+
 } // namespace
 
 int main()
@@ -397,6 +489,7 @@ int main()
     import_pads_transaction();
     source_storage_and_ranges();
     source_rates_and_lifetime();
+    source_preview();
     std::cout << "main sample core tests passed\n";
     return 0;
 }

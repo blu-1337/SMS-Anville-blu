@@ -328,6 +328,34 @@ void mainSampleTransactionsNoAlloc()
     for (std::uint32_t swap = 0; swap < 8U; ++swap)
         check(engine.setSource(&slices[swap], swap + 1U), "a source swap beside running audio");
     check(engine.setSource(nullptr, 0U), "a source clear beside running audio");
+
+    // A silent looping source preview renders beside the oracle without changing it.
+    PadData silence;
+    silence.sampleRate = kRate;
+    silence.frames = 4096U;
+    silence.stereo.assign(8192U, 0.0f);
+    check(engine.setSource(&silence, 21U), "a silent source to preview");
+    bool previewing = false;
+    audio.dispatcher.invoke([&]() noexcept {
+        engine.startSourcePreview(21U, 100U, 4000U, true);
+        previewing = engine.sourcePreviewActive();
+    });
+    const auto before = audio.blocks.load();
+    await([&] { return audio.blocks.load() >= before + 8U; }, "the source preview renders");
+    double position = 0.0;
+    audio.dispatcher.invoke([&]() noexcept { position = engine.sourcePreviewPosition(); });
+    check(previewing && position > 1.0, "a looping source preview runs beside audio");
+    check(engine.setSource(&silence, 22U), "a source swap during the preview");
+    audio.dispatcher.invoke([&]() noexcept {
+        previewing = engine.sourcePreviewActive();
+        engine.startSourcePreview(22U, 0U, 4096U, false);
+    });
+    check(!previewing, "a source swap stops the preview");
+    audio.dispatcher.invoke([&]() noexcept {
+        engine.stopSourcePreview();
+        previewing = engine.sourcePreviewActive();
+    });
+    check(!previewing, "the preview stops on request");
     audio.stop();
 }
 

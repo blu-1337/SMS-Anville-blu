@@ -322,6 +322,18 @@ public:
     }
     /** Zero when stopped; otherwise global pad + 1 plus normalized position. */
     [[nodiscard]] float chopPreviewPosition() const noexcept;
+    /**
+     * Allocation-free, frame-exact raw preview of source frames [start, end),
+     * optionally looping. It plays over pad voices and stops the chop preview
+     * (starting the chop preview stops it). A stale id, Arm, or a bad range
+     * starts nothing. Audio thread only.
+     */
+    void startSourcePreview(std::uint64_t sourceId, std::uint32_t start, std::uint32_t end,
+                            bool loop) noexcept;
+    void stopSourcePreview() noexcept;
+    [[nodiscard]] bool sourcePreviewActive() const noexcept { return sourcePreviewActive_; }
+    /** Zero when stopped; otherwise 1 plus the playing frame / source frames. */
+    [[nodiscard]] double sourcePreviewPosition() const noexcept;
     /** Zero when stopped; otherwise latest triggered pad + 1 plus source position. */
     [[nodiscard]] float playbackPosition() const noexcept;
     /** Hard-cut every pad voice and raw preview at the next audio block boundary. */
@@ -506,6 +518,10 @@ private:
     void updatePlaybackPositionOutput(std::uint32_t processedFrames) noexcept;
     void enforceVoiceLimit(std::uint32_t excludedPad = kPadCount) noexcept;
     void mixChopPreview(float& left, float& right) noexcept;
+    void mixSourcePreview(float& left, float& right) noexcept;
+    /** Linear interpolation shared by both raw previews; exact at whole frames. */
+    void mixInterpolated(const Storage* storage, std::uint32_t first, std::uint32_t second,
+                         float fraction, float& left, float& right) const noexcept;
 
     double sample_rate_;
     double capture_rate_;
@@ -559,6 +575,13 @@ private:
     std::uint32_t chopPreviewPad_ = 0;
     double chopPreviewFrame_ = 0.0;
     double chopPreviewRemainingFrames_ = 0.0;
+    // Source preview state is audio-owned; it reads source_, which only a
+    // dispatch swaps, and that dispatch stops the preview first.
+    bool sourcePreviewActive_ = false;
+    bool sourcePreviewLoop_ = false;
+    std::uint32_t sourcePreviewStart_ = 0;
+    std::uint32_t sourcePreviewEnd_ = 0;
+    double sourcePreviewFrame_ = 0.0;
 };
 
 } // namespace midichopper

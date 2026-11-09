@@ -58,6 +58,7 @@ void SamplerEngine::setSampleRate(double sampleRate) {
     controlDispatch_ = nullptr;
     applyPendingState();
     stopChopPreview();
+    stopSourcePreview();
 
     // A host may change rate while keeping the same plug-in instance. Preserve
     // completed pads and only grow the shared pool when the new rate needs
@@ -142,6 +143,7 @@ void SamplerEngine::setSampleRate(double sampleRate) {
 void SamplerEngine::reset() noexcept {
     applyPendingState();
     stopChopPreview();
+    stopSourcePreview();
     captureStorageExhausted_.store(false, std::memory_order_release);
     chopMidiPreview_ = {};
     auditionPad_ = kPadCount;
@@ -210,6 +212,7 @@ void SamplerEngine::setSettings(const EngineSettings& s) noexcept {
     }
     if (settings_.armed) {
         stopChopPreview();
+        stopSourcePreview();
         stopPadAudition();
         if (!previous.armed) {
             storagePool_.retryCaptureAllocation();
@@ -715,13 +718,14 @@ void SamplerEngine::stopAllPlayback() noexcept {
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad)
         hardStopVoice(pad);
     stopChopPreview();
+    stopSourcePreview();
     playbackPositionOutput_ = 0.0f;
     playbackPositionHoldFrames_ = 0U;
     playbackPositionWasActive_ = false;
 }
 
 bool SamplerEngine::anyPlaybackActive() const noexcept {
-    if (chopPreviewActive_)
+    if (chopPreviewActive_ || sourcePreviewActive_)
         return true;
     for (const auto& pad : pads_)
         if (pad.voice.playing())
@@ -925,6 +929,7 @@ void SamplerEngine::process(const float* inputLeft, const float* inputRight,
                 p.publishedPlaying.store(false, std::memory_order_release);
         }
         mixChopPreview(outL, outR);
+        mixSourcePreview(outL, outR);
         outputLeft[frame] = outL * settings_.gain +
             (settings_.monitorInput ? inL * settings_.monitorGain : 0.0f);
         outputRight[frame] = outR * settings_.gain +
@@ -1461,6 +1466,7 @@ bool SamplerEngine::setSource(const PadData* const audio, const std::uint64_t so
     }
     Storage* previous = nullptr;
     dispatchControl([&]() noexcept {
+        stopSourcePreview(); // it reads source_, so stop before the swap
         previous = source_;
         source_ = replacement;
         sourceId_ = replacement ? sourceId : 0U;
@@ -1782,6 +1788,7 @@ void SamplerEngine::startChopPreview(const std::uint32_t firstPad,
             chopPreviewFrame_ = static_cast<double>(remaining);
             chopPreviewRemainingFrames_ = static_cast<double>(sourceEndFrame - sourceFrame);
             chopPreviewActive_ = true;
+            stopSourcePreview(); // the two raw previews are mutually exclusive
             return;
         }
         remaining -= frames;
@@ -1856,11 +1863,8 @@ void SamplerEngine::mixChopPreview(float& left, float& right) noexcept {
     const auto frames = pads_[chopPreviewPad_].publishedFrames.load(std::memory_order_acquire);
     const auto first = static_cast<std::uint32_t>(chopPreviewFrame_);
     const auto second = std::min(first + 1U, frames - 1U);
-    const auto fraction = static_cast<float>(chopPreviewFrame_ - first);
-    left += sampleAt(chopPreviewPad_, first, 0U) * (1.0f - fraction) +
-            sampleAt(chopPreviewPad_, second, 0U) * fraction;
-    right += sampleAt(chopPreviewPad_, first, 1U) * (1.0f - fraction) +
-             sampleAt(chopPreviewPad_, second, 1U) * fraction;
+    mixInterpolated(pads_[chopPreviewPad_].storage, first, second,
+                    static_cast<float>(chopPreviewFrame_ - first), left, right);
     const double sourceRate =
         pads_[chopPreviewPad_].sourceSampleRate.load(std::memory_order_relaxed);
     const double advance = sourceRate / sample_rate_;
@@ -1868,6 +1872,58 @@ void SamplerEngine::mixChopPreview(float& left, float& right) noexcept {
     chopPreviewRemainingFrames_ -= advance;
     if (chopPreviewRemainingFrames_ <= 0.0)
         stopChopPreview();
+}
+
+void SamplerEngine::mixInterpolated(const Storage* const storage, const std::uint32_t first,
+    const std::uint32_t second, const float fraction, float& left, float& right) const noexcept {
+    SampleStoragePool::StereoReader read(storagePool_, storage);
+    const auto a = read(first);
+    const auto b = read(second);
+    left += a[0] * (1.0f - fraction) + b[0] * fraction;
+    right += a[1] * (1.0f - fraction) + b[1] * fraction;
+}
+
+void SamplerEngine::startSourcePreview(const std::uint64_t sourceId, const std::uint32_t start,
+    const std::uint32_t end, const bool loop) noexcept {
+    stopSourcePreview();
+    if (settings_.armed || !source_ || sourceId == 0U || sourceId != sourceId_ ||
+        start >= end || end > source_->frames)
+        return;
+    stopChopPreview();
+    sourcePreviewStart_ = start;
+    sourcePreviewEnd_ = end;
+    sourcePreviewLoop_ = loop;
+    sourcePreviewFrame_ = static_cast<double>(start);
+    sourcePreviewActive_ = true;
+}
+
+void SamplerEngine::stopSourcePreview() noexcept {
+    sourcePreviewActive_ = false;
+    sourcePreviewFrame_ = 0.0;
+}
+
+double SamplerEngine::sourcePreviewPosition() const noexcept {
+    if (!sourcePreviewActive_ || !source_ || source_->frames == 0U) return 0.0;
+    return 1.0 + sourcePreviewFrame_ / static_cast<double>(source_->frames);
+}
+
+void SamplerEngine::mixSourcePreview(float& left, float& right) noexcept {
+    if (!sourcePreviewActive_) return;
+    const auto first = static_cast<std::uint32_t>(sourcePreviewFrame_);
+    // A loop interpolates its last frame toward the loop start, so the seam is continuous.
+    const auto second = first + 1U < sourcePreviewEnd_ ? first + 1U :
+        (sourcePreviewLoop_ ? sourcePreviewStart_ : first);
+    mixInterpolated(source_, first, second, static_cast<float>(sourcePreviewFrame_ - first),
+                    left, right);
+    sourcePreviewFrame_ += source_->sampleRate / sample_rate_;
+    if (sourcePreviewFrame_ < static_cast<double>(sourcePreviewEnd_)) return;
+    if (!sourcePreviewLoop_) {
+        stopSourcePreview();
+        return;
+    }
+    const double length = static_cast<double>(sourcePreviewEnd_ - sourcePreviewStart_);
+    sourcePreviewFrame_ = static_cast<double>(sourcePreviewStart_) +
+        std::fmod(sourcePreviewFrame_ - static_cast<double>(sourcePreviewEnd_), length);
 }
 
 void SamplerEngine::setPadPlaybackSettings(const std::uint32_t pad,

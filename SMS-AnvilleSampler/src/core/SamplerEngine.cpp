@@ -696,6 +696,7 @@ void SamplerEngine::startVoice(std::uint32_t pad, std::uint8_t velocity,
     auto& p = pads_[pad];
     if (auditionPad_ == pad)
         auditionPad_ = kPadCount;
+    chokeGroupMembers(pad);
     if (!p.voice.playing())
         enforceVoiceLimit(pad);
     const auto frames = p.publishedFrames.load(std::memory_order_acquire);
@@ -704,6 +705,20 @@ void SamplerEngine::startVoice(std::uint32_t pad, std::uint8_t velocity,
     lastPlaybackTrigger_.pad = pad;
     ++lastPlaybackTrigger_.generation;
     p.publishedPlaying.store(true, std::memory_order_release);
+}
+
+void SamplerEngine::chokeGroupMembers(const std::uint32_t pad) noexcept {
+    const float group = pads_[pad].mixerChokeGroup.load(std::memory_order_acquire);
+    if (group < 0.5f) return;
+    const auto fadeFrames = std::max<std::uint32_t>(
+        1U, static_cast<std::uint32_t>(sample_rate_ * kChokeFadeSeconds));
+    for (std::uint32_t other = 0; other < kPadCount; ++other) {
+        if (other == pad || !pads_[other].voice.playing() ||
+            pads_[other].mixerChokeGroup.load(std::memory_order_acquire) != group)
+            continue;
+        pads_[other].held = false;
+        pads_[other].voice.choke(fadeFrames);
+    }
 }
 
 void SamplerEngine::stopVoice(std::uint32_t pad) noexcept {
@@ -772,7 +787,7 @@ void SamplerEngine::refreshActiveVoiceSettings(const std::uint32_t pad) noexcept
 void SamplerEngine::enforceVoiceLimit(const std::uint32_t excludedPad) noexcept {
     std::uint32_t activeVoices = 0;
     for (const auto& pad : pads_)
-        activeVoices += pad.voice.playing() ? 1U : 0U;
+        activeVoices += pad.voice.playing() && !pad.voice.choking() ? 1U : 0U;
 
     const std::uint32_t allowedVoices = settings_.maxVoices -
         ((excludedPad < kPadCount && !pads_[excludedPad].voice.playing()) ? 1U : 0U);
@@ -780,7 +795,7 @@ void SamplerEngine::enforceVoiceLimit(const std::uint32_t excludedPad) noexcept 
         std::uint32_t oldestPad = kPadCount;
         std::uint64_t oldestOrder = ~std::uint64_t{0};
         for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
-            if (pad == excludedPad || !pads_[pad].voice.playing())
+            if (pad == excludedPad || !pads_[pad].voice.playing() || pads_[pad].voice.choking())
                 continue;
             if (pads_[pad].voice.order() < oldestOrder) {
                 oldestOrder = pads_[pad].voice.order();
@@ -2054,6 +2069,7 @@ sms::dsp::SampleMixerSettings SamplerEngine::padMixerSettings(
         p.mixerDirty.load(std::memory_order_acquire),
         p.mixerReverse.load(std::memory_order_acquire),
         p.mixerGlobalMixer.load(std::memory_order_acquire),
+        p.mixerChokeGroup.load(std::memory_order_acquire),
     });
 }
 
@@ -2074,7 +2090,8 @@ void SamplerEngine::setPadMixerSettingsDirect(
         p.mixerFilterSlope.load(std::memory_order_acquire) != settings.filterSlope ||
         p.mixerDirty.load(std::memory_order_acquire) != settings.dirty ||
         p.mixerReverse.load(std::memory_order_acquire) != settings.reverse ||
-        p.mixerGlobalMixer.load(std::memory_order_acquire) != settings.globalMixer;
+        p.mixerGlobalMixer.load(std::memory_order_acquire) != settings.globalMixer ||
+        p.mixerChokeGroup.load(std::memory_order_acquire) != settings.chokeGroup;
     // Bypassing the master changes only its contribution to direction. Keep
     // the latched local direction, current source position, and envelope.
     if (redirectGlobal && settings_.reverse &&
@@ -2089,6 +2106,7 @@ void SamplerEngine::setPadMixerSettingsDirect(
     p.mixerDirty.store(settings.dirty, std::memory_order_release);
     p.mixerReverse.store(settings.reverse, std::memory_order_release);
     p.mixerGlobalMixer.store(settings.globalMixer, std::memory_order_release);
+    p.mixerChokeGroup.store(settings.chokeGroup, std::memory_order_release);
     if (changed)
         p.generation.fetch_add(1U, std::memory_order_release);
 }

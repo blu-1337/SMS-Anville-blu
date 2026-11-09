@@ -53,6 +53,13 @@ public:
     /** Capture/clear/reset only reset activity, age, and the envelope. */
     void reset() noexcept;
     void hardStop() noexcept;
+    /** Fades the voice linearly to silence over `frames`, then frees it (choke groups). */
+    void choke(std::uint32_t frames) noexcept
+    {
+        if (playing_ && chokeLeft_ == 0U && frames != 0U)
+            chokeLeft_ = chokeTotal_ = frames;
+    }
+    [[nodiscard]] bool choking() const noexcept { return chokeLeft_ != 0U; }
 
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
@@ -71,6 +78,8 @@ private:
     double step_ = 1.0;
     std::uint32_t startFrame_ = 0;
     std::uint32_t endFrame_ = 0;
+    std::uint32_t chokeLeft_ = 0;
+    std::uint32_t chokeTotal_ = 0;
     bool releaseFromEnd_ = false;
     bool noteReleased_ = false;
     float velocityGain_ = 1.0f;

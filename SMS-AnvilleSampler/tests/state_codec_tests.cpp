@@ -541,11 +541,18 @@ void mixerStateRoundTrip()
     original.filterSlope = 2.0f;
     original.dirty = 1.0f;
     original.reverse = 1.0f;
+    original.chokeGroup = 5.0f;
     const std::string encoded = midichopper::plugin::encodeMixerSettings(original);
-    check(encoded.rfind("MX4;", 0U) == 0U, "mixer settings use the MX4 state version");
+    check(encoded.rfind("MX5;", 0U) == 0U, "mixer settings use the MX5 state version");
     sms::dsp::SampleMixerSettings decoded;
     check(midichopper::plugin::decodeMixerSettings(encoded.c_str(), decoded),
           "sample mixer settings decode");
+    check(decoded.chokeGroup == 5.0f, "choke group round-trips");
+    sms::dsp::SampleMixerSettings other;
+    check(midichopper::plugin::decodeMixerSettings("MX4;0;0;0;0;0;0;0;0;1", other) &&
+              other.chokeGroup == 0.0f, "MX4 states decode with the choke group Off");
+    check(midichopper::plugin::decodeMixerSettings("MX5;0;0;0;0;0;0;0;0;1;99", other) &&
+              other.chokeGroup == 8.0f, "choke group is clamped to 8");
     check(std::abs(decoded.gainDecibels - original.gainDecibels) < 1.0e-6f,
           "mixer gain round-trips");
     check(std::abs(decoded.pan - original.pan) < 1.0e-6f,

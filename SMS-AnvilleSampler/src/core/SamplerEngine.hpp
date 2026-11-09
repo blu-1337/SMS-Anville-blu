@@ -461,6 +461,7 @@ private:
         std::atomic<float> mixerDirty{0.0f};
         std::atomic<float> mixerReverse{0.0f};
         std::atomic<float> mixerGlobalMixer{1.0f};
+        std::atomic<float> mixerChokeGroup{0.0f};
         Pad() = default;
         Pad(const Pad&) = delete;
         Pad& operator=(const Pad&) = delete;
@@ -519,6 +520,7 @@ private:
                     VoiceMode mode = VoiceMode::OneShot,
                     std::int16_t triggerNote = -1) noexcept;
     void stopVoice(std::uint32_t pad) noexcept;
+    void chokeGroupMembers(std::uint32_t pad) noexcept;
     void hardStopVoice(std::uint32_t pad) noexcept;
     void refreshActiveVoiceSettings(std::uint32_t pad) noexcept;
     void updatePlaybackPositionOutput(std::uint32_t processedFrames) noexcept;

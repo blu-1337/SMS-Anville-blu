@@ -2773,6 +2773,51 @@ void independent_pad_audition()
         }
 }
 
+std::vector<float> choke_run(const float groupA, const float groupB, const bool playFirst)
+{
+    using namespace midichopper;
+    SamplerEngine engine(1000.0, 1.0);
+    auto settings = engine.settings();
+    settings.monitorInput = false;
+    settings.playbackMode = PlaybackMode::Hold;
+    settings.maxVoices = 8U;
+    engine.setSettings(settings);
+    for (std::uint32_t pad = 0U; pad < 2U; ++pad) {
+        PadData source;
+        source.sampleRate = 1000.0;
+        source.frames = 200U;
+        source.stereo.assign(400U, pad == 0U ? 1.0f : 100.0f);
+        check(engine.importPad(pad, source), "choke import");
+        sms::dsp::SampleMixerSettings mixer;
+        mixer.chokeGroup = pad == 0U ? groupA : groupB;
+        engine.setPadMixerSettings(pad, mixer);
+    }
+    const MidiEvent events[]{{0U, 36U, 127U, MidiEventType::NoteOn},
+                             {20U, 37U, 127U, MidiEventType::NoteOn}};
+    std::vector<float> left(60U), right(60U);
+    engine.process(nullptr, nullptr, left.data(), right.data(), left.size(),
+                   playFirst ? events : events + 1, playFirst ? 2U : 1U);
+    return left;
+}
+
+void choke_groups()
+{
+    const auto choked = choke_run(1.0f, 1.0f, true);
+    const auto alone = choke_run(1.0f, 1.0f, false);
+    check(choked[19] > 0.0f, "choke: first pad plays before the second starts");
+    // The 5 ms fade at 1 kHz is 5 frames: first pad is silent from frame 25 on.
+    for (std::size_t frame = 26U; frame < choked.size(); ++frame)
+        close(choked[frame], alone[frame], "choke: only the second pad is audible after the fade");
+    check(choked[21] < choked[19] + alone[21] && choked[21] > alone[21],
+          "choke: the cut pad fades instead of hard-cutting");
+    const auto different = choke_run(1.0f, 2.0f, true);
+    const auto off = choke_run(0.0f, 0.0f, true);
+    check(different[40] > alone[40] && off[40] > alone[40],
+          "choke: different groups and Off keep both pads playing");
+    const auto reverseDirection = choke_run(3.0f, 3.0f, true);
+    check(reverseDirection[40] == choked[40], "choke: group number does not matter");
+}
+
 void pad_audition_lifecycle()
 {
     using namespace midichopper;
@@ -3620,6 +3665,7 @@ int main() {
     playback_direction_latched_at_trigger();
     reverse_boundaries_and_envelopes();
     independent_pad_audition();
+    choke_groups();
     pad_audition_lifecycle();
     arm_stops_hold_without_interrupting_capture();
     sample_mixer_and_varispeed();

@@ -25,6 +25,7 @@ void PlaybackVoice::start(const Parameters& parameters, const std::uint8_t veloc
     endFrame_ = endFrame;
     releaseFromEnd_ = false;
     noteReleased_ = false;
+    chokeLeft_ = chokeTotal_ = 0U;
     velocityGain_ = static_cast<float>(velocity) / 127.0f;
     const double sourceRate = parameters.sourceSampleRate;
     reverse_ = (mixer.reverse >= 0.5f) != (globalMixer && global.reverse);
@@ -131,12 +132,14 @@ bool PlaybackVoice::release(const sms::dsp::SamplePlaybackSettings& playback) no
 
 void PlaybackVoice::reset() noexcept {
     playing_ = false;
+    chokeLeft_ = 0U;
     order_ = 0;
     envelope_.reset();
 }
 
 void PlaybackVoice::hardStop() noexcept {
     playing_ = false;
+    chokeLeft_ = 0U;
     triggerNote_ = -1;
     order_ = 0;
     releaseFromEnd_ = false;
@@ -177,6 +180,7 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
         playing_ = false;
         return false;
     }
+    bool chokeFinished = false;
     const auto pos = position_;
     // The cursor, cut points and envelope use left-to-right playback
     // coordinates. Reverse virtually flips the full source before trimming.
@@ -195,7 +199,12 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
         releaseFromEnd_ = true;
     }
     const float envelopeGain = envelope_.next();
-    const float voiceGain = velocityGain_ * envelopeGain;
+    float voiceGain = velocityGain_ * envelopeGain;
+    if (chokeLeft_ != 0U) {
+        voiceGain *= static_cast<float>(chokeLeft_) / static_cast<float>(chokeTotal_);
+        if (--chokeLeft_ == 0U)
+            chokeFinished = true;
+    }
     float sampleL, sampleR;
     if (dirty_) {
         const auto sourceRate = sourceSampleRate;
@@ -234,6 +243,10 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
     }
     if ((!looping && reachedEnd) || (!envelope_.active() && (!looping || noteReleased_))) {
         playing_ = false;
+    }
+    if (chokeFinished) {
+        hardStop();
+        return false;
     }
     return playing_;
 }

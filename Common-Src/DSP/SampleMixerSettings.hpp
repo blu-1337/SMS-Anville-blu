@@ -13,6 +13,7 @@ inline constexpr float kMinimumTuneSemitones = -24.0f;
 inline constexpr float kMaximumTuneSemitones = 24.0f;
 inline constexpr float kMinimumFilterAmount = 0.0f;
 inline constexpr float kMaximumFilterAmount = 1.0f;
+inline constexpr int kChokeGroupCount = 8;
 
 /** Per-sample level, balance, varispeed, color, direction, and global routing. */
 struct SampleMixerSettings {
@@ -25,6 +26,7 @@ struct SampleMixerSettings {
     float dirty = 0.0f;
     float reverse = 0.0f;
     float globalMixer = 1.0f;
+    float chokeGroup = 0.0f; // 0 = off, 1..8 = pads in one group cut each other
 };
 
 [[nodiscard]] inline SampleMixerSettings sanitize(SampleMixerSettings value) noexcept
@@ -48,6 +50,8 @@ struct SampleMixerSettings {
     value.dirty = finiteOr(value.dirty, 0.0f) >= 0.5f ? 1.0f : 0.0f;
     value.reverse = finiteOr(value.reverse, 0.0f) >= 0.5f ? 1.0f : 0.0f;
     value.globalMixer = finiteOr(value.globalMixer, 1.0f) >= 0.5f ? 1.0f : 0.0f;
+    value.chokeGroup = std::clamp(std::round(finiteOr(value.chokeGroup, 0.0f)), 0.0f,
+                                  static_cast<float>(kChokeGroupCount));
     return value;
 }
 

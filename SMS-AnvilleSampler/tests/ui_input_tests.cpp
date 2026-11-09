@@ -263,16 +263,19 @@ void mainSampleViewRoutes()
     f.input.keyboard(InputKey::space, false);
     check(!f.states.empty() && f.states.back().first == kMainPreviewRequestKey, "Space previews");
 
-    // Double-clicking a pad opens the Sample Editor on top; closing returns here.
+    // Double-clicking a pad opens no editor or menu: each click just auditions the pad.
     f.click(pad);
     f.click(pad);
-    check(f.session.state().editorMode && f.session.state().mainSampleMode,
-          "pad double-click opens the Sample Editor above the Main Sample");
-    check(isTarget(f.input.targetAt(center(layout::mainSampleClose)),
-                                InteractiveType::closeEditor), "editor precedes the Main Sample");
-    f.session.closeSampleEditor();
-    check(isTarget(f.input.targetAt(center(layout::mainSampleClose)),
-                                InteractiveType::mainSampleClose), "closing the editor returns");
+    check(!f.session.state().editorMode && !f.session.padActions().menuOpen(),
+          "pad double-click opens neither the Sample Editor nor a menu");
+
+    // Right-clicking a pad opens the same pad context menu as the main view.
+    check(f.input.mouse(pad, InputButton::right, true), "right-click on a Main Sample pad is handled");
+    f.input.mouse(pad, InputButton::right, false);
+    check(f.session.padActions().menuOpen(), "right-click opens the pad context menu");
+    f.input.keyboard(InputKey::escape, true);
+    check(!f.session.padActions().menuOpen() && f.session.state().mainSampleMode,
+          "Escape closes the menu and stays in the Main Sample");
 
     check(f.input.keyboard(InputKey::escape, true) && !f.session.state().mainSampleMode,
           "Escape leaves the Main Sample view");

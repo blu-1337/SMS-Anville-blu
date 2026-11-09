@@ -86,8 +86,6 @@ private:
     bool fMainSampleDouble = false;
     float fMainSampleClickX = 0.0f;
     Clock::time_point fMainSampleClickTime{};
-    int fMainSamplePad = -1;
-    Clock::time_point fMainSamplePadTime{};
 };
 
 } // namespace midichopper::ui

@@ -135,9 +135,13 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             fMixer.openMenu(clicked, position);
             return true;
         }
-        if (s.armed || chop.active() || (s.mainSampleMode && !s.editorMode)) return false;
-        const auto grid = fSession.padLayout().grid(s.editorMode
-            ? uiLayout::editorPadBounds : uiLayout::mainPadBounds, s.editorMode ? 6.0f : 10.0f);
+        const bool mainSampleView = s.mainSampleMode && !s.editorMode;
+        if (s.armed || chop.active() ||
+            (mainSampleView && fSession.mainSample().confirmPending())) return false;
+        const auto grid = mainSampleView
+            ? fSession.padLayout().grid(uiLayout::mainSamplePads, 8.0f)
+            : fSession.padLayout().grid(s.editorMode
+                ? uiLayout::editorPadBounds : uiLayout::mainPadBounds, s.editorMode ? 6.0f : 10.0f);
         const int localPad = fSession.localPadFromVisualIndex(grid.hit(position));
         if (localPad >= 0) {
             fMenu.dismiss();
@@ -635,19 +639,11 @@ bool SamplerInputController::pressMainSamplePad(const int localPad)
         return true;
     }
     const auto now = Clock::now();
-    const auto& padState = fSession.state().padState;
-    const bool occupied = padState[static_cast<std::size_t>(localPad)] != '0' &&
-                          padState[static_cast<std::size_t>(localPad)] != '.';
-    if (occupied && fMainSamplePad == pad && now - fMainSamplePadTime < std::chrono::milliseconds(500)) {
-        fMainSamplePad = -1;
-        fSession.releasePlaybackPad();
-        fSession.openSampleEditor(pad);
-        return true;
+    if (const int slice = main.sliceForPad(static_cast<std::uint32_t>(pad)); slice >= 0) {
+        const auto& linked = main.status().slices[static_cast<std::size_t>(slice)];
+        main.selectSlice(linked.id);
+        main.revealRange(linked.start, linked.end, now);
     }
-    fMainSamplePad = pad;
-    fMainSamplePadTime = now;
-    if (const int slice = main.sliceForPad(static_cast<std::uint32_t>(pad)); slice >= 0)
-        main.selectSlice(main.status().slices[static_cast<std::size_t>(slice)].id);
     fSession.pressPlaybackPad(localPad);
     fHost.repaintSamplerInput();
     return true;

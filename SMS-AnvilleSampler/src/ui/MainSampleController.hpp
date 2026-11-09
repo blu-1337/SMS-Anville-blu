@@ -92,6 +92,8 @@ public:
     bool selectSliceNumber(std::size_t number) noexcept;
     bool zoomFit(Time now) noexcept;
     bool zoomToRange(std::uint32_t start, std::uint32_t end, Time now) noexcept;
+    // Scrolls a zoomed view (keeping its width) so [start, end] is visible; no-op if unzoomed.
+    bool revealRange(std::uint32_t start, std::uint32_t end, Time now) noexcept;
 
     // Selection (source frames) on empty waveform.
     void beginSelection(std::uint32_t frame) noexcept;

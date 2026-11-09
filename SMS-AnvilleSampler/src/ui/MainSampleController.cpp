@@ -352,6 +352,24 @@ bool MainSampleController::zoomToRange(const std::uint32_t start, const std::uin
     return scheduleDetail(before.start != first || before.end != last, now);
 }
 
+bool MainSampleController::revealRange(const std::uint32_t start, const std::uint32_t end,
+                                       const Time now) noexcept
+{
+    if (!hasSource() || end <= start || !fViewport.zoomed())
+        return false;
+    const std::uint64_t width = fViewport.end - fViewport.start;
+    if (start >= fViewport.start && end <= fViewport.end)
+        return false;
+    std::uint64_t first = start;
+    if (end - start < width)
+        first = start > (width - (end - start)) / 2U ? start - (width - (end - start)) / 2U : 0U;
+    first = std::min<std::uint64_t>(first, fStatus.frames > width ? fStatus.frames - width : 0U);
+    const auto before = fViewport;
+    fViewport.start = first;
+    fViewport.end = first + width;
+    return scheduleDetail(before.start != fViewport.start, now);
+}
+
 std::uint32_t MainSampleController::clampFrame(const std::uint32_t frame) const noexcept
 {
     return std::min(frame, fStatus.frames);

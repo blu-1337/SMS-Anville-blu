@@ -143,8 +143,15 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         ctx.canvas.beginPath();
         ctx.canvas.rect(x0, bounds.y, x1 - x0, bounds.height);
         ctx.canvas.fillColor((tint != nullptr ? *tint : colors.selection)
-            .withAlpha(slice.id == main.selectedSlice() ? 0.22f : 0.10f));
+            .withAlpha(slice.id == main.selectedSlice() ? 0.38f : 0.10f));
         ctx.canvas.fill();
+        if (slice.id == main.selectedSlice()) {
+            ctx.canvas.beginPath();
+            ctx.canvas.rect(x0, bounds.y + 1.0f, x1 - x0, bounds.height - 2.0f);
+            ctx.canvas.strokeColor((tint != nullptr ? *tint : colors.selection).withAlpha(0.9f));
+            ctx.canvas.strokeWidth(2.0f);
+            ctx.canvas.stroke();
+        }
     }
 
     ctx.canvas.beginPath();

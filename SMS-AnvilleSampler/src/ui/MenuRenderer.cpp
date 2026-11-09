@@ -166,11 +166,14 @@ void drawMenuOverlay(const ViewRenderContext& ctx)
     if (ctx.state.skinsAvailable)
         submenuButton(uiLayout::skinMenuButton, "SKIN", uiLayout::MenuSubmenu::skin,
                       InteractiveType::menuSkins);
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleMenuButton(ctx.state.skinsAvailable),
+                              "MAIN SAMPLE...", false, colors.selection,
+                              hovered(ctx, InteractiveType::menuMainSample), !ctx.state.armed);
     sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::resetMenuButton(ctx.state.skinsAvailable),
                               ctx.state.resetArmed ? "Confirm: CLEAR PADS" : "CLEAR PADS",
                               ctx.state.resetArmed, colors.intentDanger,
                               hovered(ctx, InteractiveType::menuReset), ctx.state.resetEnabled);
-    text(ctx, 1060.0f, ctx.state.skinsAvailable ? 235.0f : 199.0f, "LINKS", nullptr);
+    text(ctx, 1060.0f, ctx.state.skinsAvailable ? 271.0f : 235.0f, "LINKS", nullptr);
     static constexpr const char* linkLabels[] = {"ONLINE HELP", "REPORT ISSUE"};
     for (int index = 0; index < 2; ++index)
         sms::ui::dpf::drawSegment(ctx.canvas,

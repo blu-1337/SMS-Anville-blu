@@ -263,6 +263,7 @@ protected:
             static_cast<int>(fSkinCatalog.entries.size()),
             fMixer.menu(), fMixer.settings(),
             fFileDrop.highlightedPad() ? static_cast<int>(*fFileDrop.highlightedPad()) : -1,
+            fSession.state().mainSampleMode, &fSession.mainSample(),
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();
@@ -307,7 +308,7 @@ protected:
     bool onCharacterInput(const CharacterInputEvent& ev) override { return fInput.character(ev.character); }
     void uiFocus(const bool focus, DGL_NAMESPACE::CrossingMode) override { fInput.focus(focus); }
 #if DISTRHO_UI_FILE_BROWSER
-    void uiFileBrowserSelected(const char* filename) override { fSession.padActions().fileSelected(filename); }
+    void uiFileBrowserSelected(const char* filename) override { fSession.fileBrowserSelected(filename); }
 #endif
 
 private:
@@ -349,7 +350,7 @@ private:
 #if DISTRHO_UI_FILE_BROWSER
         FileBrowserOptions options;
         options.saving = saving; options.defaultName = defaultName;
-        options.title = fSkin.text(saving ? "Export pad as WAV" : "Import WAV into pad");
+        options.title = fSkin.text(saving ? "Export pad as WAV" : fSession.mainSampleBrowsing() ? "Load Main Sample" : "Import WAV into pad");
         return openFileBrowser(options);
 #else
         static_cast<void>(saving); static_cast<void>(defaultName); return false;
@@ -391,6 +392,7 @@ private:
     void repaintApplicationMenu() override { requestRepaint(); }
     void clearHover() noexcept override { fInput.clearHover(); }
     bool openLink(const char* url) override { return sms::ui::openBrowser(url); }
+    void openMainSample() override { fSession.openMainSample(); }
     void focusSamplerInput() override { getWindow().focus(); }
     void ignoreSamplerKeyRepeat(const bool ignore) override { getWindow().setIgnoringKeyRepeat(ignore); }
     void editSamplerParameter(const std::uint32_t parameter, const bool begin) override { editParameter(parameter, begin); }

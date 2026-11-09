@@ -13,8 +13,11 @@
 #include "../plugin/GlobalValueMode.hpp"
 #include "WaveformEditor.hpp"
 #include "WaveformViewport.hpp"
+#include "../plugin/MainSampleProtocol.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -77,6 +80,16 @@ enum class InteractiveType : int {
     globalSettingsGroup,
     globalRangeEntry,
     globalRangeReset,
+    mainSampleOpen,
+    mainSampleClose,
+    mainSampleWaveform,
+    mainSampleMarker,
+    mainSampleOverview,
+    mainSamplePad,
+    mainSampleLoad,
+    mainSampleClear,
+    mainSampleConfirm,
+    menuMainSample,
 };
 
 class PadPressTracker {
@@ -448,6 +461,11 @@ struct InteractionContext {
     bool editorMode = false;
     bool chopEditorMode = false;
     bool chopSplitMode = false;
+    bool mainSampleMode = false;
+    bool mainSampleHasSource = false;
+    bool mainSampleConfirm = false;
+    std::span<const plugin::MainSampleSlice> mainSampleSlices;
+    sms::ui::waveform::Viewport mainSampleViewport;
     bool menuOpen = false;
     bool skinsAvailable = false;
     bool resetEnabled = true;
@@ -478,6 +496,38 @@ struct InteractionContext {
     std::span<const std::int64_t> chopOffsets;
     sms::ui::waveform::Viewport waveformViewport;
 };
+
+/** Marker index = slice * 2 + (end edge ? 1 : 0). A boundary shared with the next slice is
+ * reported once, as that slice's start edge. Returns -1 when no marker is within 6 px. */
+[[nodiscard]] inline int mainSampleMarkerAt(const float x, const InteractionContext& context) noexcept
+{
+    const auto bounds = layout::mainSampleWaveform;
+    int best = -1;
+    float bestDistance = 6.5f;
+    const std::size_t count = std::min<std::size_t>(context.mainSampleSlices.size(), 64U);
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto& slice = context.mainSampleSlices[index];
+        for (int edge = 0; edge < 2; ++edge) {
+            const auto frame = edge == 0 ? slice.start : slice.end;
+            if (edge == 1) {
+                bool shared = false;
+                for (std::size_t other = 0; other < count; ++other)
+                    shared = shared || context.mainSampleSlices[other].start == frame;
+                if (shared)
+                    continue;
+            }
+            if (frame < context.mainSampleViewport.start || frame > context.mainSampleViewport.end)
+                continue;
+            const float distance = std::abs(
+                context.mainSampleViewport.xForFrame(static_cast<double>(frame), bounds) - x);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = static_cast<int>(index) * 2 + edge;
+            }
+        }
+    }
+    return best;
+}
 
 /** Resolve exactly one enabled interactive target using the same overlay priority as clicks. */
 [[nodiscard]] inline sms::ui::InteractiveTarget
@@ -553,6 +603,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::menuPadLayouts);
         if (uiLayout::bankModeMenuButton.contains(point))
             return target(InteractiveType::menuBankModes);
+        if (!context.armed && uiLayout::mainSampleMenuButton(context.skinsAvailable).contains(point))
+            return target(InteractiveType::menuMainSample);
         if (context.resetEnabled && uiLayout::resetMenuButton(context.skinsAvailable).contains(point))
             return target(InteractiveType::menuReset);
         for (int index = 0; index < 2; ++index) {
@@ -651,8 +703,44 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         return sms::ui::kNoInteractiveTarget;
     }
 
+    if (context.mainSampleMode) {
+        if (context.mainSampleConfirm) {
+            if (uiLayout::mainSampleConfirm.contains(point))
+                return target(InteractiveType::mainSampleConfirm, 0);
+            if (uiLayout::mainSampleCancel.contains(point))
+                return target(InteractiveType::mainSampleConfirm, 1);
+            return sms::ui::kNoInteractiveTarget;
+        }
+        if (uiLayout::mainSampleClose.contains(point))
+            return target(InteractiveType::mainSampleClose);
+        if (uiLayout::mainSampleLoad.contains(point))
+            return target(InteractiveType::mainSampleLoad);
+        if (context.mainSampleHasSource && uiLayout::mainSampleClear.contains(point))
+            return target(InteractiveType::mainSampleClear);
+        for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
+            if (uiLayout::mainBank(bank).contains(point))
+                return target(InteractiveType::bank, bank);
+        }
+        const int visualPad = pads.grid(uiLayout::mainSamplePads, 8.0f).hit(point);
+        const int localPad = pads.localIndex(visualPad);
+        if (localPad >= 0)
+            return target(InteractiveType::mainSamplePad, localPad);
+        if (context.mainSampleHasSource && context.mainSampleViewport.total != 0U) {
+            if (uiLayout::mainSampleOverview.contains(point))
+                return target(InteractiveType::mainSampleOverview);
+            if (uiLayout::mainSampleWaveform.contains(point)) {
+                const int marker = mainSampleMarkerAt(point.x, context);
+                return marker >= 0 ? target(InteractiveType::mainSampleMarker, marker)
+                                   : target(InteractiveType::mainSampleWaveform);
+            }
+        }
+        return sms::ui::kNoInteractiveTarget;
+    }
+
     if (!context.armed && uiLayout::openEditor.contains(point))
         return target(InteractiveType::openEditor);
+    if (!context.armed && uiLayout::openMainSample.contains(point))
+        return target(InteractiveType::mainSampleOpen);
     if (!context.captureActive) {
         for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
             if (uiLayout::mainBank(bank).contains(point))

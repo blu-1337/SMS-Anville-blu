@@ -30,6 +30,7 @@ public:
     virtual void repaintApplicationMenu() = 0;
     virtual void clearHover() noexcept = 0;
     virtual bool openLink(const char* url) = 0;
+    virtual void openMainSample() = 0;
 };
 
 /** Owns the main menu, skin scrolling and CLEAR PADS confirmation.

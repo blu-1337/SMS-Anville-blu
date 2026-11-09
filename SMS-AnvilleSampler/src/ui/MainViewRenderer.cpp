@@ -101,9 +101,12 @@ void drawControlPanel(const ViewRenderContext& ctx)
 {
     const auto& colors = sms::ui::dpf::theme();
     drawControlPanelBacking(ctx);
-    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::openEditor, "SAMPLE EDITOR", false,
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::openEditor, "EDITOR", false,
                               colors.controlAccent, hovered(ctx, InteractiveType::openEditor),
                               !ctx.state.armed);
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::openMainSample, "SAMPLE", false,
+                              colors.controlAccent,
+                              hovered(ctx, InteractiveType::mainSampleOpen), !ctx.state.armed);
     ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
     sms::ui::dpf::drawSymbolButton(
         ctx.canvas, uiLayout::modeToggle, "ARM", sms::ui::dpf::ControlSymbol::record,

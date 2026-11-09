@@ -148,10 +148,13 @@ void wideCanvasGeometry()
           "input and output faders are centered vertically at symmetric edges");
     check(layout::openEditor.x == layout::closeEditor.x &&
           layout::openEditor.y == layout::closeEditor.y &&
-          layout::openEditor.width == layout::closeEditor.width &&
           layout::openEditor.height == layout::closeEditor.height &&
-          layout::modeToggle.width == layout::openEditor.width,
-          "editor navigation shares exact geometry and ARM spans the control width");
+          layout::openMainSample.y == layout::closeEditor.y &&
+          layout::openMainSample.x > layout::openEditor.x + layout::openEditor.width &&
+          layout::openMainSample.x + layout::openMainSample.width ==
+              layout::closeEditor.x + layout::closeEditor.width &&
+          layout::modeToggle.width == layout::closeEditor.width,
+          "EDITOR and SAMPLE share the close-button row and ARM spans the control width");
 }
 
 void pluginIdentity()
@@ -658,7 +661,7 @@ void interactionTargets()
               interaction::interactiveTargetAt(center(layout::menuLinkOption(1, context.skinsAvailable)), context),
               interaction::InteractiveType::menuLink, 1),
           "open hamburger menu exposes both browser actions");
-    check(!interaction::interactiveTargetAt(center(layout::fixedLength), context).valid(),
+    check(!interaction::interactiveTargetAt(sms::ui::Point{layout::fixedLength.x + 6.0f, center(layout::fixedLength).y}, context).valid(),
           "open hamburger menu blocks underlying controls");
     context.menuOpen = false;
 
@@ -2811,10 +2814,59 @@ void mixerValueEntry()
           "cancellation resets numeric entry state");
 }
 
+void mainSampleTargetPrecedence()
+{
+    namespace layout = midichopper::ui::layout;
+    namespace interaction = midichopper::ui;
+    using interaction::InteractiveType;
+    using interaction::isTarget;
+    const std::array<midichopper::plugin::MainSampleSlice, 2> slices{{{1U, 0U, 400U}, {2U, 400U, 1000U}}};
+    interaction::InteractionContext context;
+    context.mainSampleMode = true;
+    context.mainSampleHasSource = true;
+    context.mainSampleSlices = slices;
+    context.mainSampleViewport = sms::ui::waveform::Viewport{1000U, 0U, 1000U};
+    const auto resolve = [&](const sms::ui::Point point) { return interaction::interactiveTargetAt(point, context); };
+    check(isTarget(resolve(center(layout::mainSampleClose)), InteractiveType::mainSampleClose),
+          "Main Sample close target");
+    check(isTarget(resolve(center(layout::mainSampleLoad)), InteractiveType::mainSampleLoad) &&
+          isTarget(resolve(center(layout::mainSampleClear)), InteractiveType::mainSampleClear),
+          "Main Sample load and clear targets");
+    check(isTarget(resolve(center(layout::mainSampleOverview)), InteractiveType::mainSampleOverview),
+          "Main Sample overview target");
+    context.mainSampleHasSource = false;
+    check(!isTarget(resolve(center(layout::mainSampleClear)), InteractiveType::mainSampleClear),
+          "Clear needs a source");
+    context.mainSampleHasSource = true;
+    check(!isTarget(resolve(center(layout::openMainSample)), InteractiveType::mainSampleOpen),
+          "main-view controls are hidden behind Main Sample");
+    context.mainSampleConfirm = true;
+    check(!isTarget(resolve(center(layout::mainSampleClose)), InteractiveType::mainSampleClose) &&
+          isTarget(resolve(center(layout::mainSampleConfirm)), InteractiveType::mainSampleConfirm, 0) &&
+          isTarget(resolve(center(layout::mainSampleCancel)), InteractiveType::mainSampleConfirm, 1),
+          "the CONFIRM modal captures every other target");
+    context.mainSampleConfirm = false;
+    context.editorMode = true;
+    check(!isTarget(resolve(center(layout::mainSampleLoad)), InteractiveType::mainSampleLoad),
+          "the Sample Editor takes precedence over Main Sample");
+    context.editorMode = false;
+    context.mainSampleMode = false;
+    check(isTarget(resolve(center(layout::openMainSample)), InteractiveType::mainSampleOpen),
+          "SAMPLE opens from the main view");
+    context.armed = true;
+    check(!isTarget(resolve(center(layout::openMainSample)), InteractiveType::mainSampleOpen),
+          "SAMPLE is disabled while armed");
+    context.armed = false;
+    context.menuOpen = true;
+    check(isTarget(resolve(center(layout::mainSampleMenuButton(context.skinsAvailable))),
+                   InteractiveType::menuMainSample), "menu offers Main Sample");
+}
+
 } // namespace
 
 int main()
 {
+    mainSampleTargetPrecedence();
     logoGlow();
     padLayouts();
     wideCanvasGeometry();

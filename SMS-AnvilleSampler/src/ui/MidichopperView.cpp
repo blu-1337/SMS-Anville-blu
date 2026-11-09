@@ -34,6 +34,8 @@ void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state)
         drawCutEditorView(ctx);
     else if (ctx.state.editorMode)
         drawSampleEditorView(ctx);
+    else if (ctx.state.mainSampleMode && ctx.state.mainSample != nullptr)
+        drawMainSampleView(ctx);
     else
         drawMainView(ctx);
     drawMainFooter(ctx);

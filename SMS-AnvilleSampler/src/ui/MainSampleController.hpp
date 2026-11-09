@@ -73,6 +73,10 @@ public:
     [[nodiscard]] std::uint32_t selectionStart() const noexcept { return fSelectionStart; }
     [[nodiscard]] std::uint32_t selectionEnd() const noexcept { return fSelectionEnd; }
 
+    // Slice chosen by the last marker press (0 = none); Delete removes it.
+    void selectSlice(std::uint16_t sliceId) noexcept { fSelectedSlice = sliceId; }
+    [[nodiscard]] std::uint16_t selectedSlice() const noexcept { return fSelectedSlice; }
+
     // Marker drags: boundary of one slice; a shared boundary moves both slices.
     bool beginMarkerDrag(std::uint16_t sliceId, bool endEdge) noexcept;
     void dragTo(std::uint32_t frame) noexcept;
@@ -132,6 +136,7 @@ private:
     float fPreviewPosition = 0.0f;
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;
+    std::uint16_t fSelectedSlice = 0U;
     std::optional<Drag> fDrag;
     std::optional<PendingAssign> fConfirm;
     std::optional<PendingAssign> fLastAssign;

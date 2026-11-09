@@ -43,7 +43,7 @@ inline constexpr sms::ui::Rect sidePanel{974.0f, 96.0f, 266.0f, 596.0f};
 inline constexpr sms::ui::Rect menuButton{1208.0f, 25.0f, 32.0f, 32.0f};
 enum class MenuSubmenu { none, padLayout, bankMode, skin };
 
-inline constexpr sms::ui::Rect menuPanel{1048.0f, 68.0f, 192.0f, 262.0f};
+inline constexpr sms::ui::Rect menuPanel{1048.0f, 68.0f, 192.0f, 298.0f};
 inline constexpr sms::ui::Rect layoutMenuButton{1060.0f, 80.0f, 168.0f, 28.0f};
 inline constexpr sms::ui::Rect bankModeMenuButton{1060.0f, 116.0f, 168.0f, 28.0f};
 inline constexpr sms::ui::Rect skinMenuButton{1060.0f, 152.0f, 168.0f, 28.0f};
@@ -51,6 +51,11 @@ inline constexpr sms::ui::Rect skinMenuButton{1060.0f, 152.0f, 168.0f, 28.0f};
 [[nodiscard]] constexpr sms::ui::Rect resetMenuButton(const bool hasSkins) noexcept
 {
     return {1060.0f, hasSkins ? 188.0f : 152.0f, 168.0f, 28.0f};
+}
+
+[[nodiscard]] constexpr sms::ui::Rect mainSampleMenuButton(const bool hasSkins) noexcept
+{
+    return {1060.0f, hasSkins ? 224.0f : 188.0f, 168.0f, 28.0f};
 }
 
 [[nodiscard]] constexpr sms::ui::Rect menuPanelBounds(const bool hasSkins) noexcept
@@ -111,7 +116,8 @@ inline constexpr sms::ui::Rect editorPadBounds{994.0f, 204.0f, 222.0f, 406.0f};
 inline constexpr sms::ui::Rect editorPlayStop{994.0f, 628.0f, 106.0f, 34.0f};
 inline constexpr sms::ui::Rect playOnSelect{1106.0f, 628.0f, 110.0f, 34.0f};
 inline constexpr sms::ui::Rect closeEditor{994.0f, 112.0f, 222.0f, 32.0f};
-inline constexpr sms::ui::Rect openEditor = closeEditor;
+inline constexpr sms::ui::Rect openEditor{994.0f, 112.0f, 106.0f, 32.0f};
+inline constexpr sms::ui::Rect openMainSample{1110.0f, 112.0f, 106.0f, 32.0f};
 inline constexpr sms::ui::Rect chopWaveform{74.0f, 170.0f, 862.0f, 228.0f};
 inline constexpr sms::ui::Rect chopZoom{46.0f, 170.0f, 16.0f, 228.0f};
 inline constexpr sms::ui::Rect chopScroll{74.0f, 412.0f, 862.0f, 12.0f};
@@ -169,7 +175,7 @@ inline constexpr sms::ui::Rect clearAction{1146.0f, 610.0f, 70.0f, 34.0f};
 [[nodiscard]] constexpr sms::ui::Rect menuLinkOption(
     const int index, const bool hasSkins = true) noexcept
 {
-    return {1060.0f, (hasSkins ? 256.0f : 220.0f) +
+    return {1060.0f, (hasSkins ? 292.0f : 256.0f) +
             static_cast<float>(index) * 34.0f, 168.0f, 27.0f};
 }
 
@@ -247,6 +253,9 @@ inline constexpr sms::ui::Rect mainSampleInfo{994.0f, 392.0f, 222.0f, 60.0f};
 inline constexpr sms::ui::Rect mainSampleLoad{994.0f, 462.0f, 104.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleClear{1112.0f, 462.0f, 104.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleStatus{994.0f, 506.0f, 222.0f, 40.0f};
+inline constexpr sms::ui::Rect mainSampleModal{300.0f, 270.0f, 380.0f, 150.0f};
+inline constexpr sms::ui::Rect mainSampleConfirm{330.0f, 366.0f, 150.0f, 34.0f};
+inline constexpr sms::ui::Rect mainSampleCancel{500.0f, 366.0f, 150.0f, 34.0f};
 inline constexpr std::array<sms::ui::Rect, 8> mainSampleRects{
     mainSampleWaveform, mainSampleOverview, mainSamplePads, mainSampleClose,
     mainSampleInfo, mainSampleLoad, mainSampleClear, mainSampleStatus};

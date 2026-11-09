@@ -56,6 +56,11 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.editorMode = s.editorMode;
     context.chopEditorMode = chop.active();
     context.chopSplitMode = chop.split();
+    context.mainSampleMode = s.mainSampleMode;
+    context.mainSampleHasSource = fSession.mainSample().hasSource();
+    context.mainSampleConfirm = fSession.mainSample().confirmPending();
+    context.mainSampleSlices = fSession.mainSample().displaySlices();
+    context.mainSampleViewport = fSession.mainSample().viewport();
     context.menuOpen = fMenu.open();
     context.resetEnabled = fSession.resetEnabled();
     context.skinsAvailable = menu.skinsSelectable;
@@ -130,7 +135,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             fMixer.openMenu(clicked, position);
             return true;
         }
-        if (s.armed || chop.active()) return false;
+        if (s.armed || chop.active() || (s.mainSampleMode && !s.editorMode)) return false;
         const auto grid = fSession.padLayout().grid(s.editorMode
             ? uiLayout::editorPadBounds : uiLayout::mainPadBounds, s.editorMode ? 6.0f : 10.0f);
         const int localPad = fSession.localPadFromVisualIndex(grid.hit(position));
@@ -244,6 +249,40 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             return false;
         }
 
+        if (s.mainSampleMode) {
+            auto& main = fSession.mainSample();
+            if (isTarget(clicked, InteractiveType::mainSampleConfirm)) {
+                main.confirmAssign(clicked.index == 0);
+                fHost.repaintSamplerInput();
+                return true;
+            }
+            if (main.confirmPending()) return true;
+            if (isTarget(clicked, InteractiveType::mainSampleClose)) { fSession.closeMainSample(); return true; }
+            if (isTarget(clicked, InteractiveType::mainSampleLoad)) { fSession.browseMainSample(); return true; }
+            if (isTarget(clicked, InteractiveType::mainSampleClear)) { main.clear(); return true; }
+            if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }
+            if (isTarget(clicked, InteractiveType::mainSamplePad)) return pressMainSamplePad(clicked.index);
+            if (isTarget(clicked, InteractiveType::mainSampleOverview)) {
+                fMainSampleDrag = MainSampleDrag::overview;
+                updateMainSampleDrag(position);
+                return true;
+            }
+            if (isTarget(clicked, InteractiveType::mainSampleMarker)) {
+                const auto& slices = main.displaySlices();
+                const auto index = static_cast<std::size_t>(clicked.index / 2);
+                if (index >= slices.size()) return false;
+                main.selectSlice(slices[index].id);
+                if (main.beginMarkerDrag(slices[index].id, (clicked.index & 1) != 0))
+                    fMainSampleDrag = MainSampleDrag::marker;
+                fHost.repaintSamplerInput();
+                return true;
+            }
+            if (isTarget(clicked, InteractiveType::mainSampleWaveform))
+                return beginMainSampleWaveform(position);
+            return false;
+        }
+
+        if (isTarget(clicked, InteractiveType::mainSampleOpen)) { fSession.openMainSample(); return true; }
         if (isTarget(clicked, InteractiveType::playStop)) {
             fPlayButtonPressCaptured = true;
             fSession.togglePlayStop();
@@ -319,6 +358,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return true;
     }
     if (fViewportDrag >= 0) { fViewportDrag = -1; return true; }
+    if (fMainSampleDrag != MainSampleDrag::none) return endMainSampleDrag(position);
     if (fPlayButtonPressCaptured) { fPlayButtonPressCaptured = false; return true; }
     if (fMixer.releaseFader()) return true;
     if (s.editorMode && fDragTarget != EditTarget::none) {
@@ -350,6 +390,7 @@ bool SamplerInputController::motion(const sms::ui::Point position)
     auto& chop = fSession.chopEditor();
     if (fMixer.faderDragging()) return fMixer.motion(mixerContext(), position);
     if (fViewportDrag >= 0) { updateViewportDrag(position); return true; }
+    if (fMainSampleDrag != MainSampleDrag::none) { updateMainSampleDrag(position); return true; }
     if (chop.active() && chop.activeBoundary() >= 0) {
         chop.dragBoundary(position.x, uiLayout::chopWaveform.width, fSession.detail().viewport());
         return true;
@@ -394,6 +435,15 @@ bool SamplerInputController::scroll(const sms::ui::Point position, const float d
         return fMixer.wheel(mixerContext(), hovered, delta, adjustment);
     auto& chop = fSession.chopEditor();
     auto& detail = fSession.detail();
+    if (s.mainSampleMode && !s.editorMode && !chop.active() && (control || shift) &&
+        fSession.mainSample().hasSource() && !fSession.mainSample().confirmPending() &&
+        (uiLayout::mainSampleWaveform.contains(position) || uiLayout::mainSampleOverview.contains(position))) {
+        auto& main = fSession.mainSample();
+        const bool changed = control ? main.zoom(delta, position.x, uiLayout::mainSampleWaveform, Clock::now())
+            : main.pan(delta, Clock::now());
+        if (changed) fHost.repaintSamplerInput();
+        return true;
+    }
     const auto bounds = chop.active() ? uiLayout::chopWaveform : uiLayout::editorWaveform;
     if ((s.editorMode || (chop.active() && chop.ready() && !chop.applying())) &&
         bounds.contains(position) && detail.viewport().total != 0U && (control || shift)) {
@@ -457,7 +507,9 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
             fSession.padActions().menuOpen() || fMixer.menu().active() ||
             fSession.chopEditor().active() || fSession.padActions().dialogPending();
         const auto action = fSpaceKey.update(press, blocked, fSession.state().armed);
-        if (action == SpaceAction::playStop) fSession.togglePlayStop();
+        const auto& s = fSession.state();
+        if (action == SpaceAction::playStop && s.mainSampleMode && !s.editorMode) toggleMainSamplePreview();
+        else if (action == SpaceAction::playStop) fSession.togglePlayStop();
         else if (action == SpaceAction::chop) fSession.captureSpace();
         return true;
     }
@@ -466,6 +518,14 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
         : key == InputKey::backspace ? MixerEntryKey::backspace
         : key == InputKey::deleteText ? MixerEntryKey::deleteText : MixerEntryKey::other;
     if (fMixer.keyboard(mixerContext(), entryKey, press, backward)) return true;
+    const auto& state = fSession.state();
+    const bool mainSampleTop = state.mainSampleMode && !state.editorMode && !fSession.chopEditor().active();
+    if (mainSampleTop && press && key == InputKey::deleteText && !fSession.mainSample().confirmPending() &&
+        fSession.mainSample().deleteSlice(fSession.mainSample().selectedSlice())) {
+        fSession.mainSample().selectSlice(0U);
+        fHost.repaintSamplerInput();
+        return true;
+    }
     if (!press || key != InputKey::escape) return false;
     if (fSession.padActions().menuOpen()) {
         fSession.padActions().closeMenu();
@@ -475,6 +535,12 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
     if (fMenu.escape()) return true;
     auto& chop = fSession.chopEditor();
     if (chop.active() && !chop.applying()) { chop.exit(); return true; }
+    if (mainSampleTop) {
+        if (fSession.mainSample().confirmPending()) fSession.mainSample().confirmAssign(false);
+        else fSession.closeMainSample();
+        fHost.repaintSamplerInput();
+        return true;
+    }
     return false;
 }
 
@@ -487,6 +553,10 @@ void SamplerInputController::focus(const bool focused)
 {
     if (focused) return;
     fMixer.cancelScope(MixerCancelScope::focus);
+    if (fMainSampleDrag != MainSampleDrag::none) {
+        fSession.mainSample().cancelDrag();
+        fMainSampleDrag = MainSampleDrag::none;
+    }
     fSpaceKey.reset();
     fHost.ignoreSamplerKeyRepeat(false);
 }
@@ -520,6 +590,101 @@ void SamplerInputController::invalidate(const UiInteractionInvalidation reason)
         break;
     case UiInteractionInvalidation::padActionHover: clearHover(); break;
     }
+}
+
+bool SamplerInputController::pressMainSamplePad(const int localPad)
+{
+    auto& main = fSession.mainSample();
+    const int pad = fSession.globalPad(localPad);
+    if (main.hasSelection()) {
+        main.assignSelection(static_cast<std::uint32_t>(pad));
+        main.clearSelection();
+        fHost.repaintSamplerInput();
+        return true;
+    }
+    const auto now = Clock::now();
+    const auto& padState = fSession.state().padState;
+    const bool occupied = padState[static_cast<std::size_t>(localPad)] != '0' &&
+                          padState[static_cast<std::size_t>(localPad)] != '.';
+    if (occupied && fMainSamplePad == pad && now - fMainSamplePadTime < std::chrono::milliseconds(500)) {
+        fMainSamplePad = -1;
+        fSession.releasePlaybackPad();
+        fSession.openSampleEditor(pad);
+        return true;
+    }
+    fMainSamplePad = pad;
+    fMainSamplePadTime = now;
+    fSession.pressPlaybackPad(localPad);
+    fHost.repaintSamplerInput();
+    return true;
+}
+
+void SamplerInputController::toggleMainSamplePreview()
+{
+    auto& main = fSession.mainSample();
+    if (main.previewPosition() > 0.0f) main.stopPreview();
+    else if (main.hasSelection()) main.preview(main.selectionStart(), main.selectionEnd(), false);
+    else if (main.hasSource()) main.preview(0U, main.status().frames, false);
+}
+
+bool SamplerInputController::beginMainSampleWaveform(const sms::ui::Point position)
+{
+    auto& main = fSession.mainSample();
+    main.beginSelection(static_cast<std::uint32_t>(
+        main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform)));
+    fMainSampleOriginX = position.x;
+    fMainSampleMoved = false;
+    fMainSampleDrag = MainSampleDrag::selecting;
+    fHost.repaintSamplerInput();
+    return true;
+}
+
+void SamplerInputController::updateMainSampleDrag(const sms::ui::Point position)
+{
+    auto& main = fSession.mainSample();
+    const auto frame = static_cast<std::uint32_t>(
+        main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform));
+    if (fMainSampleDrag == MainSampleDrag::marker) main.dragTo(frame);
+    else if (fMainSampleDrag == MainSampleDrag::selecting) {
+        if (!fMainSampleMoved && std::abs(position.x - fMainSampleOriginX) < 3.0f) return;
+        fMainSampleMoved = true;
+        main.extendSelection(frame);
+    } else if (fMainSampleDrag == MainSampleDrag::overview) {
+        const auto& viewport = main.viewport();
+        const auto length = viewport.end - viewport.start;
+        if (viewport.total <= length) return;
+        const auto& track = uiLayout::mainSampleOverview;
+        const double center = std::clamp(static_cast<double>((position.x - track.x) / track.width), 0.0, 1.0) *
+            static_cast<double>(viewport.total);
+        main.setScrollPosition(static_cast<float>(std::clamp(
+            (center - static_cast<double>(length) * 0.5) / static_cast<double>(viewport.total - length),
+            0.0, 1.0)), Clock::now());
+    }
+    fHost.repaintSamplerInput();
+}
+
+bool SamplerInputController::endMainSampleDrag(const sms::ui::Point position)
+{
+    auto& main = fSession.mainSample();
+    const auto drag = fMainSampleDrag;
+    fMainSampleDrag = MainSampleDrag::none;
+    if (drag == MainSampleDrag::marker) main.endDrag();
+    else if (drag == MainSampleDrag::selecting) {
+        const auto frame = static_cast<std::uint32_t>(
+            main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform));
+        if (!fMainSampleMoved) {
+            main.clearSelection();
+            main.previewFrom(frame);
+        } else if (main.hasSelection()) {
+            const auto dropped = targetAt(position);
+            if (isTarget(dropped, InteractiveType::mainSamplePad)) {
+                main.assignSelection(static_cast<std::uint32_t>(fSession.globalPad(dropped.index)));
+                main.clearSelection();
+            }
+        }
+    }
+    fHost.repaintSamplerInput();
+    return true;
 }
 
 bool SamplerInputController::beginViewportDrag(const sms::ui::InteractiveTarget clicked,

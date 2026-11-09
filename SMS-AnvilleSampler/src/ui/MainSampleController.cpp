@@ -115,6 +115,7 @@ void MainSampleController::sourceChanged()
     fDrag.reset();
     fConfirm.reset();
     fLastAssign.reset();
+    fSelectedSlice = 0U;
     clearSelection();
     fViewport.reset(fStatus.frames);
     fOverview = {};

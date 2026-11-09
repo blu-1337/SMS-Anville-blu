@@ -46,6 +46,14 @@ bool ApplicationMenuController::press(const ApplicationMenuContext& context,
     }
 
     fResetArmed = false;
+    if (isTarget(clicked, InteractiveType::menuMainSample)) {
+        fOpen = false;
+        fSubmenu = layout::MenuSubmenu::none;
+        fHost.clearHover();
+        fHost.openMainSample();
+        fHost.repaintApplicationMenu();
+        return true;
+    }
     if (isTarget(clicked, InteractiveType::menuPadLayouts) ||
         isTarget(clicked, InteractiveType::menuBankModes)) {
         fSubmenu = isTarget(clicked, InteractiveType::menuPadLayouts)
@@ -125,6 +133,7 @@ void ApplicationMenuController::hover(const ApplicationMenuContext& context,
     else if (isTarget(hovered, InteractiveType::menuSkins))
         submenu = layout::MenuSubmenu::skin;
     else if (isTarget(hovered, InteractiveType::menuLink) ||
+             isTarget(hovered, InteractiveType::menuMainSample) ||
              isTarget(hovered, InteractiveType::menuReset))
         submenu = layout::MenuSubmenu::none;
     if (submenu == fSubmenu)

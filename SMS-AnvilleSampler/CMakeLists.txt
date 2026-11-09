@@ -167,6 +167,7 @@ set(ANVILLESAMPLER_UI_SOURCES
   src/ui/MainViewRenderer.cpp
   src/ui/SampleEditorRenderer.cpp
   src/ui/CutEditorRenderer.cpp
+  src/ui/MainSampleRenderer.cpp
   src/ui/MenuRenderer.cpp
   src/ui/ProductControlsRenderer.cpp
   "${ANVILLESAMPLER_ARTWORK_DIR}/anvillesampler_artwork.cpp"

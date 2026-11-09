@@ -1,5 +1,6 @@
 #include "SamplerInputController.hpp"
 #include "EditorSnapshotProtocol.hpp"
+#include "StateKeys.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -56,6 +57,7 @@ struct Fixture final : SamplerUiHost, MixerInteractionHost, ApplicationMenuHost,
     void repaintApplicationMenu() override {}
     void clearHover() noexcept override { input.clearHover(); }
     bool openLink(const char*) override { return true; }
+    void openMainSample() override { session.openMainSample(); }
     void focusSamplerInput() override {}
     void ignoreSamplerKeyRepeat(bool ignore) override { ignoringRepeat = ignore; }
     void editSamplerParameter(std::uint32_t p, bool begin) override { gestures.emplace_back(p, begin); }
@@ -172,10 +174,128 @@ void editorWheelAndPointerRoutes()
 }
 } // namespace
 
+std::vector<MainSampleRequest> mainSampleRequests(const Fixture& f)
+{
+    std::vector<MainSampleRequest> result;
+    for (const auto& [key, value] : f.states) {
+        MainSampleRequest request;
+        if (key == kMainSampleRequestKey && decodeMainSampleRequest(value, request))
+            result.push_back(request);
+    }
+    return result;
+}
+
+std::size_t mainSampleVerbs(const Fixture& f, const MainSampleVerb verb)
+{
+    const auto requests = mainSampleRequests(f);
+    return static_cast<std::size_t>(std::count_if(requests.begin(), requests.end(),
+        [&](const MainSampleRequest& request) { return request.verb == verb; }));
+}
+
+void mainSampleViewRoutes()
+{
+    Fixture f;
+    f.session.acceptState("pad_mask", "1111111111111111");
+    check(!f.session.state().mainSampleMode, "the main view is the default");
+    check(isTarget(f.input.targetAt(center(layout::openMainSample)),
+                                InteractiveType::mainSampleOpen), "SAMPLE button is a target");
+    f.click(center(layout::openMainSample));
+    check(f.session.state().mainSampleMode, "SAMPLE opens the Main Sample view");
+    check(mainSampleVerbs(f, MainSampleVerb::query) >= 1U, "opening queries the session");
+
+    MainSampleStatus status;
+    status.sequence = f.session.mainSample().lastSentSequence();
+    status.state = MainSampleState::ready;
+    status.sourceId = 0xABCU;
+    status.frames = 1000U;
+    status.sampleRate = 48000U;
+    status.slices = {{1U, 0U, 400U}, {2U, 400U, 1000U}};
+    status.text = "loop.wav";
+    f.session.acceptState(kMainSampleStatusKey, encodeMainSampleStatus(status).c_str());
+    check(f.session.mainSample().hasSource(), "status mirrors the source");
+
+    const auto waveformPoint = sms::ui::Point{700.0f, 260.0f};
+    check(isTarget(f.input.targetAt(waveformPoint), InteractiveType::mainSampleWaveform),
+          "empty waveform is a target");
+    check(isTarget(f.input.targetAt(center(layout::mainSampleOverview)),
+                                InteractiveType::mainSampleOverview), "overview is a target");
+    check(isTarget(f.input.targetAt(center(layout::mainSampleLoad)),
+                                InteractiveType::mainSampleLoad), "Load is a target");
+    const sms::ui::Point shared{layout::mainSampleWaveform.x + layout::mainSampleWaveform.width * 0.4f, 260.0f};
+    const auto marker = f.input.targetAt(shared);
+    check(isTarget(marker, InteractiveType::mainSampleMarker, 2),
+          "a shared boundary is one marker, the later slice's start edge");
+
+    // A click on empty waveform previews from there to the end of its slice.
+    f.click(waveformPoint);
+    check(std::any_of(f.states.begin(), f.states.end(),
+          [](const auto& state) { return state.first == kMainPreviewRequestKey; }),
+          "clicking empty waveform previews");
+
+    // One marker drag sends exactly one S, on mouse-up.
+    const auto edits = mainSampleVerbs(f, MainSampleVerb::edit);
+    check(f.input.mouse(shared, InputButton::left, true), "marker press handled");
+    for (float dx = 4.0f; dx <= 60.0f; dx += 4.0f)
+        f.input.motion({shared.x + dx, shared.y});
+    check(mainSampleVerbs(f, MainSampleVerb::edit) == edits, "no S while dragging");
+    f.input.mouse({shared.x + 60.0f, shared.y}, InputButton::left, false);
+    check(mainSampleVerbs(f, MainSampleVerb::edit) == edits + 1U, "one S per drag");
+    check(f.session.mainSample().selectedSlice() == 2U, "the dragged marker selects its slice");
+
+    // Delete removes the selected slice (the controller's mirror still has slice 2).
+    check(f.input.keyboard(InputKey::deleteText, true), "Delete handled");
+    check(mainSampleVerbs(f, MainSampleVerb::remove) == 1U, "Delete sends D");
+
+    // A drag on the waveform selects; releasing over a pad assigns it.
+    f.input.mouse({100.0f, 240.0f}, InputButton::left, true);
+    f.input.motion({200.0f, 240.0f});
+    f.input.motion({300.0f, 240.0f});
+    check(f.session.mainSample().hasSelection(), "dragging selects");
+    const auto pad = center(f.session.padLayout().grid(layout::mainSamplePads, 8.0f).cell(
+        f.session.padLayout().visualIndex(2)));
+    f.input.mouse(pad, InputButton::left, false);
+    check(mainSampleVerbs(f, MainSampleVerb::assign) == 1U && !f.session.mainSample().hasSelection(),
+          "releasing a selection over a pad assigns it");
+
+    // Space toggles the source preview instead of the pad play/stop.
+    f.states.clear();
+    f.input.keyboard(InputKey::space, true);
+    f.input.keyboard(InputKey::space, false);
+    check(!f.states.empty() && f.states.back().first == kMainPreviewRequestKey, "Space previews");
+
+    // Double-clicking a pad opens the Sample Editor on top; closing returns here.
+    f.click(pad);
+    f.click(pad);
+    check(f.session.state().editorMode && f.session.state().mainSampleMode,
+          "pad double-click opens the Sample Editor above the Main Sample");
+    check(isTarget(f.input.targetAt(center(layout::mainSampleClose)),
+                                InteractiveType::closeEditor), "editor precedes the Main Sample");
+    f.session.closeSampleEditor();
+    check(isTarget(f.input.targetAt(center(layout::mainSampleClose)),
+                                InteractiveType::mainSampleClose), "closing the editor returns");
+
+    check(f.input.keyboard(InputKey::escape, true) && !f.session.state().mainSampleMode,
+          "Escape leaves the Main Sample view");
+    check(!isTarget(f.input.targetAt(waveformPoint), InteractiveType::mainSampleWaveform),
+          "main view targets return");
+}
+
+void applicationMenuOpensMainSample()
+{
+    Fixture f;
+    f.click(center(layout::menuButton));
+    check(isTarget(f.input.targetAt(center(layout::mainSampleMenuButton(true))),
+                                InteractiveType::menuMainSample), "menu offers Main Sample");
+    f.click(center(layout::mainSampleMenuButton(true)));
+    check(f.session.state().mainSampleMode && !f.menu.open(), "menu item opens the view and closes the menu");
+}
+
 int main()
 {
     padOwnershipAndSpace();
     overlaysAndFaderCapture();
     editorWheelAndPointerRoutes();
+    mainSampleViewRoutes();
+    applicationMenuOpensMainSample();
     std::cout << "UI input routing tests passed\n";
 }

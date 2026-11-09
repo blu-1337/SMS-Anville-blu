@@ -11,6 +11,7 @@ void drawMainFooter(const ViewRenderContext& ctx);
 void drawMainView(const ViewRenderContext& ctx);
 void drawSampleEditorView(const ViewRenderContext& ctx);
 void drawCutEditorView(const ViewRenderContext& ctx);
+void drawMainSampleView(const ViewRenderContext& ctx);
 void drawMenus(const ViewRenderContext& ctx);
 
 } // namespace midichopper::ui::rendering

@@ -73,6 +73,17 @@ private:
     int fViewportDrag = -1;
     float fViewportScrollGrabX = 0.0f;
     int fMainSliderDrag = -1;
+    enum class MainSampleDrag { none, selecting, marker, overview };
+    bool beginMainSampleWaveform(sms::ui::Point position);
+    void updateMainSampleDrag(sms::ui::Point position);
+    bool endMainSampleDrag(sms::ui::Point position);
+    bool pressMainSamplePad(int localPad);
+    void toggleMainSamplePreview();
+    MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
+    float fMainSampleOriginX = 0.0f;
+    bool fMainSampleMoved = false;
+    int fMainSamplePad = -1;
+    Clock::time_point fMainSamplePadTime{};
 };
 
 } // namespace midichopper::ui

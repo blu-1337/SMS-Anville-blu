@@ -10,6 +10,7 @@
 #include "MidichopperLayout.hpp"
 #include "EditorAuditionMode.hpp"
 #include "GlobalControlMenu.hpp"
+#include "MainSampleController.hpp"
 #include "WaveformViewport.hpp"
 
 #include <array>
@@ -100,6 +101,8 @@ struct ViewState {
     std::array<plugin::GlobalValueSettings, 5> globalValueSettings =
         plugin::defaultGlobalValueSettings();
     int dropHoverPad = -1; // Global pad a file drag would load, or -1.
+    bool mainSampleMode = false;
+    const MainSampleController* mainSample = nullptr;
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

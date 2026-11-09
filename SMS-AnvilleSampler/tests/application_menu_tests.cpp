@@ -41,6 +41,8 @@ struct Host final : ApplicationMenuHost {
     void setStatus(const char* const message) override { status = message; }
     void repaintApplicationMenu() override { ++repaints; }
     void clearHover() noexcept override { ++hoverClears; }
+    int mainSampleOpened = 0;
+    void openMainSample() override { ++mainSampleOpened; }
     bool openLink(const char* const url) override
     { links.emplace_back(url); return browserAvailable; }
 };

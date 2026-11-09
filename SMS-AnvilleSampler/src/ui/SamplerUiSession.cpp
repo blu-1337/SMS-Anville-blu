@@ -1245,6 +1245,30 @@ void SamplerUiSession::closeMainSample()
     fMainSample.close();
 }
 
+bool SamplerUiSession::browseMainSample()
+{
+    if (!fState.mainSampleMode || fMainSampleBrowsing || fPadActions.dialogPending())
+        return false;
+    fMainSampleBrowsing = true;
+    if (!showPadFileBrowser(false, nullptr)) {
+        fMainSampleBrowsing = false;
+        setLocalStatus("File browser unavailable");
+        return false;
+    }
+    return true;
+}
+
+void SamplerUiSession::fileBrowserSelected(const char *filename)
+{
+    if (!fMainSampleBrowsing) {
+        fPadActions.fileSelected(filename);
+        return;
+    }
+    fMainSampleBrowsing = false;
+    if (filename != nullptr && filename[0] != '\0' && fState.mainSampleMode)
+        fMainSample.load(filename);
+}
+
 void SamplerUiSession::sendPadActionState(const char *key, const std::string &value)
 {
     sendChopState(key, value);

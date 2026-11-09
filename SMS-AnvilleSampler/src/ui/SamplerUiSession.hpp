@@ -110,6 +110,10 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     // The Sample Editor and Cut Point Editor draw above it, so closing them returns here.
     void openMainSample();
     void closeMainSample();
+    /** Opens the file browser for Load; the pick goes to the Main Sample, not a pad. */
+    bool browseMainSample();
+    [[nodiscard]] bool mainSampleBrowsing() const noexcept { return fMainSampleBrowsing; }
+    void fileBrowserSelected(const char *filename);
     void pressPlaybackPad(int localPad);
     void releasePlaybackPad();
     void captureSpace();
@@ -179,6 +183,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     ChopEditorController fChopEditor;
     PadActionController fPadActions;
     MainSampleController fMainSample{*this};
+    bool fMainSampleBrowsing = false;
     bool fMeterRepaintPending = false;
     bool fCaptureStorageExhausted = false;
     Time fNextMeterRepaint{};

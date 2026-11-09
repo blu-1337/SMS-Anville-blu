@@ -19,30 +19,36 @@ implements `MainSampleHost` (send state, repaint). Requests are MS1 on
 - A new source id or frame count resets the viewport, waveforms, drag,
   selection and pending confirm.
 - `pad_mask` from the plug-in calls `padsChanged`: one `Q` 250 ms later.
-- Without state transport the session never opens the view or sends.
 
 ## Waveforms
 
 The overview is one `W` over the whole source (4 tiles) per source id. The
 detail is a `W` for the zoomed viewport, debounced 50 ms. Both retry every
-250 ms until a reply with the same sequence and range arrives.
+250 ms until a matching reply arrives.
 
 ## Editing
 
 - Marker drags are local (`displaySlices()`). `endDrag()` sends exactly one
   `S`: the dragged slice, plus the neighbour when they share the boundary.
-  Every slice keeps at least one frame.
-- `assignSelection(pad)` sends `A`. A CONFIRM whose mask is that pad sets
+  - `assignSelection(pad)` sends `A`. A CONFIRM whose mask is that pad sets
   `confirmPending()`; `confirmAssign(true)` resends with confirm.
 - `deleteSlice(id)` sends `D` for a known slice.
 - `previewFrom(frame)` previews to the end of the containing slice, or of
   the source. The playhead is `kParameterMainSamplePreviewPosition`.
 
-## View state
+## View, input
 
-`SamplerUiState::mainSampleMode` sits below the Cut Point Editor and Sample
-Editor, so closing either returns to it. Rects are in `MidichopperLayout.hpp`
-(`mainSampleRects`). The side panel keeps y 154-380 free for auto-chop.
-Drawing, input and the entry button come with the renderer.
+`mainSampleMode` sits below the Cut Point and Sample Editors, so closing
+either returns here. The SAMPLE button or menu item opens it; Escape or
+Close leaves it. 
 
-Tests: `tests/main_sample_ui_tests.cpp` (CTest `main-sample-ui`).
+`MainSampleRenderer.cpp` draws (at most 512 columns, 64 markers). Targets
+(`mainSample*`) resolve in `interactiveTargetAt`, precedence chop, editor,
+Main Sample, main; CONFIRM captures all.
+
+Gestures: empty waveform previews, Space toggles, drag selects, a pad click
+assigns or auditions, a pad double-click opens the Sample Editor, marker
+drag edits, Delete removes, Ctrl+wheel zooms, Shift+wheel pans. Load uses
+the pad file browser.
+
+Tests: `main-sample-ui`, `ui-input-routing`.

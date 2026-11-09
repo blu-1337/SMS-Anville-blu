@@ -170,7 +170,8 @@ while the plugin shows the interpreted values.
 
 ### Sample Editor view
 
-**SAMPLE EDITOR** opens waveform, ADSR, and pad mixing; **MAIN VIEW** returns.
+**EDITOR** opens waveform, ADSR, and pad mixing; **MAIN VIEW** returns.
+**SAMPLE**: [Main Sample](Docs/MAIN-SAMPLE.md).
 Selection cycles Play on Select (once), Loop on Select, Off. Loop repeats
 Start/End after release, restarting ADSR. Audition is independent of main playback. See the [mixing guide](Docs/MIXING.md) for controls.
 

@@ -113,5 +113,4 @@ Cancellation and failures do not mutate.
 
 ## Limitation
 
-Imported or fixed-capture pads can pass structural checks. A future source/session
-identifier could remove this ambiguity.
+Imported or fixed-capture pads can pass structural checks. [Main sample](MAIN-SAMPLE.md) provenance identifies sibling pads.

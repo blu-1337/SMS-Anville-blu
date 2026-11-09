@@ -92,7 +92,7 @@ and the durable MSS1 session and LK1 link codecs. Frames are `uint32`, like
 the engine. A path, name or message is the last field and may contain `;`.
 Names are cut to 128 bytes, and status text to 512, on UTF-8 boundaries. The
 worst-case status and four-tile waveform fit under 8191 bytes.
-[Main sample workflows](MAIN-SAMPLE-WORKFLOWS.md) covers the keys and requests.
+[Main sample workflows](MAIN-SAMPLE-WORKFLOWS.md) covers the keys and requests; [UI](MAIN-SAMPLE-UI.md) the view.
 
 ## Tests
 

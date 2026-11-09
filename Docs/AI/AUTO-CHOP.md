@@ -28,3 +28,7 @@ A cancelled analysis has `cancelled` set and must not be cached.
 - Random: seeded starts, optional snap within a quarter beat, bounded retries to avoid overlap.
 
 Beat-based modes return nothing when the BPM is 0.
+
+## Host tempo
+
+`DISTRHO_PLUGIN_WANT_TIMEPOS` makes `run()` store the host BPM (0 when the host gives none) in a lock-free `std::atomic<double> hostBpm_`. It adds no parameter or port: VST3 only gains process-context requirements, and LV2 already has the atom input. This is a separate commit; without it the Host button stays hidden.

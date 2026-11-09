@@ -518,6 +518,11 @@ protected:
              const MidiEvent* const midiEvents, const uint32_t midiEventCount) override
     {
         sampler_.setOffline(isOffline());
+        {
+            // Host tempo for auto-chop's Host button; 0 when the host gives none.
+            const auto& time = getTimePosition();
+            hostBpm_.store(time.bbt.valid ? time.bbt.beatsPerMinute : 0.0, std::memory_order_relaxed);
+        }
         const auto samplerAccess = samplerAccess_.audioAccess();
         if (samplerAccess.shouldYield()) {
             inputMeter_.process(inputs[0], inputs[1], frames, getSampleRate());
@@ -788,6 +793,9 @@ private:
     mutable sms::audio::RealtimeAccessGate samplerAccess_;
     std::uint64_t publishedPlaybackTriggerGeneration_ = 0;
     bool playbackPadEventAlternateHalf_ = false;
+    // Written by run(), read by control workers; see TIMEPOS note in Docs/AI/AUTO-CHOP.md.
+    std::atomic<double> hostBpm_{0.0};
+    static_assert(std::atomic<double>::is_always_lock_free, "host tempo must be lock-free");
     std::atomic<std::uint32_t> padFileResultSequence_{0};
     std::atomic<std::uint32_t> padClipboardResultSequence_{0};
     mutable sms::audio::RealtimeCommandDispatcher controlDispatcher_;

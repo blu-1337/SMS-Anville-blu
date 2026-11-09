@@ -514,6 +514,10 @@ if(BUILD_TESTING)
   target_link_libraries(anvillesampler_ui_geometry_tests PRIVATE sms_common_ui)
   add_test(NAME ui-geometry COMMAND anvillesampler_ui_geometry_tests)
 
+  add_executable(anvillesampler_file_drop_tests tests/file_drop_tests.cpp)
+  target_link_libraries(anvillesampler_file_drop_tests PRIVATE sms_common_ui)
+  add_test(NAME ui-file-drop COMMAND anvillesampler_file_drop_tests)
+
   add_executable(anvillesampler_pad_action_controller_tests
     tests/pad_action_controller_tests.cpp)
   target_link_libraries(anvillesampler_pad_action_controller_tests PRIVATE anvillesampler_ui_controllers)

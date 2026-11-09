@@ -8,7 +8,15 @@ compiled as part of each plug-in UI target so that the plug-in's DPF feature
 defines remain authoritative.
 
 Consumers link `sms_common_ui` to inherit shared include paths and the compiled
-`sms_file_io` platform library. Other shared UI components remain headers.
+`sms_file_io` and `sms_file_drop` platform libraries. Other shared UI components
+remain headers.
+
+- `FileDropTarget.hpp`: framework-neutral native file-drop registration for an
+  editor window; listener callbacks run on the UI thread with UTF-8 paths.
+  Unsupported platforms compile `FileDropTargetNull.cpp`, whose `attach` returns
+  null. See the [file-drop contract](../Docs/AI/FILE-DROP.md).
+- `FileDropEffect.hpp`: pure drop-effect choice from the source's allowed mask,
+  the MOVE-reported-as-NONE safety rule, and the `.wav`/`.wave` filter.
 
 - `DPF/NanoUI.hpp`: logical-canvas scaling and repaint lifecycle.
 - `BrowserLauncher.hpp`: UI-thread browser dispatch through Windows

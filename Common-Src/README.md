@@ -45,6 +45,8 @@ host, or a specific plug-in's state model.
   atomic replacement. Unknown valid keys survive updates. Compiled into
   `sms_file_io`; control-thread only. Plugin-specific schemas/validators belong
   in consumers; see Anville's [preference contract](../Docs/AI/LAYOUT-PREFERENCE.md).
+- `Analysis/`: static library `sms_analysis` (CMake in that folder): seeded
+  `SplitMix64`, `RealFft` and the auto-chop analysis. See [Auto-chop](../Docs/AI/AUTO-CHOP.md).
 - `UI/Geometry.hpp`: renderer-independent rectangles and reusable pad-grid
   layout/hit testing.
 

@@ -13,7 +13,7 @@ Read [AGENTS.md](../../AGENTS.md), then the relevant row.
 | Startup preferences | [Preferences](LAYOUT-PREFERENCE.md) | Host precedence |
 | Effects | [Mixing contract](MIXING.md) | [DSP](../../Common-Src/DSP/ColorEffects.hpp) |
 | Resampling | [Contract](RESAMPLING.md), [Benchmarks](../../SMS-AnvilleSampler/Docs/RESAMPLING-BENCHMARKS.md) | DSP |
-| Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md) | [Common-Src](../../Common-Src/) |
+| Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md), [Auto-chop](AUTO-CHOP.md) | [Common-Src](../../Common-Src/) |
 | Shared UI | [Common-UI map](../../Common-UI/README.md) | [Common-UI](../../Common-UI/) |
 | Product direction | [Vision](../../SMS-AnvilleSampler/Docs/VISION.md) | Intended scope |
 | Pad context menu and actions | [Context-menu design](PAD-CONTEXT-MENU.md) | Action contract |

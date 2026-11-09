@@ -80,6 +80,8 @@ add_subdirectory("${SMS_DPF_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/third_party/DPF"
   EXCLUDE_FROM_ALL)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../Common-UI"
   "${CMAKE_CURRENT_BINARY_DIR}/Common-UI" EXCLUDE_FROM_ALL)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../Common-Src/Analysis"
+  "${CMAKE_CURRENT_BINARY_DIR}/Common-Src/Analysis" EXCLUDE_FROM_ALL)
 
 add_library(anvillesampler_core STATIC
   src/core/PadClipboard.cpp
@@ -466,6 +468,10 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
   target_link_libraries(anvillesampler_pad_workflow_tests PRIVATE anvillesampler_core Threads::Threads)
   add_test(NAME pad-workflows COMMAND anvillesampler_pad_workflow_tests)
+
+  add_executable(anvillesampler_analysis_tests tests/analysis_tests.cpp)
+  target_link_libraries(anvillesampler_analysis_tests PRIVATE sms_analysis)
+  add_test(NAME analysis COMMAND anvillesampler_analysis_tests)
 
   add_executable(anvillesampler_core_tests tests/core_tests.cpp)
   target_link_libraries(anvillesampler_core_tests PRIVATE anvillesampler_core)

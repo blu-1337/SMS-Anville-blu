@@ -12,10 +12,13 @@ runs MS1 requests on the control thread and publishes the replies.
 | `main_preview_request` | DSP-only, transient | Registered; inert until the preview mailbox lands. |
 | `main_sample_status` | UI-only | One MS1 status per request; a load publishes LOADING first. |
 | `main_sample_waveform` | UI-only | The MW1 reply to `W`. |
+| `main_sample_audio` | Base64 blob, DSP-only, durable | SSP1 v2 float32 of the stored source. |
+| `main_sample_session` | DSP-only, durable | MSS1. |
+| `main_sample_links` | DSP-only, durable | LK1, built at save time. |
 
-The keys are appended after the five global keys (`kMainSampleStateOffset`),
-and `initPluginState` tests them before the global branch, so no earlier index
-moves. If the worker cannot run a request, `reportControlFailure` publishes
+The transient, then the durable keys follow the five global keys
+(`kMainSampleStateOffset`); `initPluginState` tests them before the global
+branch, so no earlier index moves. If the worker cannot run a request, `reportControlFailure` publishes
 ERROR "Main sample action failed; retry" without a session.
 
 ## Locking
@@ -58,9 +61,8 @@ being lost. One `importPads` commits every pad against the current layout. On
 failure (Arm, a stale generation, recording, capacity) the session is unchanged
 and the status is ERROR "Pads changed, try again".
 
-After a commit, each affected pad's editor key is published before the status
-(`A` adds the mixer key), as after a chop apply. Each slice feeds its own pad,
-so this stays far below the 64-message UI bus.
+After a commit, affected pads' editor keys (for `A` also mixer keys) are
+published before the status, as after a chop apply.
 
 ## Status semantics
 
@@ -71,11 +73,32 @@ match a new id. `affectedMask` names the pads re-cut, assigned or unlinked, or
 the pad a CONFIRM asks about. ERROR and CONFIRM never change the session, so
 the UI keeps its model and shows the text. READY carries the source name.
 
+## Durable state
+
+Without a source the durable keys save `""` (clear). Audio Base64 is cached
+per source id (seeded by a restore, dropped by `L`/`C`). LK1 lists pads whose
+newest tag names the current source and an existing slice, with frames and
+`padAudioFingerprint`.
+
+Restore takes the mutation mutex and accepts any key order: VST3 and CLAP send
+keys alphabetically (`main_*` first), LV2 in index order (pads first). Audio and
+session wait until both are present with matching frames and rate; then
+`restoreSource` queues the source (suspended callbacks never stall it) and the
+session is adopted with one sequence-0 status. A links value replaces the staged
+entries and tags pads whose audio already matches. Each `pad_NN` restore passes
+a matching entry's tag to `restorePad`; other links drop quietly. An empty audio
+or session value clears both; invalid values change nothing.
+
+Known limitation: an old preset loaded into a live instance never sends the
+missing `main_*` keys, so the previous main sample stays until **Clear**.
+
 ## Tests
 
 `pad-workflows` loads real WAV files and covers the empty query, malformed
 requests, unreadable files, LOADING then READY, waveform tiles and refusals,
-new ids on reload, clear, assign onto empty and foreign pads (CONFIRM, then
-confirmed), reassigning a linked pad, single and shared-boundary re-cuts that
+new ids on reload, clear, assign (empty, foreign with CONFIRM,
+linked), single and shared-boundary re-cuts that
 keep envelope and mixer, refusals while armed, delete, the slice cap, and one
 status per request. `global-value-mode-*` checks the key order and hints.
+`project-state-*` covers key orders, suspended callbacks, dropped links, clears,
+mismatches, the cache and old fixtures; `main-sample-core` covers `restoreSource`.

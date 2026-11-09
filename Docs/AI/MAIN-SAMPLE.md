@@ -53,7 +53,8 @@ that pad's voice; this is intended, not hidden.
 (`prepareImport`, capped at `kMaximumPadFrames`, rates above 96 kHz stored at
 96 kHz); `nullptr` clears it and audio needs a nonzero id. The engine holds one
 reference, and the pointer swap runs in a dispatch, so the old source is freed
-on the control thread. Source storage does not count against pad capacity
+on the control thread. `restoreSource` queues the same swap for durable state,
+like `restorePad`; readers see the queued source at once. Source storage does not count against pad capacity
 (`total_blocks_`); it survives collection and a bounded-pool rebuild.
 
 Readers pin the source under the control mutex (a reference plus a copy of its

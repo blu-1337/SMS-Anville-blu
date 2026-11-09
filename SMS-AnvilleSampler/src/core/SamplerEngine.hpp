@@ -223,8 +223,10 @@ public:
      * published snapshot, for a later expectedGeneration check. Control thread. */
     void padProvenance(std::span<std::uint64_t, kPadCount> provenance,
                        std::span<std::uint64_t> generations = {}) const;
-    /** fingerprint() of the newest pad audio (PadFingerprint.hpp). Control thread. */
-    [[nodiscard]] std::uint64_t padAudioFingerprint(std::uint32_t pad) const;
+    /** fingerprint() of the newest pad audio (PadFingerprint.hpp); frames
+     * (optional) receives its length, 0 when empty. Control thread. */
+    [[nodiscard]] std::uint64_t padAudioFingerprint(std::uint32_t pad,
+                                                    std::uint32_t* frames = nullptr) const;
     /** Tag the newest pad audio if its fingerprint matches; 0 unlinks. Control thread. */
     [[nodiscard]] bool setPadProvenance(std::uint32_t pad, std::uint64_t provenance,
                                         std::uint64_t expectedFingerprint);
@@ -272,6 +274,10 @@ public:
      * Audio needs a nonzero sourceId. Control thread only.
      */
     [[nodiscard]] bool setSource(const PadData* audio, std::uint64_t sourceId);
+    /** Durable-state variant of setSource: like restorePad it queues the swap
+     * for the next block (or dispatch), so a host may restore while callbacks
+     * are suspended. Control readers see the queued source at once. */
+    [[nodiscard]] bool restoreSource(const PadData* audio, std::uint64_t sourceId);
     [[nodiscard]] SourceInfo sourceInfo() const;
     /** Copy the whole source; sourceId (optional) receives its identifier. */
     [[nodiscard]] bool exportSource(PadData& destination, std::uint64_t* sourceId = nullptr) const;
@@ -538,10 +544,23 @@ private:
     void* controlContext_ = nullptr;
     void (*controlDispatch_)(void*, void (*)(void*) noexcept, void*) = nullptr;
     std::uint32_t used_blocks_ = 0; // active pad capacity; retained readers use reserve blocks
-    // Main Sample source: written only inside a dispatch issued under
-    // storageControlMutex_, so control readers holding the mutex see it stably.
-    Storage* source_ = nullptr; // holds one engine reference
-    std::uint64_t sourceId_ = 0U;
+    // Main Sample source: written by the audio owner (a dispatch issued under
+    // storageControlMutex_, or applyPendingState for a queued restoreSource).
+    // Control readers hold the mutex and prefer an uninstalled queued source.
+    std::atomic<Storage*> source_{nullptr}; // holds one engine reference
+    std::atomic<std::uint64_t> sourceId_{0U};
+    struct PendingSource {
+        std::atomic<bool> consumed{false};  // installed or superseded; owner may free it
+        std::atomic<bool> installed{false}; // source_ now holds it (set after the stores)
+        Storage* storage = nullptr;         // holds one reference until installed or superseded
+        std::uint64_t id = 0U;
+    };
+    std::atomic<PendingSource*> pendingSource_{nullptr};
+    PendingSource* latestPendingSource_ = nullptr; // newest queued; guarded by storageControlMutex_
+    std::vector<std::unique_ptr<PendingSource>> pendingSourceOwners_;
+    void applyPendingSource() noexcept;
+    /** Newest source (queued first) under storageControlMutex_. */
+    [[nodiscard]] Storage* newestSource(std::uint64_t& id) const noexcept;
     std::array<Pad, kPadCount> pads_{};
     std::uint32_t ringCapacityFrames_ = 0;
     std::vector<float> ring_;

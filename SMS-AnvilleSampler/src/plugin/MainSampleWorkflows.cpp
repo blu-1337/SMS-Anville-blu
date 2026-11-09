@@ -1,6 +1,7 @@
 #include "MainSampleWorkflows.hpp"
 
 #include "PadFileActions.hpp"
+#include "PadFingerprint.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
 
@@ -58,6 +59,155 @@ MainSampleSession MainSampleWorkflows::session() const
     return session_;
 }
 
+std::string MainSampleWorkflows::saveAudio() const
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        audioCache_ = {};
+        audioCacheId_ = 0U;
+        return {};
+    }
+    if (audioCacheId_ != session_.sourceId) {
+        // Free the stale copy first: a long source is large in Base64 too.
+        audioCache_ = {};
+        audioCacheId_ = 0U;
+        PadData source;
+        std::uint64_t id = 0U;
+        if (!sampler_.exportSource(source, &id) || id != session_.sourceId || source.frames == 0U)
+            return {};
+        const auto rate = static_cast<std::uint32_t>(std::clamp(source.sampleRate, 1.0, 384000.0));
+        audioCache_ = encodePadState(source, rate);
+        audioCacheId_ = id;
+    }
+    return audioCache_;
+}
+
+std::string MainSampleWorkflows::saveSession() const
+{
+    const std::lock_guard lock(mutationMutex_);
+    return encodeMainSampleSession(session_);
+}
+
+std::string MainSampleWorkflows::saveLinks() const
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty())
+        return {};
+    const auto pads = snapshotPads();
+    std::vector<MainSampleLinkRecord> links;
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        const auto provenance = pads.provenance[pad];
+        if (provenance == 0U || (provenance >> 16U) != session_.sourceId ||
+            session_.find(static_cast<std::uint16_t>(provenance & kSliceMask)) == nullptr)
+            continue;
+        MainSampleLinkRecord record{pad, provenance, 0U, 0U};
+        record.fingerprint = sampler_.padAudioFingerprint(pad, &record.frames);
+        if (record.frames != 0U)
+            links.push_back(record);
+    }
+    return links.empty() ? std::string() : encodeMainSampleLinks(links);
+}
+
+void MainSampleWorkflows::restoreAudio(const char* const value)
+{
+    if (value == nullptr || value[0] == '\0') {
+        const std::lock_guard lock(mutationMutex_);
+        clearRestoredSourceLocked();
+        return;
+    }
+    // Decode outside the mutex, like pad restores.
+    DecodedPadState decoded;
+    if (!decodePadState(value, decoded) || decoded.pad.frames == 0U)
+        return;
+    StagedAudio staged{std::move(decoded.pad), decoded.sourceSampleRate, value};
+    const std::lock_guard lock(mutationMutex_);
+    stagedAudio_ = std::move(staged);
+    applyStagedSourceLocked();
+}
+
+void MainSampleWorkflows::restoreSession(const char* const value)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (value == nullptr || value[0] == '\0') {
+        clearRestoredSourceLocked();
+        return;
+    }
+    MainSampleSession session;
+    if (!decodeMainSampleSession(value, session))
+        return;
+    stagedSession_ = std::move(session);
+    applyStagedSourceLocked();
+}
+
+void MainSampleWorkflows::restoreLinks(const char* const value)
+{
+    const std::lock_guard lock(mutationMutex_);
+    std::vector<MainSampleLinkRecord> links;
+    if (value != nullptr && value[0] != '\0' && !decodeMainSampleLinks(value, links))
+        return;
+    stagedLinks_ = std::move(links);
+    // Index order (LV2) restores the pads first; tag those whose audio matches.
+    // Pads restored later are tagged by restorePad from the staged entries.
+    bool tagged = false;
+    for (const auto& link : stagedLinks_)
+        tagged = sampler_.setPadProvenance(link.pad, link.provenance, link.fingerprint) || tagged;
+    if (tagged && !session_.empty())
+        publishStatusLocked(0U, MainSampleState::ready);
+}
+
+void MainSampleWorkflows::restorePad(const std::uint32_t pad, const PadData* const audio)
+{
+    const std::lock_guard lock(mutationMutex_);
+    std::uint64_t provenance = 0U;
+    if (audio != nullptr) {
+        const auto link = std::find_if(stagedLinks_.begin(), stagedLinks_.end(),
+            [pad](const MainSampleLinkRecord& record) { return record.pad == pad; });
+        // An edited or different pad drops its link quietly.
+        if (link != stagedLinks_.end() && link->frames == audio->frames &&
+            fingerprint(*audio) == link->fingerprint)
+            provenance = link->provenance;
+    }
+    static_cast<void>(sampler_.restorePad(pad, audio, provenance));
+}
+
+void MainSampleWorkflows::applyStagedSourceLocked()
+{
+    if (!stagedAudio_ || !stagedSession_)
+        return;
+    auto staged = std::move(*stagedAudio_);
+    auto session = std::move(*stagedSession_);
+    stagedAudio_.reset();
+    stagedSession_.reset();
+    if (staged.audio.frames != session.frames || staged.sampleRate != session.sampleRate)
+        return; // Not a pair; keep the current source.
+    if (!sampler_.restoreSource(&staged.audio, session.sourceId))
+        return;
+    // Slices index stored frames; a source stored at another rate cannot use them.
+    const auto info = sampler_.sourceInfo();
+    if (info.frames != session.frames ||
+        static_cast<std::uint32_t>(std::lround(info.sampleRate)) != session.sampleRate) {
+        clearRestoredSourceLocked();
+        return;
+    }
+    session_ = std::move(session);
+    audioCache_ = std::move(staged.encoded);
+    audioCacheId_ = session_.sourceId;
+    publishStatusLocked(0U, MainSampleState::ready);
+}
+
+void MainSampleWorkflows::clearRestoredSourceLocked()
+{
+    stagedAudio_.reset();
+    stagedSession_.reset();
+    audioCache_ = {};
+    audioCacheId_ = 0U;
+    if (session_.empty() && sampler_.sourceInfo().id == 0U)
+        return;
+    static_cast<void>(sampler_.restoreSource(nullptr, 0U));
+    session_.reset(0U, 0U, 0U, {});
+    publishStatusLocked(0U, MainSampleState::ready);
+}
+
 void MainSampleWorkflows::handleRequest(const std::string_view encoded)
 {
     MainSampleRequest request;
@@ -111,6 +261,8 @@ void MainSampleWorkflows::load(const MainSampleRequest& request)
     const auto info = sampler_.sourceInfo();
     session_.reset(id, info.frames,
                    static_cast<std::uint32_t>(std::lround(info.sampleRate)), name);
+    audioCache_ = {}; // keyed by the old id; the next save encodes the new source
+    audioCacheId_ = 0U;
     publishStatusLocked(request.sequence, MainSampleState::ready);
 }
 
@@ -125,6 +277,8 @@ void MainSampleWorkflows::clear(const MainSampleRequest& request)
     }
     // Pads keep their audio and stale tags; a new source never reuses the id.
     session_.reset(0U, 0U, 0U, {});
+    audioCache_ = {};
+    audioCacheId_ = 0U;
     publishStatusLocked(request.sequence, MainSampleState::ready);
 }
 

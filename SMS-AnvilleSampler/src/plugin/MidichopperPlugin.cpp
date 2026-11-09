@@ -200,6 +200,13 @@ protected:
                 return String(encodeGlobalValueSettings(desiredGlobalValueSettings_[i]).c_str());
             }
         }
+        // The workflows take the mutation mutex themselves.
+        if (std::strcmp(key, kMainSampleAudioKey) == 0)
+            return String(mainSampleWorkflows_.saveAudio().c_str());
+        if (std::strcmp(key, kMainSampleSessionKey) == 0)
+            return String(mainSampleWorkflows_.saveSession().c_str());
+        if (std::strcmp(key, kMainSampleLinksKey) == 0)
+            return String(mainSampleWorkflows_.saveLinks().c_str());
         const std::lock_guard lock(padWorkflows_.mutationMutex());
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
             if (std::strcmp(key, kPadStateKeys[pad].c_str()) != 0)
@@ -360,6 +367,18 @@ protected:
             }
             return;
         }
+        if (std::strcmp(key, kMainSampleAudioKey) == 0) {
+            mainSampleWorkflows_.restoreAudio(value);
+            return;
+        }
+        if (std::strcmp(key, kMainSampleSessionKey) == 0) {
+            mainSampleWorkflows_.restoreSession(value);
+            return;
+        }
+        if (std::strcmp(key, kMainSampleLinksKey) == 0) {
+            mainSampleWorkflows_.restoreLinks(value);
+            return;
+        }
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
             if (std::strcmp(key, kPadColorStateKeys[pad].c_str()) != 0)
                 continue;
@@ -370,16 +389,15 @@ protected:
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
             if (std::strcmp(key, kPadStateKeys[pad].c_str()) != 0)
                 continue;
+            // Main Sample links are restored with the audio when a staged
+            // LK1 entry's fingerprint matches (any key order).
             if (value == nullptr || value[0] == '\0') {
-                const std::lock_guard lock(padWorkflows_.mutationMutex());
-                static_cast<void>(sampler_.restorePad(pad, nullptr));
+                mainSampleWorkflows_.restorePad(pad, nullptr);
                 return;
             }
             midichopper::plugin::DecodedPadState decoded;
-            if (midichopper::plugin::decodePadState(value, decoded)) {
-                const std::lock_guard lock(padWorkflows_.mutationMutex());
-                static_cast<void>(sampler_.restorePad(pad, &decoded.pad));
-            }
+            if (midichopper::plugin::decodePadState(value, decoded))
+                mainSampleWorkflows_.restorePad(pad, &decoded.pad);
             return;
         }
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {

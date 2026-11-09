@@ -1,14 +1,20 @@
+#include "MainSampleSession.hpp"
+#include "PadFingerprint.hpp"
 #include "Parameters.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
 #include "src/DistrhoPluginInternal.hpp"
 
+#include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 using namespace midichopper::plugin;
@@ -42,6 +48,13 @@ Audio process(PluginExporter& plugin, const Audio& input, const std::uint32_t fr
     note.data[2] = 127U;
     plugin.run(inputs, outputs, frames, trigger ? &note : nullptr, trigger ? 1U : 0U);
     return output;
+}
+
+void checkNoMainSample(PluginExporter& plugin, const char* const message)
+{
+    check(plugin.getStateValue(kMainSampleAudioKey) == "" &&
+          plugin.getStateValue(kMainSampleSessionKey) == "" &&
+          plugin.getStateValue(kMainSampleLinksKey) == "", message);
 }
 
 struct SavedState {
@@ -117,6 +130,7 @@ void restoreAndCompare(const SavedState& saved, const bool active)
                   "recreated adapter plays the saved edited recording identically");
     check(plugin.getStateValue(kKeys[0]) == saved.values[0].c_str(),
           "processing leaves the restored source audio unchanged");
+    checkNoMainSample(plugin, "a project without main-sample keys restores no main sample");
     plugin.deactivateIfNeeded();
 }
 
@@ -139,6 +153,146 @@ void legacyRestore()
         for (std::uint32_t channel = 0U; channel < 2U; ++channel)
             check(sameBits(output[channel][frame], expected[frame * 2U + channel]),
                   "legacy project playback retains its released PCM16 amplitude");
+    checkNoMainSample(plugin, "a released project restores no main sample");
+    plugin.deactivateIfNeeded();
+}
+
+midichopper::PadData tone(const std::uint32_t frames, const float scale)
+{
+    midichopper::PadData data;
+    data.sampleRate = 48000.0;
+    data.frames = frames;
+    data.stereo.resize(static_cast<std::size_t>(frames) * 2U);
+    for (std::uint32_t frame = 0U; frame < frames; ++frame) {
+        const float value = scale * static_cast<float>(static_cast<int>(frame % 97U) - 48) / 64.0f;
+        data.stereo[frame * 2U] = value;
+        data.stereo[frame * 2U + 1U] = -0.5f * value;
+        data.peak = std::max(data.peak, std::abs(value));
+    }
+    return data;
+}
+
+midichopper::PadData range(const midichopper::PadData& source, const std::uint32_t first,
+                           const std::uint32_t count)
+{
+    auto data = source;
+    data.frames = count;
+    data.stereo.assign(source.stereo.begin() + first * 2U,
+                       source.stereo.begin() + (first + count) * 2U);
+    return data;
+}
+
+using KeyValues = std::vector<std::pair<std::string, std::string>>;
+struct MainSampleProject {
+    KeyValues values; // pads 1..3, then audio, session, links (index order)
+    std::string links; // what a save writes back: the two matching links
+};
+
+MainSampleProject mainSampleProject()
+{
+    const auto source = tone(4800U, 0.9f);
+    MainSampleSession session;
+    session.reset(0xabc123U, 4800U, 48000U, "loop.wav");
+    MainSampleSlice first;
+    MainSampleSlice second;
+    check(session.addSlice(100U, 1100U, first) && session.addSlice(2000U, 2600U, second),
+          "fixture slices");
+    const auto padA = range(source, 100U, 1000U);
+    const auto padB = range(source, 2000U, 600U);
+    const auto other = tone(500U, 0.3f);
+    const auto id = session.sourceId;
+    const std::vector<MainSampleLinkRecord> links{
+        {0U, (id << 16U) | first.id, 1000U, midichopper::fingerprint(padA)},
+        {1U, (id << 16U) | second.id, 600U, midichopper::fingerprint(padB)},
+        // The pad was edited after the link was saved: its fingerprint differs.
+        {2U, (id << 16U) | first.id, 500U, midichopper::fingerprint(other) ^ 1U},
+    };
+    MainSampleProject project;
+    project.values = {
+        {kPadStateKeys[0], encodePadState(padA, 48000U)},
+        {kPadStateKeys[1], encodePadState(padB, 48000U)},
+        {kPadStateKeys[2], encodePadState(other, 48000U)},
+        {kMainSampleAudioKey, encodePadState(source, 48000U)},
+        {kMainSampleSessionKey, encodeMainSampleSession(session)},
+        {kMainSampleLinksKey, encodeMainSampleLinks(links)},
+    };
+    project.links = encodeMainSampleLinks(std::span(links).first(2U));
+    return project;
+}
+
+void restoreMainSample(const MainSampleProject& project, const KeyValues& order,
+                       const bool active, const char* const name)
+{
+    PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
+    plugin.setParameterValue(kParameterInputMonitor, 0.0f);
+    if (active) plugin.activate(); // Callbacks suspended: the source is queued, not dispatched.
+    for (const auto& [key, value] : order)
+        plugin.setState(key.c_str(), value.c_str());
+    for (int pass = 0; pass < 2; ++pass) {
+        for (const auto& [key, value] : project.values) {
+            if (key == kMainSampleLinksKey) continue;
+            if (plugin.getStateValue(key.c_str()) != value.c_str()) {
+                std::cerr << name << ": " << key << '\n';
+                check(false, "main-sample source, session and pads restore in any key order");
+            }
+        }
+        if (plugin.getStateValue(kMainSampleLinksKey) != project.links.c_str()) {
+            std::cerr << name << '\n';
+            check(false, "matching links restore in any key order; an edited pad drops its link");
+        }
+        static_cast<void>(process(plugin, {}, kFrames)); // Install queued state; saves stay equal.
+    }
+    plugin.deactivateIfNeeded();
+}
+
+void mainSampleKeyOrders()
+{
+    const auto project = mainSampleProject();
+    auto alphabetical = project.values; // VST3 and CLAP: main_* before pad_*
+    std::sort(alphabetical.begin(), alphabetical.end());
+    check(alphabetical.front().first == kMainSampleAudioKey, "alphabetical fixture order");
+    restoreMainSample(project, alphabetical, false, "alphabetical");
+    restoreMainSample(project, alphabetical, true, "alphabetical, callbacks suspended");
+    restoreMainSample(project, project.values, false, "index order"); // LV2: pads first
+    const auto& v = project.values;
+    restoreMainSample(project, {v[1], v[5], v[0], v[4], v[2], v[3]}, true, "shuffled");
+}
+
+void mainSampleClearAndMismatch()
+{
+    const auto project = mainSampleProject();
+    PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
+    plugin.setParameterValue(kParameterInputMonitor, 0.0f);
+    for (const auto& [key, value] : project.values)
+        plugin.setState(key.c_str(), value.c_str());
+    check(plugin.getStateValue(kMainSampleSessionKey) != "", "fixture restores a main sample");
+    plugin.setState(kMainSampleAudioKey, "");
+    checkNoMainSample(plugin, "an empty durable value clears a stale main sample and its links");
+    check(plugin.getStateValue(kPadStateKeys[0].c_str()) == project.values[0].second.c_str(),
+          "clearing the main sample keeps pad audio");
+
+    // A session whose audio does not match it is never adopted.
+    plugin.setState(kMainSampleSessionKey, project.values[4].second.c_str());
+    const auto shorter = encodePadState(tone(4000U, 0.9f), 48000U);
+    plugin.setState(kMainSampleAudioKey, shorter.c_str());
+    checkNoMainSample(plugin, "mismatched frames keep the main sample empty");
+    plugin.setState(kMainSampleSessionKey, "MSS1;broken");
+    plugin.setState(kMainSampleAudioKey, project.values[3].second.c_str());
+    checkNoMainSample(plugin, "an invalid session is ignored");
+
+    // The save cache is seeded by the restored text, so a save does not
+    // re-encode: a PCM16 (version 1) blob comes back unchanged, not as float32.
+    constexpr char legacy[] = "U1NQMQEAAgCAuwAAAgAAAAgAAAAy9vZ8AEAA4P9/AYA=";
+    MainSampleSession session;
+    session.reset(0x51U, 2U, 48000U, "short.wav");
+    const auto encodedSession = encodeMainSampleSession(session);
+    plugin.setState(kMainSampleAudioKey, legacy); // replaces the staged unmatched audio
+    plugin.setState(kMainSampleSessionKey, encodedSession.c_str());
+    check(plugin.getStateValue(kMainSampleAudioKey) == legacy &&
+          plugin.getStateValue(kMainSampleSessionKey) == encodedSession.c_str(),
+          "a save reuses the cached Base64 of the restored source");
+    plugin.setState(kMainSampleSessionKey, "");
+    checkNoMainSample(plugin, "an empty session clears the main sample");
     plugin.deactivateIfNeeded();
 }
 } // namespace
@@ -153,6 +307,8 @@ int main()
     restoreAndCompare(saved, false);
     restoreAndCompare(saved, true);
     legacyRestore();
+    mainSampleKeyOrders();
+    mainSampleClearAndMismatch();
     DISTRHO::d_nextPluginIsDummy = false;
     std::cout << "Project state tests passed\n";
 }

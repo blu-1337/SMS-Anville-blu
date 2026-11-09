@@ -3,6 +3,7 @@
 #include "../src/core/SamplerEngine.hpp"
 #include "../src/core/PadClipboard.hpp"
 #include "../src/core/PadFingerprint.hpp"
+#include "Audio/RealtimeCommandDispatcher.hpp"
 
 #include <algorithm>
 #include <array>
@@ -386,6 +387,42 @@ void source_rates_and_lifetime()
           "a cleared source is freed");
 }
 
+void queued_source_restore()
+{
+    // Durable state: restoreSource never dispatches, so an active host that
+    // suspended callbacks cannot stall it (a dispatch here would throw).
+    SamplerEngine engine(48000.0, 30.0);
+    sms::audio::RealtimeCommandDispatcher dispatcher;
+    engine.setControlDispatcher(&dispatcher, &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
+    dispatcher.activate();
+    const auto first = ramp(1U << 20U, 0.0f, 48000.0);
+    const auto second = ramp(1U << 20U, 0.0001f, 48000.0);
+    const int before = largeAllocations.load();
+    check(engine.restoreSource(&first, 5U) && engine.sourceInfo().id == 5U &&
+          engine.sourceInfo().frames == first.frames, "a queued source is visible at once");
+    check(engine.restoreSource(&second, 6U) && engine.sourceInfo().id == 6U,
+          "the newest queued restore wins");
+    {
+        PadData exported;
+        check(engine.exportSource(exported) && exported.stereo == second.stereo,
+              "export reads the queued source");
+    }
+    processBlock(engine);
+    check(engine.sourceInfo().id == 6U, "the next block installs it");
+    check(engine.restoreSource(nullptr, 0U) && engine.sourceInfo().id == 0U,
+          "a queued clear hides the source at once");
+    processBlock(engine);
+    check(engine.restoreSource(nullptr, 0U) && largeAllocations.load() == before,
+          "superseded and replaced sources are freed");
+
+    dispatcher.deactivate(); // setSource dispatches inline from here
+    check(engine.restoreSource(&first, 7U) && engine.setSource(&second, 8U) &&
+          engine.sourceInfo().id == 8U, "setSource installs a queued restore first, then wins");
+    processBlock(engine);
+    check(engine.sourceInfo().id == 8U, "a later block keeps the newest source");
+    engine.setControlDispatcher(nullptr, nullptr);
+}
+
 struct Rendered {
     std::array<float, 64> left{};
     std::array<float, 64> right{};
@@ -489,6 +526,7 @@ int main()
     import_pads_transaction();
     source_storage_and_ranges();
     source_rates_and_lifetime();
+    queued_source_restore();
     source_preview();
     std::cout << "main sample core tests passed\n";
     return 0;

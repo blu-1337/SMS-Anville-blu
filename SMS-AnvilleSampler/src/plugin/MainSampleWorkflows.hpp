@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -35,6 +36,27 @@ public:
     void handleRequest(std::string_view encoded);
     /** A copy taken under the mutation mutex. */
     [[nodiscard]] MainSampleSession session() const;
+
+    // Durable keys (host state thread; each call takes the mutation mutex).
+    /** SSP1 v2 Base64 of the source, cached per source id; "" without a source. */
+    [[nodiscard]] std::string saveAudio() const;
+    /** MSS1, or "" without a source. */
+    [[nodiscard]] std::string saveSession() const;
+    /** LK1 of the pads linked to a slice of the current source; "" when none. */
+    [[nodiscard]] std::string saveLinks() const;
+    /**
+     * Order-independent restore. Audio and session are staged until both are
+     * present with matching frames and rate; then the source is queued
+     * (restoreSource) and the session adopted. An empty value clears the source
+     * and session. Each links value replaces the staged LK1 entries and tags the
+     * pads whose audio already matches; restorePad tags later pads on a match.
+     * Invalid values change nothing.
+     */
+    void restoreAudio(const char* value);
+    void restoreSession(const char* value);
+    void restoreLinks(const char* value);
+    /** Restore pad audio (nullptr clears), with a staged link if its fingerprint matches. */
+    void restorePad(std::uint32_t pad, const PadData* audio);
 
 private:
     struct PadSnapshot {
@@ -72,6 +94,20 @@ private:
     std::atomic<std::uint64_t> latestLoadSequence_{0U};
     std::uint64_t sourceCounter_ = 0U;  // guarded by mutationMutex_
     MainSampleSession session_;         // guarded by mutationMutex_
+
+    // Restore staging and the save cache, all guarded by mutationMutex_.
+    struct StagedAudio {
+        PadData audio;
+        std::uint32_t sampleRate = 0U;
+        std::string encoded; // seeds the save cache once the source is adopted
+    };
+    void applyStagedSourceLocked();
+    void clearRestoredSourceLocked();
+    std::optional<StagedAudio> stagedAudio_;
+    std::optional<MainSampleSession> stagedSession_;
+    std::vector<MainSampleLinkRecord> stagedLinks_;
+    mutable std::string audioCache_;
+    mutable std::uint64_t audioCacheId_ = 0U;
 };
 
 } // namespace midichopper::plugin

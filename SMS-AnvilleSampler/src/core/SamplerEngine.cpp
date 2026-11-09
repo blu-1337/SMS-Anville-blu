@@ -313,6 +313,12 @@ void SamplerEngine::collectPendingState() {
     std::erase_if(pendingStateOwners_, [](const auto& state) {
         return state->consumed.load(std::memory_order_acquire);
     });
+    if (latestPendingSource_ && latestPendingSource_->installed.load(std::memory_order_acquire))
+        latestPendingSource_ = nullptr;
+    std::erase_if(pendingSourceOwners_, [this](const auto& source) {
+        return source.get() != latestPendingSource_ &&
+               source->consumed.load(std::memory_order_acquire);
+    });
 }
 
 std::unique_ptr<SamplerEngine::PendingState> SamplerEngine::preparePendingState() {
@@ -420,6 +426,7 @@ void SamplerEngine::redirectPadVoice(const std::uint32_t pad, const bool reverse
 }
 
 void SamplerEngine::applyPendingState() noexcept {
+    applyPendingSource();
     std::array<PendingState*, kPadCount> updates{};
     std::uint64_t required = used_blocks_;
     bool changed = false;
@@ -1169,11 +1176,14 @@ void SamplerEngine::padProvenance(const std::span<std::uint64_t, kPadCount> prov
     }
 }
 
-std::uint64_t SamplerEngine::padAudioFingerprint(const std::uint32_t pad) const {
+std::uint64_t SamplerEngine::padAudioFingerprint(const std::uint32_t pad,
+                                                 std::uint32_t* const frames) const {
+    if (frames) *frames = 0U;
     if (pad >= kPadCount) return 0U;
     const std::lock_guard lock(storageControlMutex_);
     Snapshot snapshot;
     captureNewestSnapshot(pad, snapshot);
+    if (frames && snapshot.storage) *frames = snapshot.metadata.frames;
     return snapshotFingerprint(snapshot);
 }
 
@@ -1465,30 +1475,83 @@ bool SamplerEngine::setSource(const PadData* const audio, const std::uint64_t so
         replacement->references.fetch_add(1U, std::memory_order_relaxed); // engine reference
     }
     Storage* previous = nullptr;
+    // The dispatch first installs any queued restoreSource, so this one is newest.
     dispatchControl([&]() noexcept {
         stopSourcePreview(); // it reads source_, so stop before the swap
-        previous = source_;
-        source_ = replacement;
-        sourceId_ = replacement ? sourceId : 0U;
+        previous = source_.load(std::memory_order_relaxed);
+        source_.store(replacement, std::memory_order_relaxed);
+        sourceId_.store(replacement ? sourceId : 0U, std::memory_order_relaxed);
     });
+    latestPendingSource_ = nullptr;
     if (previous) previous->references.fetch_sub(1U, std::memory_order_release);
     collectImportedStorage();
     return true;
 }
 
+bool SamplerEngine::restoreSource(const PadData* const audio, const std::uint64_t sourceId) {
+    if (audio && sourceId == 0U) return false;
+    const std::lock_guard lock(storageControlMutex_);
+    collectImportedStorage();
+    auto pending = std::make_unique<PendingSource>();
+    if (audio) {
+        pending->storage = storagePool_.prepareImport(*audio, sample_rate_, kMaximumPadFrames);
+        if (!pending->storage) { collectImportedStorage(); return false; }
+        pending->storage->references.fetch_add(1U, std::memory_order_relaxed); // pending reference
+        pending->id = sourceId;
+    }
+    auto* update = pending.get();
+    pendingSourceOwners_.push_back(std::move(pending));
+    latestPendingSource_ = update;
+    // Whoever exchanges an update out owns its reference: the audio owner
+    // installs it; here an uninstalled older restore is superseded.
+    if (auto* previous = pendingSource_.exchange(update, std::memory_order_acq_rel)) {
+        if (previous->storage) previous->storage->references.fetch_sub(1U, std::memory_order_release);
+        previous->consumed.store(true, std::memory_order_release);
+    }
+    return true;
+}
+
+void SamplerEngine::applyPendingSource() noexcept {
+    auto* update = pendingSource_.exchange(nullptr, std::memory_order_acq_rel);
+    if (!update) return;
+    stopSourcePreview();
+    auto* previous = source_.load(std::memory_order_relaxed);
+    source_.store(update->storage, std::memory_order_relaxed);
+    sourceId_.store(update->storage ? update->id : 0U, std::memory_order_relaxed);
+    if (previous) previous->references.fetch_sub(1U, std::memory_order_release);
+    update->installed.store(true, std::memory_order_release); // after the stores above
+    update->consumed.store(true, std::memory_order_release);
+}
+
+SamplerEngine::Storage* SamplerEngine::newestSource(std::uint64_t& id) const noexcept {
+    // A queued source is newest until the audio owner marks it installed; after
+    // that no store can race this reader, which holds the mutex every writer needs.
+    if (const auto* pending = latestPendingSource_;
+        pending && !pending->installed.load(std::memory_order_acquire)) {
+        id = pending->storage ? pending->id : 0U;
+        return pending->storage;
+    }
+    id = sourceId_.load(std::memory_order_acquire);
+    return source_.load(std::memory_order_acquire);
+}
+
 SamplerEngine::Storage* SamplerEngine::pinSource(const std::uint64_t expectedId,
                                                  SourceInfo& info) const {
     const std::lock_guard lock(storageControlMutex_);
-    if (!source_ || (expectedId != 0U && expectedId != sourceId_)) return nullptr;
-    source_->references.fetch_add(1U, std::memory_order_relaxed);
-    info = {sourceId_, source_->frames, source_->sampleRate, source_->peak, source_->rms};
-    return source_;
+    std::uint64_t id = 0U;
+    auto* source = newestSource(id);
+    if (!source || (expectedId != 0U && expectedId != id)) return nullptr;
+    source->references.fetch_add(1U, std::memory_order_relaxed);
+    info = {id, source->frames, source->sampleRate, source->peak, source->rms};
+    return source;
 }
 
 SourceInfo SamplerEngine::sourceInfo() const {
     const std::lock_guard lock(storageControlMutex_);
-    if (!source_) return {};
-    return {sourceId_, source_->frames, source_->sampleRate, source_->peak, source_->rms};
+    std::uint64_t id = 0U;
+    const auto* source = newestSource(id);
+    if (!source) return {};
+    return {id, source->frames, source->sampleRate, source->peak, source->rms};
 }
 
 bool SamplerEngine::exportSource(PadData& destination, std::uint64_t* const sourceId) const {
@@ -1886,8 +1949,10 @@ void SamplerEngine::mixInterpolated(const Storage* const storage, const std::uin
 void SamplerEngine::startSourcePreview(const std::uint64_t sourceId, const std::uint32_t start,
     const std::uint32_t end, const bool loop) noexcept {
     stopSourcePreview();
-    if (settings_.armed || !source_ || sourceId == 0U || sourceId != sourceId_ ||
-        start >= end || end > source_->frames)
+    const auto* source = source_.load(std::memory_order_relaxed);
+    if (settings_.armed || !source || sourceId == 0U ||
+        sourceId != sourceId_.load(std::memory_order_relaxed) ||
+        start >= end || end > source->frames)
         return;
     stopChopPreview();
     sourcePreviewStart_ = start;
@@ -1903,8 +1968,9 @@ void SamplerEngine::stopSourcePreview() noexcept {
 }
 
 double SamplerEngine::sourcePreviewPosition() const noexcept {
-    if (!sourcePreviewActive_ || !source_ || source_->frames == 0U) return 0.0;
-    return 1.0 + sourcePreviewFrame_ / static_cast<double>(source_->frames);
+    const auto* source = source_.load(std::memory_order_relaxed);
+    if (!sourcePreviewActive_ || !source || source->frames == 0U) return 0.0;
+    return 1.0 + sourcePreviewFrame_ / static_cast<double>(source->frames);
 }
 
 void SamplerEngine::mixSourcePreview(float& left, float& right) noexcept {
@@ -1913,9 +1979,10 @@ void SamplerEngine::mixSourcePreview(float& left, float& right) noexcept {
     // A loop interpolates its last frame toward the loop start, so the seam is continuous.
     const auto second = first + 1U < sourcePreviewEnd_ ? first + 1U :
         (sourcePreviewLoop_ ? sourcePreviewStart_ : first);
-    mixInterpolated(source_, first, second, static_cast<float>(sourcePreviewFrame_ - first),
+    const auto* source = source_.load(std::memory_order_relaxed);
+    mixInterpolated(source, first, second, static_cast<float>(sourcePreviewFrame_ - first),
                     left, right);
-    sourcePreviewFrame_ += source_->sampleRate / sample_rate_;
+    sourcePreviewFrame_ += source->sampleRate / sample_rate_;
     if (sourcePreviewFrame_ < static_cast<double>(sourcePreviewEnd_)) return;
     if (!sourcePreviewLoop_) {
         stopSourcePreview();

@@ -155,22 +155,28 @@ void metadata()
     }
 
     // Main Sample keys are appended after the global keys: earlier indices never move.
-    const std::array<std::pair<const char*, std::uint32_t>, 4> mainSampleStates{{
+    // The transient keys come first, then the durable ones (commit order).
+    const std::array<std::pair<const char*, std::uint32_t>, 7> mainSampleStates{{
         {kMainSampleRequestKey, DISTRHO::kStateIsOnlyForDSP},
         {kMainPreviewRequestKey, DISTRHO::kStateIsOnlyForDSP},
         {kMainSampleStatusKey, DISTRHO::kStateIsOnlyForUI},
         {kMainSampleWaveformKey, DISTRHO::kStateIsOnlyForUI},
+        {kMainSampleAudioKey, DISTRHO::kStateIsBase64Blob | DISTRHO::kStateIsOnlyForDSP},
+        {kMainSampleSessionKey, DISTRHO::kStateIsOnlyForDSP},
+        {kMainSampleLinksKey, DISTRHO::kStateIsOnlyForDSP},
     }};
     std::uint32_t lastGlobal = plugin.getStateCount();
     for (std::uint32_t state = 0; state < plugin.getStateCount(); ++state)
         if (plugin.getStateKey(state) == kGlobalControlStateKeys.back()) lastGlobal = state;
-    check(lastGlobal + mainSampleStates.size() < plugin.getStateCount(), "main-sample keys follow the global keys");
+    check(lastGlobal + 1U + mainSampleStates.size() == plugin.getStateCount(),
+          "main-sample keys follow the global keys and end the table");
     for (std::uint32_t i = 0; i < mainSampleStates.size(); ++i) {
         const auto state = lastGlobal + 1U + i;
         check(plugin.getStateKey(state) == mainSampleStates[i].first &&
               plugin.getStateHints(state) == mainSampleStates[i].second &&
               plugin.getStateDefaultValue(state) == "" &&
-              plugin.getStateValue(mainSampleStates[i].first) == "", "transient main-sample state metadata");
+              plugin.getStateValue(mainSampleStates[i].first) == "",
+              "main-sample state metadata; a fresh instance saves empty values");
     }
 }
 

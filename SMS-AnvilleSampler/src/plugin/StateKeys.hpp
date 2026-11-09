@@ -52,5 +52,9 @@ inline constexpr const char* kMainSampleRequestKey = "main_sample_request";
 inline constexpr const char* kMainPreviewRequestKey = "main_preview_request";
 inline constexpr const char* kMainSampleStatusKey = "main_sample_status";
 inline constexpr const char* kMainSampleWaveformKey = "main_sample_waveform";
+// Durable Main Sample state; an empty value clears (Docs/AI/MAIN-SAMPLE-WORKFLOWS.md).
+inline constexpr const char* kMainSampleAudioKey = "main_sample_audio";
+inline constexpr const char* kMainSampleSessionKey = "main_sample_session";
+inline constexpr const char* kMainSampleLinksKey = "main_sample_links";
 
 } // namespace midichopper::plugin

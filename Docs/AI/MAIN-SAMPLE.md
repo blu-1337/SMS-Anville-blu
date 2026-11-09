@@ -35,7 +35,22 @@ The link is a tag on the pad's immutable `SampleStoragePool::Storage`:
   range from retained imported or capture storage and zero-fills past the end.
 - A rebuilt bounded pool (`setSampleRate`) re-imports pads and keeps their tags.
 
+## Atomic imports
+
+`SamplerEngine::importPads(span<const PadImport>, expectedSettings)` replaces
+or clears (`audio == nullptr`) up to 64 distinct pads in one transaction,
+mirroring `rechopPads`. It prepares storage on the control thread, then one
+dispatch re-checks Arm, recording, each optional `expectedGeneration`,
+capacity (imported pad storage counts against `total_blocks_` exactly as in
+`rechopPads`) and the layout/MIDI mapping. Only then does it publish every pad
+with its tag and supplied settings. On failure nothing changes and prepared
+storage is collected. Publication hard-stops a sounding pad, so a re-cut cuts
+that pad's voice; this is intended, not hidden.
+
 ## Tests
 
-`main-sample-core` covers capture reuse, ranged copies, fingerprints, and tags
-through restores, settings edits, collapse, import, paste, clear and recording.
+`main-sample-core` covers capture reuse, ranged copies, fingerprints, tags
+through restores, settings edits, collapse, import, paste, clear and
+recording, and `importPads` failures (stale generation, duplicate pad,
+capacity, layout, Arm). `sampler-transfer` checks that 64-pad `importPads`
+commits allocate and free nothing on the audio thread.

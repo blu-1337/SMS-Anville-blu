@@ -1392,6 +1392,55 @@ bool SamplerEngine::rechopPads(const std::uint32_t firstPad, const std::uint32_t
     return applied;
 }
 
+bool SamplerEngine::importPads(const std::span<const PadImport> imports,
+                               const EngineSettings* const expectedSettings) {
+    if (imports.empty() || imports.size() > kPadCount) return false;
+    std::array<bool, kPadCount> seen{};
+    for (const auto& import : imports) {
+        if (import.pad >= kPadCount || seen[import.pad]) return false;
+        seen[import.pad] = true;
+    }
+    const std::lock_guard lock(storageControlMutex_);
+    collectImportedStorage();
+    std::array<Storage*, kPadCount> prepared{};
+    std::uint64_t required = 0;
+    for (std::size_t i = 0; i < imports.size(); ++i) {
+        if (!imports[i].audio) continue;
+        prepared[i] = prepareStorage(*imports[i].audio);
+        if (!prepared[i]) { collectImportedStorage(); return false; }
+        prepared[i]->provenance.store(imports[i].provenance, std::memory_order_relaxed);
+        required += (prepared[i]->frames + kSampleBlockFrames - 1U) / kSampleBlockFrames;
+    }
+    bool applied = false;
+    dispatchControl([&]() noexcept {
+        if (settings_.armed || (expectedSettings &&
+            (settings_.padsPerBank != expectedSettings->padsPerBank ||
+             settings_.midiBankMode != expectedSettings->midiBankMode))) return;
+        std::uint64_t oldBlocks = 0;
+        for (const auto& import : imports) {
+            const auto& p = pads_[import.pad];
+            if (p.recording || (import.expectedGeneration &&
+                p.generation.load(std::memory_order_acquire) != *import.expectedGeneration)) return;
+            oldBlocks += p.allocatedBlocks;
+        }
+        if (required > static_cast<std::uint64_t>(total_blocks_) - used_blocks_ + oldBlocks) return;
+        // Release the whole transaction's capacity before publishing any replacement.
+        for (const auto& import : imports) PadMutation::begin(pads_[import.pad]);
+        for (const auto& import : imports) releasePadBlocks(import.pad);
+        for (std::size_t i = 0; i < imports.size(); ++i) {
+            const auto pad = imports[i].pad;
+            publishStorage(pad, prepared[i], false); // nullptr clears and resets settings
+            if (!prepared[i]) continue;
+            setPadPlaybackSettingsDirect(pad, imports[i].playback);
+            setPadMixerSettingsDirect(pad, imports[i].mixer);
+        }
+        for (const auto& import : imports) PadMutation::finish(pads_[import.pad]);
+        applied = true;
+    });
+    collectImportedStorage();
+    return applied;
+}
+
 void SamplerEngine::movePadContents(const std::uint32_t source,
                                     const std::uint32_t destination) noexcept {
     auto& from = pads_[source];

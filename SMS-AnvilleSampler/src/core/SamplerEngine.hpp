@@ -95,6 +95,16 @@ struct ChopMidiPreview {
     std::array<std::uint64_t, 3> sourceEndFrames{};
 };
 
+/** One pad of an atomic importPads transaction. */
+struct PadImport {
+    std::uint32_t pad = kPadCount;
+    const PadData* audio = nullptr; // nullptr clears the pad and resets its settings
+    sms::dsp::SamplePlaybackSettings playback{};
+    sms::dsp::SampleMixerSettings mixer{};
+    std::uint64_t provenance = 0U; // main-sample link of the new audio
+    std::optional<std::uint64_t> expectedGeneration{};
+};
+
 /**
  * Allocation-free/lock-free audio engine. Configuration and pad state import
  * are control-thread operations. With an installed dispatcher, transfers may
@@ -232,6 +242,16 @@ public:
     [[nodiscard]] bool rechopPads(std::uint32_t firstPad, std::uint32_t padCount,
                                   std::span<const std::int64_t> boundaryOffsets,
                                   std::span<const std::uint64_t> expectedGenerations = {},
+                                  const EngineSettings* expectedSettings = nullptr);
+    /**
+     * Replace or clear up to kPadCount distinct pads in one all-or-nothing
+     * transaction, mirroring rechopPads: storage is prepared here, then one
+     * dispatch re-checks Arm, recording, every expected generation, capacity
+     * and the optional layout/MIDI mapping before publishing all pads. Each
+     * imported pad takes the supplied settings. Publication hard-stops a
+     * sounding pad. On failure nothing changes. Control thread only.
+     */
+    [[nodiscard]] bool importPads(std::span<const PadImport> imports,
                                   const EngineSettings* expectedSettings = nullptr);
     /**
      * Close the empty run containing targetPad by moving the immediately

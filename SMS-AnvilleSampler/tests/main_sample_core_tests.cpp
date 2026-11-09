@@ -185,6 +185,75 @@ void provenance_follows_pcm()
     check(engine.padMetadata(4U).occupied && links[4] == 0U, "recording drops the link");
 }
 
+bool samePcm(const SamplerEngine& engine, const std::uint32_t pad, const PadData& expected)
+{
+    PadData exported;
+    return engine.exportPad(pad, exported) && exported.frames == expected.frames &&
+           exported.stereo == expected.stereo;
+}
+
+void import_pads_transaction()
+{
+    SamplerEngine engine(1000.0, 1.0); // 64 storage blocks of 1024 frames
+    const auto a = ramp(8U, 0.1f);
+    const auto b = ramp(12U, 0.4f);
+    sms::dsp::SamplePlaybackSettings trimmed;
+    trimmed.start = 0.5f;
+    sms::dsp::SampleMixerSettings louder;
+    louder.gainDecibels = 3.0f;
+    std::array<midichopper::PadImport, 2> pair{{
+        {3U, &a, trimmed, louder, 0x10001U, {}},
+        {9U, &b, {}, {}, 0x10002U, {}}}};
+    check(engine.importPads(pair), "import two pads in one transaction");
+    Links links{};
+    Links generations{};
+    engine.padProvenance(links, generations);
+    check(links[3] == 0x10001U && links[9] == 0x10002U, "imports carry their links");
+    check(samePcm(engine, 3U, a) && samePcm(engine, 9U, b), "imported PCM is exact");
+    check(engine.padPlaybackSettings(3U).start == 0.5f &&
+          engine.padMixerSettings(3U).gainDecibels == 3.0f, "imports take the supplied settings");
+
+    // A stale generation anywhere fails everything.
+    std::array<midichopper::PadImport, 2> stale{{
+        {3U, &b, {}, {}, 0x20001U, generations[3]},
+        {9U, &a, {}, {}, 0x20002U, generations[9] + 1U}}};
+    check(!engine.importPads(stale), "a stale generation rejects the transaction");
+    engine.padProvenance(links);
+    check(links[3] == 0x10001U && samePcm(engine, 3U, a) && samePcm(engine, 9U, b),
+          "a rejected transaction changes nothing");
+
+    std::array<midichopper::PadImport, 2> duplicate{{{4U, &a}, {4U, &b}}};
+    check(!engine.importPads(duplicate), "duplicate pads are rejected");
+    check(!engine.importPads({}), "an empty transaction is rejected");
+
+    const auto large = ramp(40000U, 0.0f); // 40 blocks each, 80 > 64 available
+    std::array<midichopper::PadImport, 2> tooLarge{{{20U, &large}, {21U, &large}}};
+    check(!engine.importPads(tooLarge), "a capacity shortfall is rejected");
+    check(!engine.padMetadata(20U).occupied && !engine.padMetadata(21U).occupied,
+          "a capacity failure publishes no pad");
+
+    auto expected = engine.settings();
+    expected.padsPerBank = 12U;
+    std::array<midichopper::PadImport, 1> one{{{5U, &a}}};
+    check(!engine.importPads(one, &expected), "a changed layout rejects the plan");
+    auto settings = engine.settings();
+    settings.armed = true;
+    engine.setSettings(settings);
+    check(!engine.importPads(one), "Arm rejects imports");
+    settings.armed = false;
+    engine.setSettings(settings);
+    processBlock(engine);
+
+    std::array<midichopper::PadImport, 2> clearAndKeep{{
+        {3U, nullptr, trimmed, louder, 0x30001U, {}},
+        {9U, &a, {}, {}, 0x30002U, {}}}};
+    check(engine.importPads(clearAndKeep), "clear one pad and replace another");
+    engine.padProvenance(links);
+    check(!engine.padMetadata(3U).occupied && links[3] == 0U &&
+          engine.padPlaybackSettings(3U).start == 0.0f, "nullptr clears and resets settings");
+    check(links[9] == 0x30002U && samePcm(engine, 9U, a), "the other pad is replaced");
+}
+
 } // namespace
 
 int main()
@@ -193,6 +262,7 @@ int main()
     ranged_copy_is_bit_exact();
     fingerprint_identity();
     provenance_follows_pcm();
+    import_pads_transaction();
     std::cout << "main sample core tests passed\n";
     return 0;
 }

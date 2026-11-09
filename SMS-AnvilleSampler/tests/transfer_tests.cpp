@@ -298,6 +298,35 @@ void setPerformancePad(SamplerEngine& engine)
     check(engine.importPad(15, pad), "install unrelated performance pad");
 }
 
+// Main Sample re-cuts: a 64-pad importPads commit and clear allocate and free
+// nothing on the callback. Pad 15 is re-imported with the oracle's constant audio.
+void mainSampleTransactionsNoAlloc()
+{
+    SamplerEngine engine(kRate, 30.0);
+    setPerformancePad(engine);
+    AudioHarness audio(engine);
+    std::vector<PadData> slices(midichopper::kPadCount);
+    std::vector<midichopper::PadImport> imports(midichopper::kPadCount);
+    for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
+        slices[pad] = sample(256U + pad);
+        if (pad == 15U) {
+            for (std::uint32_t frame = 0; frame < slices[pad].frames; ++frame) {
+                slices[pad].stereo[frame * 2U] = 0.125f;
+                slices[pad].stereo[frame * 2U + 1U] = -0.25f;
+            }
+            slices[pad].peak = slices[pad].rms = 0.25f;
+        }
+        imports[pad].pad = pad;
+        imports[pad].audio = &slices[pad];
+        imports[pad].provenance = (std::uint64_t{7} << 16U) | (pad + 1U);
+    }
+    check(engine.importPads(imports), "a 64-pad re-cut commits beside running audio");
+    for (auto& import : imports)
+        if (import.pad != 15U) import.audio = nullptr;
+    check(engine.importPads(imports), "a 63-pad clear commits beside running audio");
+    audio.stop();
+}
+
 void transferContinuity(const PadData& source)
 {
     SamplerEngine engine(kRate, 30.0);
@@ -1137,6 +1166,7 @@ int main(int argc, char** argv)
     retainedSnapshotsAndStalePlans();
     recordingContinuity();
     dynamicCaptureReserveGrowthAndReuse();
+    mainSampleTransactionsNoAlloc();
     if (argc == 2) transferContinuity(readOptionalWav(argv[1]));
     std::cout << "Transfer continuity tests passed (48 kHz, 64-frame blocks).\n";
 }

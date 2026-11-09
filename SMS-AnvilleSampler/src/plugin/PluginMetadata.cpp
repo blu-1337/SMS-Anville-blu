@@ -273,6 +273,12 @@ void initPluginParameter(const uint32_t index, DISTRHO::Parameter& parameter,
                        kParameterIsOutput | kParameterIsHidden,
                        "Internal UI playhead for raw Chop Editor preview.");
         break;
+    case kParameterMainSamplePreviewPosition:
+        setupParameter(index, parameter, "Main Sample Preview Position",
+                       "main_sample_preview_position", "",
+                       kParameterIsOutput | kParameterIsHidden,
+                       "Internal UI playhead for Main Sample preview.");
+        break;
     case kParameterPlaybackPosition:
         setupParameter(index, parameter, "Sample Playback Position",
                        "sample_playback_position", "",

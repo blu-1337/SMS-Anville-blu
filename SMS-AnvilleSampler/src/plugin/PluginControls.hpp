@@ -3,6 +3,7 @@
 #include "Audio/RealtimeLatestMailbox.hpp"
 #include "ChopEditorProtocol.hpp"
 #include "GlobalValueMode.hpp"
+#include "SourcePreviewRequest.hpp"
 
 #include <array>
 #include <atomic>
@@ -51,6 +52,7 @@ private:
     std::atomic<std::uint64_t> pendingClearPads_{0};
     std::atomic<std::uint32_t> pendingCaptureTarget_{0};
     sms::audio::RealtimeLatestMailbox<ChopPreviewRequest> chopPreviewMailbox_;
+    sms::audio::RealtimeLatestMailbox<SourcePreviewRequest> sourcePreviewMailbox_;
     std::mutex chopMidiPreviewMutex_; // Control writers only.
     std::atomic<std::uint64_t> pendingChopMidiPreviewSequence_{0};
     std::atomic<std::uint32_t> pendingChopMidiPreviewConfig_{0};

@@ -15,6 +15,15 @@
 
 static_assert(DISTRHO_PLUGIN_HAS_UI == 1 && DPF_VST3_USES_SEPARATE_CONTROLLER == 0,
               "exercise Anville's UI-enabled combined VST3 controller");
+// Plug-in parameter i has VST3 id kVst3InternalParameterCount + i: DPF's
+// internal and MIDI-CC ids come first and never depend on the plug-in count,
+// so appending a parameter (Main Sample preview position) shifts no id.
+static_assert(DISTRHO::kVst3InternalParameterCount ==
+                  DISTRHO::kVst3InternalParameterBaseCount
+#if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                  + 130 * 16
+#endif
+              , "internal and MIDI-CC ids form a fixed block before plug-in parameters");
 
 namespace {
 
@@ -275,6 +284,10 @@ int main()
     PluginVst3 source(host.interface(), true);
     auto& original = *static_cast<StateFixture*>(source.getInstancePointer());
     const auto savedValues = original.values;
+
+    // The fixture has no plug-in parameters, so the count is the internal block.
+    check(source.getParameterCount() == static_cast<int32_t>(kVst3InternalParameterCount),
+          "plug-in parameter ids start after the fixed internal block");
 
     open(source, view, original);
     close(source);

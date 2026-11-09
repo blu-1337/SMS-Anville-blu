@@ -53,6 +53,7 @@ enum Parameter : std::uint32_t {
     kParameterMonitorGainDb,
     kParameterGlobalReverse,
     kParameterCaptureStorageExhausted,
+    kParameterMainSamplePreviewPosition,
     kParameterCount,
 };
 
@@ -99,6 +100,8 @@ inline constexpr ParameterRange padClipboardResultEvent{0.0f, 0.0f, 6.0f};
 inline constexpr ParameterRange chopPreviewPosition{
     0.0f, 0.0f, static_cast<float>(kPadCount + 1U)};
 inline constexpr ParameterRange playbackPosition = chopPreviewPosition;
+// 0 = idle, else 1 + frame / source frames.
+inline constexpr ParameterRange mainSamplePreviewPosition{0.0f, 0.0f, 2.0f};
 inline constexpr ParameterRange globalPan{0.0f, -1.0f, 1.0f};
 inline constexpr ParameterRange globalTuneSemitones{0.0f, -24.0f, 24.0f};
 inline constexpr ParameterRange filterAmount{0.0f, 0.0f, 1.0f};
@@ -184,6 +187,8 @@ private:
     case kParameterPadClipboardResultEvent: return parameterRanges::padClipboardResultEvent;
     case kParameterChopPreviewPosition: return parameterRanges::chopPreviewPosition;
     case kParameterPlaybackPosition: return parameterRanges::playbackPosition;
+    case kParameterMainSamplePreviewPosition:
+        return parameterRanges::mainSamplePreviewPosition;
     case kParameterGlobalPan: return parameterRanges::globalPan;
     case kParameterGlobalTuneSemitones: return parameterRanges::globalTuneSemitones;
     case kParameterGlobalLowpass:

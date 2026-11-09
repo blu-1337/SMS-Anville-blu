@@ -124,6 +124,7 @@ void stableParameterIds()
         {kParameterAnyPlaybackActive, 68U}, {kParameterMonitorGainDb, 69U},
         {kParameterGlobalReverse, 70U},
         {kParameterCaptureStorageExhausted, 71U},
+        {kParameterMainSamplePreviewPosition, 72U},
     };
     for (const auto& [parameter, expected] : identities)
         check(static_cast<std::uint32_t>(parameter) == expected,
@@ -180,7 +181,8 @@ void live_peak_meter() {
           kParameterMonitorGainDb == kParameterAnyPlaybackActive + 1U &&
           kParameterGlobalReverse == kParameterMonitorGainDb + 1U &&
           kParameterCaptureStorageExhausted == kParameterGlobalReverse + 1U &&
-          kParameterCaptureStorageExhausted + 1U == kParameterCount && kParameterCount == 72U,
+          kParameterMainSamplePreviewPosition == kParameterCaptureStorageExhausted + 1U &&
+          kParameterMainSamplePreviewPosition + 1U == kParameterCount && kParameterCount == 73U,
           "new controls remain appended after released and hidden parameters");
 }
 

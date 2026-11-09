@@ -441,12 +441,15 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME ui-skin-theme COMMAND anvillesampler_skin_theme_tests)
 
-  add_executable(anvillesampler_preview_mailbox_tests tests/preview_mailbox_tests.cpp)
+  add_executable(anvillesampler_preview_mailbox_tests
+    tests/preview_mailbox_tests.cpp
+    src/plugin/PluginControls.cpp)
   target_include_directories(anvillesampler_preview_mailbox_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../Common-Src"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
-  target_link_libraries(anvillesampler_preview_mailbox_tests PRIVATE Threads::Threads)
+  target_link_libraries(anvillesampler_preview_mailbox_tests PRIVATE
+    anvillesampler_core Threads::Threads)
   add_test(NAME preview-mailbox COMMAND anvillesampler_preview_mailbox_tests)
 
   add_executable(anvillesampler_pad_workflow_tests

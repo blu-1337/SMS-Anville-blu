@@ -508,10 +508,8 @@ protected:
                 mainSampleWorkflows_.handleRequest(value);
             return;
         }
-        // The preview mailbox is wired with the position parameter; until then
-        // a preview request is inert, like the UI-only replies.
-        if (std::strcmp(key, kMainPreviewRequestKey) == 0 ||
-            std::strcmp(key, kMainSampleStatusKey) == 0 ||
+        // main_preview_request is queued by controls_.queueStateCommand above.
+        if (std::strcmp(key, kMainSampleStatusKey) == 0 ||
             std::strcmp(key, kMainSampleWaveformKey) == 0)
             return;
     }
@@ -551,6 +549,9 @@ protected:
             sampler_.chopPreviewPosition());
         controls_.publishParameterValue(midichopper::plugin::kParameterPlaybackPosition,
             sampler_.playbackPosition());
+        controls_.publishParameterValue(
+            midichopper::plugin::kParameterMainSamplePreviewPosition,
+            static_cast<float>(sampler_.sourcePreviewPosition()));
         controls_.publishParameterValue(midichopper::plugin::kParameterAnyPlaybackActive,
             sampler_.anyPlaybackActive() ? 1.0f : 0.0f);
     }

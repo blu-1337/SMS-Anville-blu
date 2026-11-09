@@ -1,6 +1,7 @@
 #include "PluginControls.hpp"
 
 #include "CaptureActionProtocol.hpp"
+#include "MainSampleProtocol.hpp"
 #include "PlaybackRequest.hpp"
 #include "StateKeys.hpp"
 #include "SamplerEngine.hpp"
@@ -108,6 +109,14 @@ bool PluginControls::queueStateCommand(const char* const key, const char* const 
         if (midichopper::plugin::decodeChopPreviewRequest(
                 value != nullptr ? value : "", request)) {
             chopPreviewMailbox_.publish(request);
+        }
+        return true;
+    }
+    if (std::strcmp(key, kMainPreviewRequestKey) == 0) {
+        midichopper::plugin::SourcePreviewRequest request;
+        if (midichopper::plugin::decodeSourcePreviewRequest(
+                value != nullptr ? value : "", request)) {
+            sourcePreviewMailbox_.publish(request);
         }
         return true;
     }
@@ -240,6 +249,16 @@ void PluginControls::applyCommandTriggers(midichopper::SamplerEngine& sampler) n
                 preview.sourceFrame, preview.sourceEndFrame);
         } else {
             sampler.stopChopPreview();
+        }
+    }
+    // After the chop preview, so a newer Main Sample play wins the shared slot.
+    midichopper::plugin::SourcePreviewRequest sourcePreview;
+    if (sourcePreviewMailbox_.tryConsume(sourcePreview)) {
+        if (sourcePreview.play) {
+            sampler.startSourcePreview(sourcePreview.sourceId, sourcePreview.start,
+                sourcePreview.end, sourcePreview.loop);
+        } else {
+            sampler.stopSourcePreview();
         }
     }
 }

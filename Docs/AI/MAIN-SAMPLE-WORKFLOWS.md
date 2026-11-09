@@ -9,7 +9,7 @@ runs MS1 requests on the control thread and publishes the replies.
 | Key | Flags | Path |
 | --- | --- | --- |
 | `main_sample_request` | DSP-only, transient | `setState` transient list, then the control worker (VST3) or `applyState` directly, then `handleRequest`. `getState` returns `""`. |
-| `main_preview_request` | DSP-only, transient | Registered; inert until the preview mailbox lands. |
+| `main_preview_request` | DSP-only, transient | Audio-thread mailbox; see [preview](MAIN-SAMPLE-PREVIEW.md). |
 | `main_sample_status` | UI-only | One MS1 status per request; a load publishes LOADING first. |
 | `main_sample_waveform` | UI-only | The MW1 reply to `W`. |
 | `main_sample_audio` | Base64 blob, DSP-only, durable | SSP1 v2 float32 of the stored source. |

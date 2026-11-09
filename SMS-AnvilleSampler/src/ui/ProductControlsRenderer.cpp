@@ -243,6 +243,28 @@ void drawGlobalMixerToggle(const ViewRenderContext& ctx)
     text(ctx, centerX, uiLayout::mixerKnob(4).y - 1.0f, "GLOBAL MIXER", nullptr);
 }
 
+void drawChokeSelector(const ViewRenderContext& ctx)
+{
+    const auto& colors = sms::ui::dpf::theme();
+    const auto bounds = uiLayout::padChoke;
+    const int group = static_cast<int>(ctx.state.mixerSettings.chokeGroup + 0.5f);
+    drawToggleFrame(ctx, bounds, InteractiveType::padChoke);
+    char label[8];
+    if (group > 0)
+        std::snprintf(label, sizeof(label), "%d", group);
+    else
+        std::snprintf(label, sizeof(label), "OFF");
+    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    ctx.canvas.fontSize(14.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    ctx.canvas.fillColor(group > 0 ? colors.controlAccent : colors.contentSecondary.withAlpha(0.5f));
+    text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f, label, nullptr);
+    ctx.canvas.fontSize(9.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
+    ctx.canvas.fillColor(colors.contentSecondary);
+    text(ctx, bounds.x + bounds.width * 0.5f, uiLayout::mixerKnob(4).y - 1.0f, "CHOKE", nullptr);
+}
+
 void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
                      const InteractiveType type, const float slope)
 {

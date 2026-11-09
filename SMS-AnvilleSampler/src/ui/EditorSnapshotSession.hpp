@@ -68,7 +68,8 @@ public:
             reply.mixer.lowpass != fLocalMixer.lowpass ||
             reply.mixer.highpass != fLocalMixer.highpass ||
             reply.mixer.filterSlope != fLocalMixer.filterSlope ||
-            reply.mixer.dirty != fLocalMixer.dirty))
+            reply.mixer.dirty != fLocalMixer.dirty ||
+            reply.mixer.chokeGroup != fLocalMixer.chokeGroup))
             return false;
         fReply = reply;
         fReady = true;

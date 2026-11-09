@@ -1028,6 +1028,18 @@ void SamplerUiSession::toggleSampleGlobalMixer()
     fHost.repaintUi();
 }
 
+void SamplerUiSession::cycleSampleChokeGroup()
+{
+    if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
+        fState.mixerSettingsPad != fState.selectedPad)
+        return;
+    auto settings = fState.mixerSettings;
+    settings.chokeGroup = std::fmod(std::round(settings.chokeGroup) + 1.0f,
+                                    static_cast<float>(sms::dsp::kChokeGroupCount + 1));
+    commitMixerSettings(settings);
+    fHost.repaintUi();
+}
+
 void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &settings)
 {
     fState.mixerSettings = sms::dsp::sanitize(settings);

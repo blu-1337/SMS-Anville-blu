@@ -131,6 +131,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void commitMixerSettings(const sms::dsp::SampleMixerSettings &settings);
     void flipSampleDirection();
     void toggleSampleGlobalMixer();
+    /** Cycles the selected pad's choke group Off, 1..8, Off. */
+    void cycleSampleChokeGroup();
 
   private:
     [[nodiscard]] static int clampPad(float value);

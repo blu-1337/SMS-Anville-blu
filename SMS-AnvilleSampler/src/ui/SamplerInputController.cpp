@@ -210,6 +210,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fSession.toggleSampleGlobalMixer();
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::padChoke)) {
+                fSession.cycleSampleChokeGroup();
+                return true;
+            }
             if (fMixer.sampleMixerPress(mixerContext(), clicked, position, adjustment)) {
                 if (isTarget(clicked, InteractiveType::mixerKnob) && fMixer.entry().target().valid())
                     fDragTarget = EditTarget::none;

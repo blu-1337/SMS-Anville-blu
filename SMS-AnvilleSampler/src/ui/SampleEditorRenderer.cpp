@@ -181,6 +181,7 @@ void drawSampleEditor(const ViewRenderContext& ctx)
     ctx.canvas.strokeWidth(1.5f);
     ctx.canvas.stroke();
     drawGlobalMixerToggle(ctx);
+    drawChokeSelector(ctx);
 }
 
 void drawEditorPadPanel(const ViewRenderContext& ctx)

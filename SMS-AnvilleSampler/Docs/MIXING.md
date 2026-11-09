@@ -78,3 +78,11 @@ custom ranges. The [knob settings manual](../README.md#knob-settings) explains
 Normal, Quantized, Zero Snap, remapping, range restoration, and session/default
 storage. These settings reinterpret global host values; IN and pad controls
 are unaffected.
+
+## Choke groups
+
+The Sample Editor has a **CHOKE** button beside the Global Mixer button. Click it to cycle the pad
+through Off and groups 1 to 8. When a pad starts, from MIDI, the mouse or an audition, every
+other playing pad in the same group fades out over 5 ms and stops. Retriggering the same pad
+works as before. Cut voices do not count toward the voice limit. The group is stored with the
+pad's mixer settings and follows copy, move and split.

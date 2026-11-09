@@ -2832,6 +2832,8 @@ void mainSampleTargetPrecedence()
     check(isTarget(resolve(center(layout::mainSampleLoad)), InteractiveType::mainSampleLoad) &&
           isTarget(resolve(center(layout::mainSampleClear)), InteractiveType::mainSampleClear),
           "Main Sample load and clear targets");
+    check(isTarget(resolve(center(layout::mainSampleAction(0))), InteractiveType::mainSampleAction, 0),
+          "Main Sample action buttons are targets");
     check(isTarget(resolve(center(layout::mainSampleOverview)), InteractiveType::mainSampleOverview),
           "Main Sample overview target");
     context.mainSampleHasSource = false;

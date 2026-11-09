@@ -80,6 +80,7 @@ private:
     bool endMainSampleDrag(sms::ui::Point position);
     bool pressMainSamplePad(int localPad);
     void toggleMainSamplePreview();
+    void assignSelectionToFreePad();
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;
     bool fMainSampleMoved = false;

@@ -344,6 +344,28 @@ void layoutRects()
         if (first >= 3U && first != 3U)
             check(rect.y > 380.0f, "the side panel leaves y 154-380 for auto-chop");
     }
+    const auto disjoint = [](const sms::ui::Rect& r, const sms::ui::Rect& o) {
+        return r.x + r.width <= o.x || o.x + o.width <= r.x ||
+               r.y + r.height <= o.y || o.y + o.height <= r.y;
+    };
+    for (int index = 0; index < kMainSampleActionCount; ++index) {
+        const auto rect = mainSampleAction(index);
+        check(rect.x >= sidePanel.x && rect.y >= sidePanel.y &&
+              rect.x + rect.width <= sidePanel.x + sidePanel.width &&
+              rect.y + rect.height <= sidePanel.y + sidePanel.height, "action buttons stay in the side panel");
+        for (const auto& other : mainSampleRects)
+            check(disjoint(rect, other), "action buttons overlap no other Main Sample rect");
+        for (int second = index + 1; second < kMainSampleActionCount; ++second)
+            check(disjoint(rect, mainSampleAction(second)), "action buttons do not overlap each other");
+    }
+}
+
+void assignPicksFirstFreePad()
+{
+    check(MainSampleController::firstFreePad("11.0", 4) == 2, "'.' counts as free, in pad order");
+    check(MainSampleController::firstFreePad("1111", 4) == -1, "no free pad reports -1");
+    check(MainSampleController::firstFreePad("1110", 3) == -1, "pads beyond the visible count are ignored");
+    check(MainSampleController::firstFreePad("0111", 4) == 0, "the lowest free pad wins");
 }
 } // namespace
 
@@ -437,6 +459,7 @@ int main()
     padChangesRequery();
     sessionRouting();
     layoutRects();
+    assignPicksFirstFreePad();
     autoChopPanel();
     std::cout << "Main Sample UI tests passed\n";
 }

@@ -215,6 +215,15 @@ bool MainSampleController::assignSelection(const std::uint32_t pad)
     return true;
 }
 
+int MainSampleController::firstFreePad(const std::string_view padState, const int visiblePads) noexcept
+{
+    const int count = std::min(visiblePads, static_cast<int>(padState.size()));
+    for (int pad = 0; pad < count; ++pad)
+        if (padState[static_cast<std::size_t>(pad)] == '0' || padState[static_cast<std::size_t>(pad)] == '.')
+            return pad;
+    return -1;
+}
+
 bool MainSampleController::confirmAssign(const bool confirm)
 {
     if (fAutoConfirm) {

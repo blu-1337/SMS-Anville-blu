@@ -376,6 +376,11 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
             sms::ui::dpf::drawSegment(ctx.canvas, rect, label, false, colors.activityPlayback,
                                       hovered(ctx, InteractiveType::mainSampleAutoChop, index));
         };
+        static constexpr const char* kActionLabels[] = {"ASSIGN", "ARRANGE", "AUTO COLOR", "CLEAR COLORS"};
+        for (int index = 0; index < uiLayout::kMainSampleActionCount; ++index)
+            sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleAction(index), kActionLabels[index],
+                                      false, colors.activityPlayback,
+                                      hovered(ctx, InteractiveType::mainSampleAction, index));
         drawButton(uiLayout::autoChopMode, main.autoChopModeName(), 0);
         drawButton(uiLayout::autoChopCountMinus, "-", 1);
         drawButton(uiLayout::autoChopCountPlus, "+", 2);

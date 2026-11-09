@@ -60,6 +60,8 @@ public:
     void load(const std::string& path);
     void clear();
     bool assignSelection(std::uint32_t pad);
+    /** First visible (local) pad, in pad-number order, with no sample ('0' or '.'); -1 if none. */
+    [[nodiscard]] static int firstFreePad(std::string_view padState, int visiblePads) noexcept;
     bool confirmAssign(bool confirm);
     bool deleteSlice(std::uint16_t sliceId);
     bool preview(std::uint32_t start, std::uint32_t end, bool loop);

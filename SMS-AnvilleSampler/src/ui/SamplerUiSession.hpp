@@ -105,6 +105,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     [[nodiscard]] int localPadFromVisualIndex(int index) const noexcept;
     [[nodiscard]] sms::ui::BankedPadLayout padLayout() const noexcept;
     [[nodiscard]] bool hasSelectedPad() const noexcept;
+    /** The pads-view waveform block shows a selected pad that holds audio. */
+    [[nodiscard]] bool overviewPadDisplayed() const noexcept;
     [[nodiscard]] bool selectedPadOccupied() const noexcept;
     [[nodiscard]] bool resetEnabled() const noexcept;
     [[nodiscard]] bool effectiveGlobalReverse() const noexcept;

@@ -89,3 +89,5 @@ release, which avoids clicks. Holding Alt or Shift, or turning SNAP off, keeps t
 to another slice stays there.
 
 Pads view: UNDO/REDO sit under the A-D bank buttons (shared history with Main Sample); the BANK/PAD BANK labels are gone.
+
+Pads view: left-click the tall waveform block opens the Sample Editor for the displayed pad; right-click opens that pad's context menu. Nothing happens when it is empty.

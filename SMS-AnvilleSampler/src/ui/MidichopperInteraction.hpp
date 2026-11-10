@@ -102,6 +102,7 @@ enum class InteractiveType : int {
     historyRedo,
     dropdownItem,
     mainSampleModeItem,
+    overviewWaveform,
 };
 
 class PadPressTracker {
@@ -491,6 +492,7 @@ struct InteractionContext {
     GlobalControlMenu globalControlMenu;
     midichopper::plugin::GlobalValueSettings globalControlSettings;
     bool padContextMenuOpen = false;
+    bool overviewPadDisplayed = false; // the pads-view waveform block shows a non-empty pad
     bool padColorMenuOpen = false;
     bool armed = false;
     bool fixedCapture = false;
@@ -836,6 +838,9 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         if (uiLayout::mainRedo.contains(point))
             return target(InteractiveType::historyRedo);
     }
+    if (!context.captureActive && !context.armed && context.overviewPadDisplayed &&
+        uiLayout::overviewWaveform.contains(point))
+        return target(InteractiveType::overviewWaveform);
     if (!context.captureActive && !context.armed && context.perBankMidi &&
         uiLayout::midiBankHint.contains(point))
         return target(InteractiveType::midiBankHint);

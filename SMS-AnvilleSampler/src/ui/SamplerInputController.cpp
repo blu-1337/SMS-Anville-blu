@@ -75,6 +75,7 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.globalControlMenu = fMixer.menu();
     context.globalControlSettings = fMixer.settings(fMixer.menu().parameter);
     context.padContextMenuOpen = actions.menuOpen();
+    context.overviewPadDisplayed = fSession.overviewPadDisplayed();
     context.padColorMenuOpen = actions.colorMenuOpen();
     context.armed = s.armed;
     context.fixedCapture = s.captureMode >= 0.5f;
@@ -190,6 +191,12 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             if (s.editorMode) fSession.selectEditorPad(pad);
             else fSession.selectMainPadForContextMenu(pad);
             actions.openMenu(fSession.padActionContext(), pad, position);
+            fHost.repaintSamplerInput();
+            return true;
+        }
+        if (isTarget(clicked, InteractiveType::overviewWaveform)) {
+            fMenu.dismiss();
+            actions.openMenu(fSession.padActionContext(), s.selectedPad, position);
             fHost.repaintSamplerInput();
             return true;
         }
@@ -454,6 +461,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             return true;
         }
         if (fMixer.globalMixerPress(mixerContext(), clicked, position, adjustment)) return true;
+        if (isTarget(clicked, InteractiveType::overviewWaveform)) {
+            fSession.openSampleEditor(s.selectedPad);
+            return true;
+        }
         if (isTarget(clicked, InteractiveType::openEditor)) {
             fSession.openSampleEditor(!fSession.hasSelectedPad() ||
                 fSession.bankForGlobalPad(s.selectedPad) != s.bank ? fSession.globalPad(0) : s.selectedPad);

@@ -613,6 +613,11 @@ bool SamplerUiSession::hasSelectedPad() const noexcept
     return fState.selectedPad >= 0 && fState.selectedPad < static_cast<int>(midichopper::kPadCount);
 }
 
+bool SamplerUiSession::overviewPadDisplayed() const noexcept
+{
+    return !fState.armed && !fState.editorMode && !fState.mainSampleMode && hasSelectedPad() && fState.hasWaveform;
+}
+
 int SamplerUiSession::firstEmptyLocalPad() const noexcept
 {
     for (int localPad = 0; localPad < visiblePadCount(); ++localPad) {

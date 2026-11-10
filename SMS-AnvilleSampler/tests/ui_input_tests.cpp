@@ -268,6 +268,49 @@ void padQuickEditGestures()
           "phase suffix round-trips and rejects unknown phases");
 }
 
+void overviewWaveformClicks()
+{
+    using namespace layout;
+    const sms::ui::Point at{overviewWaveform.x + 40.0f, overviewWaveform.y + 20.0f};
+    InteractionContext context;
+    check(!isTarget(interactiveTargetAt(at, context), InteractiveType::overviewWaveform),
+          "no target while no pad is displayed");
+    context.overviewPadDisplayed = true;
+    check(isTarget(interactiveTargetAt(at, context), InteractiveType::overviewWaveform), "block is a target");
+    check(!isTarget(interactiveTargetAt({overviewWaveform.x - 4.0f, at.y}, context), InteractiveType::overviewWaveform),
+          "outside the block is not");
+    context.armed = true;
+    check(!isTarget(interactiveTargetAt(at, context), InteractiveType::overviewWaveform), "not while armed");
+
+    Fixture f;
+    f.session.acceptState("pad_mask", "1111111111111111");
+    f.input.mouse(at, InputButton::left, true);
+    f.input.mouse(at, InputButton::left, false);
+    check(!f.session.state().editorMode, "empty block: left click does nothing");
+    f.input.mouse(at, InputButton::right, true);
+    f.input.mouse(at, InputButton::right, false);
+    check(!f.session.padActions().menuOpen(), "empty block: right click does nothing");
+    f.session.selectMainPadForContextMenu(2);
+    const auto request = std::find_if(f.states.rbegin(), f.states.rend(), [](const auto& st) {
+        return st.first == "waveform_request";
+    });
+    check(request != f.states.rend(), "selecting requests the waveform");
+    EditorSnapshotReply reply;
+    check(decodeEditorSnapshotRequest(request->second, reply.request), "request decodes");
+    reply.waveform.pad = 2;
+    reply.waveform.frames = 48000;
+    reply.waveform.sampleRate = 48000;
+    check(f.session.acceptState("waveform_data", encodeEditorSnapshotReply(reply).c_str()), "reply accepted");
+    check(f.session.overviewPadDisplayed(), "a selected pad with audio is displayed");
+    f.click(at, InputButton::right);
+    check(f.session.padActions().menuOpen() && f.session.padActions().target() == 2,
+          "right click opens the displayed pad's menu");
+    f.input.keyboard(InputKey::escape, true);
+    f.click(at);
+    check(f.session.state().editorMode && f.session.state().selectedPad == 2,
+          "left click opens the editor for the displayed pad");
+}
+
 void overlaysAndFaderCapture()
 {
     Fixture f;
@@ -528,6 +571,7 @@ int main()
     padOwnershipAndSpace();
     padQuickEditGestures();
     undoRedoButtonsAndKeys();
+    overviewWaveformClicks();
     overlaysAndFaderCapture();
     editorWheelAndPointerRoutes();
     mainSampleViewRoutes();

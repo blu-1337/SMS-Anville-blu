@@ -138,6 +138,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void cycleSampleChokeGroup();
     /** Cycles the selected pad's output Main, Out 1..16, Main. */
     void cycleSampleOutput();
+    void toggleSampleHoldLoop();
 
   private:
     [[nodiscard]] static int clampPad(float value);

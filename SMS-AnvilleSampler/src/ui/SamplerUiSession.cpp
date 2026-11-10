@@ -1056,6 +1056,17 @@ void SamplerUiSession::cycleSampleOutput()
     fHost.repaintUi();
 }
 
+void SamplerUiSession::toggleSampleHoldLoop()
+{
+    if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
+        fState.mixerSettingsPad != fState.selectedPad)
+        return;
+    auto settings = fState.mixerSettings;
+    settings.holdLoop = settings.holdLoop >= 0.5f ? 0.0f : 1.0f;
+    commitMixerSettings(settings);
+    fHost.repaintUi();
+}
+
 void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &settings)
 {
     fState.mixerSettings = sms::dsp::sanitize(settings);

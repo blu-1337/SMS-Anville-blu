@@ -11,6 +11,7 @@ void PlaybackVoice::start(const Parameters& parameters, const std::uint8_t veloc
     const auto& global = parameters.global;
     const auto sampleRate = parameters.sampleRate;
     mode_ = mode;
+    holdLoop_ = parameters.mixer.holdLoop >= 0.5f;
     triggerNote_ = triggerNote;
     const auto frameCount = parameters.frames;
     const auto& mixer = parameters.mixer;
@@ -63,7 +64,7 @@ bool PlaybackVoice::refresh(const Parameters& parameters) noexcept {
     const bool globalMixer = mixer.globalMixer >= 0.5f;
     auto playback = parameters.playback;
     if (globalMixer && global.reverse) playback = sms::dsp::mirroredRegion(playback);
-    const bool looping = mode_ != Mode::OneShot;
+    const bool looping = this->looping();
     if (looping) {
         // Loop turns and seam interpolation must use the latest Start, too.
         // One-shot voices keep their trigger-time Start while End stays live.
@@ -175,7 +176,7 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
     const SampleStoragePool::Storage* storage, const std::uint32_t frameCount,
     const double sourceSampleRate, float& outL, float& outR) noexcept {
     const auto n = std::min(frameCount, endFrame_);
-    const bool looping = mode_ != Mode::OneShot;
+    const bool looping = this->looping();
     if (n == 0 || (!envelope_.active() && (!looping || noteReleased_))) {
         playing_ = false;
         return false;

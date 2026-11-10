@@ -61,6 +61,8 @@ public:
     }
     [[nodiscard]] bool choking() const noexcept { return chokeLeft_ != 0U; }
 
+    [[nodiscard]] bool looping() const noexcept
+    { return mode_ == Mode::Loop || (mode_ == Mode::Hold && holdLoop_); }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
     [[nodiscard]] std::int16_t triggerNote() const noexcept { return triggerNote_; }
@@ -82,6 +84,7 @@ private:
     std::uint32_t chokeTotal_ = 0;
     bool releaseFromEnd_ = false;
     bool noteReleased_ = false;
+    bool holdLoop_ = true; // latched at trigger: Hold mode wraps while held
     float velocityGain_ = 1.0f;
     float gainLeft_ = 1.0f;
     float gainRight_ = 1.0f;

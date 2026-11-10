@@ -70,7 +70,8 @@ public:
             reply.mixer.filterSlope != fLocalMixer.filterSlope ||
             reply.mixer.dirty != fLocalMixer.dirty ||
             reply.mixer.chokeGroup != fLocalMixer.chokeGroup ||
-            reply.mixer.outputBus != fLocalMixer.outputBus))
+            reply.mixer.outputBus != fLocalMixer.outputBus ||
+            reply.mixer.holdLoop != fLocalMixer.holdLoop))
             return false;
         fReply = reply;
         fReady = true;

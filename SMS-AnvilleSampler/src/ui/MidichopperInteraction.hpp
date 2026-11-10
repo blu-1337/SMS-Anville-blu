@@ -76,6 +76,7 @@ enum class InteractiveType : int {
     globalDirection,
     padGlobalMixer,
     padChoke,
+    padLoop,
     padOutput,
     menuReset,
     valueModeItem,
@@ -468,6 +469,7 @@ struct InteractionContext {
     bool chopSplitMode = false;
     bool mainSampleMode = false;
     bool mainSampleHasSource = false;
+    bool holdPlayback = false; // global playback mode is HOLD (per-pad LOOP toggle visible)
     bool mainSampleConfirm = false;
     std::span<const plugin::MainSampleSlice> mainSampleSlices;
     sms::ui::waveform::Viewport mainSampleViewport;
@@ -695,6 +697,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::padDirection);
         if (uiLayout::padGlobalMixer.contains(point))
             return target(InteractiveType::padGlobalMixer);
+        if (context.holdPlayback && uiLayout::padLoop.contains(point))
+            return target(InteractiveType::padLoop);
         if (uiLayout::padChoke.contains(point))
             return target(InteractiveType::padChoke);
         if (uiLayout::padOutput.contains(point))

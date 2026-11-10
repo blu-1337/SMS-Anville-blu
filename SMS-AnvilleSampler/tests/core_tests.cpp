@@ -1264,6 +1264,43 @@ void bank_and_layout_mapping() {
     check(e.padMetadata(12).active, "restoring the layout reveals preserved pad audio");
 }
 
+void hold_loop_toggle()
+{
+    using namespace midichopper;
+    for (const float loopFlag : {1.0f, 0.0f})
+        for (const bool releaseEarly : {false, true}) {
+            SamplerEngine engine(1000.0, 1.0);
+            auto settings = engine.settings();
+            settings.monitorInput = false;
+            settings.playbackMode = PlaybackMode::Hold;
+            engine.setSettings(settings);
+            PadData source;
+            source.sampleRate = 1000.0;
+            source.frames = 32U;
+            source.stereo.assign(64U, 0.25f);
+            check(engine.importPad(0U, source), "import hold loop source");
+            sms::dsp::SamplePlaybackSettings playback;
+            playback.releaseSeconds = 0.0f;
+            engine.setPadPlaybackSettings(0U, playback);
+            sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = loopFlag;
+            engine.setPadMixerSettings(0U, mixer);
+            std::array<float, 8> left{}, right{};
+            const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
+            engine.process(nullptr, nullptr, left.data(), right.data(), left.size(), &on, 1U);
+            if (releaseEarly) {
+                const MidiEvent off{0U, 36U, 0U, MidiEventType::NoteOff};
+                engine.process(nullptr, nullptr, left.data(), right.data(), left.size(), &off, 1U);
+                check(!engine.padMetadata(0U).active, "release before the end stops both loop settings");
+                continue;
+            }
+            for (int block = 0; block < 8; ++block)
+                engine.process(nullptr, nullptr, left.data(), right.data(), left.size());
+            check(engine.padMetadata(0U).active == (loopFlag >= 0.5f),
+                  "Loop On keeps wrapping while held; Loop Off ends at the sample end");
+        }
+}
+
 void hold_release_after_bank_switch()
 {
     using namespace midichopper;
@@ -3688,6 +3725,7 @@ int main() {
     full_bank_and_undo();
     bank_and_layout_mapping();
     hold_release_after_bank_switch();
+    hold_loop_toggle();
     hold_note_ownership();
     all_bank_midi_mapping();
     capture_target_selection();

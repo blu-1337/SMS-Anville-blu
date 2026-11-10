@@ -29,6 +29,7 @@ struct SampleMixerSettings {
     float globalMixer = 1.0f;
     float chokeGroup = 0.0f; // 0 = off, 1..8 = pads in one group cut each other
     float outputBus = 0.0f;  // 0 = main stereo out, 1..16 = auxiliary stereo out
+    float holdLoop = 1.0f;   // HOLD mode: 1 = loop while held (default), 0 = play once
 };
 
 [[nodiscard]] inline SampleMixerSettings sanitize(SampleMixerSettings value) noexcept
@@ -56,6 +57,7 @@ struct SampleMixerSettings {
                                   static_cast<float>(kChokeGroupCount));
     value.outputBus = std::clamp(std::round(finiteOr(value.outputBus, 0.0f)), 0.0f,
                                  static_cast<float>(kAuxOutputCount));
+    value.holdLoop = finiteOr(value.holdLoop, 1.0f) >= 0.5f ? 1.0f : 0.0f;
     return value;
 }
 

@@ -265,6 +265,22 @@ void drawChokeSelector(const ViewRenderContext& ctx)
     text(ctx, bounds.x + bounds.width * 0.5f, uiLayout::mixerKnob(4).y - 1.0f, "CHOKE", nullptr);
 }
 
+void drawLoopToggle(const ViewRenderContext& ctx)
+{
+    if (ctx.state.playbackMode < 0.5f)
+        return;
+    const auto& colors = sms::ui::dpf::theme();
+    const auto bounds = uiLayout::padLoop;
+    const bool on = ctx.state.mixerSettings.holdLoop >= 0.5f;
+    drawToggleFrame(ctx, bounds, InteractiveType::padLoop);
+    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    ctx.canvas.fontSize(12.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    ctx.canvas.fillColor(on ? colors.controlAccent : colors.contentSecondary.withAlpha(0.5f));
+    text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f,
+         on ? "LOOP" : "ONCE", nullptr);
+}
+
 void drawOutputSelector(const ViewRenderContext& ctx)
 {
     const auto& colors = sms::ui::dpf::theme();

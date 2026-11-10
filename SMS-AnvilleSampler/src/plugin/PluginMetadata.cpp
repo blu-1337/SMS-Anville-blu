@@ -455,7 +455,7 @@ void initPluginState(const uint32_t index, DISTRHO::State& state,
         const auto pad = index - kMixerStateOffset;
         state.key = kPadMixerStateKeys[pad].c_str();
         state.label = "Pad Sample Mixer Settings";
-        state.defaultValue = "MX6;0;0;0;0;0;0;0;0;1;0;0";
+        state.defaultValue = "MX7;0;0;0;0;0;0;0;0;1;0;0;1";
         state.hints = 0;
     } else if (index == kPadStructureRequestState) {
         state.key = kPadStructureRequestKey;

@@ -183,6 +183,7 @@ void drawSampleEditor(const ViewRenderContext& ctx)
     drawGlobalMixerToggle(ctx);
     drawChokeSelector(ctx);
     drawOutputSelector(ctx);
+    drawLoopToggle(ctx);
 }
 
 void drawEditorPadPanel(const ViewRenderContext& ctx)

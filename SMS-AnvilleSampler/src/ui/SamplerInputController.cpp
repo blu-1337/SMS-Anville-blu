@@ -58,6 +58,7 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.chopSplitMode = chop.split();
     context.mainSampleMode = s.mainSampleMode;
     context.mainSampleHasSource = fSession.mainSample().hasSource();
+    context.holdPlayback = fSession.state().playbackMode >= 0.5f;
     context.mainSampleConfirm = fSession.mainSample().confirmPending();
     context.mainSampleSlices = fSession.mainSample().displaySlices();
     context.mainSampleViewport = fSession.mainSample().viewport();
@@ -235,6 +236,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             }
             if (isTarget(clicked, InteractiveType::padOutput)) {
                 fSession.cycleSampleOutput();
+                return true;
+            }
+            if (isTarget(clicked, InteractiveType::padLoop)) {
+                fSession.toggleSampleHoldLoop();
                 return true;
             }
             if (isTarget(clicked, InteractiveType::padChoke)) {

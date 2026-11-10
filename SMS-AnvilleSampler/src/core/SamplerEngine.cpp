@@ -2085,6 +2085,7 @@ sms::dsp::SampleMixerSettings SamplerEngine::padMixerSettings(
         p.mixerGlobalMixer.load(std::memory_order_acquire),
         p.mixerChokeGroup.load(std::memory_order_acquire),
         p.mixerOutputBus.load(std::memory_order_acquire),
+        p.mixerHoldLoop.load(std::memory_order_acquire),
     });
 }
 
@@ -2107,7 +2108,8 @@ void SamplerEngine::setPadMixerSettingsDirect(
         p.mixerReverse.load(std::memory_order_acquire) != settings.reverse ||
         p.mixerGlobalMixer.load(std::memory_order_acquire) != settings.globalMixer ||
         p.mixerChokeGroup.load(std::memory_order_acquire) != settings.chokeGroup ||
-        p.mixerOutputBus.load(std::memory_order_acquire) != settings.outputBus;
+        p.mixerOutputBus.load(std::memory_order_acquire) != settings.outputBus ||
+        p.mixerHoldLoop.load(std::memory_order_acquire) != settings.holdLoop;
     // Bypassing the master changes only its contribution to direction. Keep
     // the latched local direction, current source position, and envelope.
     if (redirectGlobal && settings_.reverse &&
@@ -2124,6 +2126,7 @@ void SamplerEngine::setPadMixerSettingsDirect(
     p.mixerGlobalMixer.store(settings.globalMixer, std::memory_order_release);
     p.mixerChokeGroup.store(settings.chokeGroup, std::memory_order_release);
     p.mixerOutputBus.store(settings.outputBus, std::memory_order_release);
+    p.mixerHoldLoop.store(settings.holdLoop, std::memory_order_release);
     if (changed)
         p.generation.fetch_add(1U, std::memory_order_release);
 }

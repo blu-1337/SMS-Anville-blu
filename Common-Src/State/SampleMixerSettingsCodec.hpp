@@ -14,12 +14,12 @@ namespace sms::state {
     const dsp::SampleMixerSettings& requested)
 {
     const auto settings = dsp::sanitize(requested);
-    char encoded[192]{};
-    std::snprintf(encoded, sizeof(encoded), "MX6;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g",
+    char encoded[224]{};
+    std::snprintf(encoded, sizeof(encoded), "MX7;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g",
                   settings.gainDecibels, settings.pan, settings.tuneSemitones,
                   settings.lowpass, settings.highpass, settings.filterSlope, settings.dirty,
                   settings.reverse, settings.globalMixer, settings.chokeGroup,
-                  settings.outputBus);
+                  settings.outputBus, settings.holdLoop);
     return encoded;
 }
 
@@ -34,11 +34,12 @@ namespace sms::state {
     const bool version4 = std::strncmp(encoded, "MX4;", 4U) == 0;
     const bool version5 = std::strncmp(encoded, "MX5;", 4U) == 0;
     const bool version6 = std::strncmp(encoded, "MX6;", 4U) == 0;
-    if (!legacy && !version2 && !version3 && !version4 && !version5 && !version6)
+    const bool version7 = std::strncmp(encoded, "MX7;", 4U) == 0;
+    if (!legacy && !version2 && !version3 && !version4 && !version5 && !version6 && !version7)
         return false;
     const char* cursor = encoded + 4U;
-    float values[11]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
-    const std::size_t count = legacy ? 3U : version6 ? 11U : version5 ? 10U : version4 ? 9U : version3 ? 8U : 7U;
+    float values[12]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f};
+    const std::size_t count = legacy ? 3U : version7 ? 12U : version6 ? 11U : version5 ? 10U : version4 ? 9U : version3 ? 8U : 7U;
     for (std::size_t index = 0; index < count; ++index) {
         char* end = nullptr;
         values[index] = std::strtof(cursor, &end);
@@ -55,7 +56,7 @@ namespace sms::state {
         return false;
     destination = dsp::sanitize(dsp::SampleMixerSettings{
         values[0], values[1], values[2], values[3], values[4], values[5], values[6],
-        values[7], values[8], values[9], values[10]});
+        values[7], values[8], values[9], values[10], values[11]});
     return true;
 }
 

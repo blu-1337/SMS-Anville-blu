@@ -22,6 +22,7 @@ void drawDirectionToggle(const ViewRenderContext& ctx, const sms::ui::Rect bound
 
 void drawGlobalMixerToggle(const ViewRenderContext& ctx);
 void drawChokeSelector(const ViewRenderContext& ctx);
+void drawLoopToggle(const ViewRenderContext& ctx);
 void drawOutputSelector(const ViewRenderContext& ctx);
 
 void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,

@@ -171,8 +171,8 @@ inline constexpr sms::ui::Rect padGlobalMixerSeparator{854.0f, 586.0f, 1.0f, 77.
 inline constexpr sms::ui::Rect padGlobalMixer{879.0f, 604.0f, 42.0f, 34.0f};
 // CHOKE and OUT chips on the Sample Editor heading line, left of CLOSE (x 994).
 inline constexpr sms::ui::Rect padOutput{850.0f, 112.0f, 124.0f, 28.0f};
-// HOLD-mode loop toggle between the OUT and CHOKE selectors.
-inline constexpr sms::ui::Rect padLoop{926.0f, 562.0f, 62.0f, 34.0f};
+// HOLD-mode loop toggle, directly under the GLOBAL MIXER button (same x and width).
+inline constexpr sms::ui::Rect padLoop{879.0f, 646.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect padChoke{712.0f, 112.0f, 124.0f, 28.0f};
 inline constexpr sms::ui::Rect padDirection{64.0f, 604.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect globalDirection{1007.0f, 428.0f, 42.0f, 34.0f};

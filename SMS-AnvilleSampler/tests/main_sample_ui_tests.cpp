@@ -359,6 +359,16 @@ void editorHeaderChipsFit()
     }
     check(padChoke.x + padChoke.width < padOutput.x, "CHOKE and OUT chips do not overlap");
     check(padLoop.y > padChoke.y + padChoke.height, "LOOP toggle is clear of the chips");
+    check(padLoop.x == padGlobalMixer.x && padLoop.width == padGlobalMixer.width &&
+          padLoop.y >= padGlobalMixer.y + padGlobalMixer.height + 4.0f &&
+          padLoop.y <= padGlobalMixer.y + padGlobalMixer.height + 16.0f,
+          "LOOP sits directly under the GLOBAL MIXER button, aligned");
+    check(padLoop.y + padLoop.height <= 700.0f, "LOOP stays inside the editor panel");
+    const sms::ui::Rect loopBox = padLoop;
+    for (const auto& other : {padOutput, padChoke, padDirection, padGlobalMixer, mixerKnob(4)})
+        check(loopBox.x >= other.x + other.width || other.x >= loopBox.x + loopBox.width ||
+              loopBox.y >= other.y + other.height || other.y >= loopBox.y + loopBox.height,
+              "LOOP overlaps no neighbouring control");
 }
 
 void countFieldEntry()

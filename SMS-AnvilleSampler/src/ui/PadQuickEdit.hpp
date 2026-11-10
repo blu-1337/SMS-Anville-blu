@@ -19,10 +19,10 @@ enum class PadQuickAxis { none, volume, pan, swap };
 inline constexpr float kPadQuickDragThreshold = 7.0f; // logical px before a press becomes a drag
 inline constexpr float kPadQuickPanDeadZone = 0.05f;  // snaps to centre near the middle
 
-/** A press in the upper third of a pad starts a pad swap instead of a volume/pan drag. */
+/** A press in the lower third of a pad starts a pad swap; the upper two-thirds keep volume/pan. */
 [[nodiscard]] inline bool padSwapZone(const sms::ui::Rect& cell, const float y) noexcept
 {
-    return cell.height > 0.0f && y >= cell.y && y < cell.y + cell.height / 3.0f;
+    return cell.height > 0.0f && y >= cell.y + cell.height * (2.0f / 3.0f) && y <= cell.y + cell.height;
 }
 
 /** Top of the pad = full level, bottom = muted. Linear amplitude, so the middle is about -6 dB. */

@@ -78,9 +78,9 @@ The header **SPEC** toggle (UI-local, default off) draws a dim log-frequency hea
 
 ## Swap pads
 
-Press in the top third of any pad and drag onto another pad to swap them: sound, volume,
+Press in the bottom third of any pad and drag onto another pad to swap them: sound, volume,
 pan, settings, colour, favourite star and slice link all move together; nothing shifts.
-Dragging from the lower two-thirds still sets volume and pan. Undo reverts the swap.
+Dragging from the upper two-thirds still sets volume and pan. Undo reverts the swap.
 
 ## Zero-crossing snap
 

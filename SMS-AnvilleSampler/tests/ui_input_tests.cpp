@@ -190,32 +190,34 @@ void padQuickEditGestures()
     check(quickWrites() == 4 && lastPhase() == 'E', "horizontal drag is a second gesture");
 
     // Upper third of the pad starts a swap; the lower two-thirds keep volume/pan.
-    check(padSwapZone(padCell, padCell.y + 1.0f) && padSwapZone(padCell, padCell.y + padCell.height / 3.0f - 1.0f) &&
-          !padSwapZone(padCell, padCell.y + padCell.height / 3.0f + 1.0f) && !padSwapZone(padCell, padCell.y - 1.0f),
-          "swap zone is the upper third");
+    check(padSwapZone(padCell, padCell.y + padCell.height - 1.0f) &&
+          padSwapZone(padCell, padCell.y + padCell.height * 2.0f / 3.0f + 1.0f) &&
+          !padSwapZone(padCell, padCell.y + padCell.height * 2.0f / 3.0f - 1.0f) &&
+          !padSwapZone(padCell, padCell.y + 1.0f) && !padSwapZone(padCell, padCell.y + padCell.height + 1.0f),
+          "swap zone is the lower third");
     PadQuickEdit swapGesture;
-    swapGesture.begin(4, padCell, {padCell.x + 20.0f, padCell.y + 5.0f}, true);
-    check(!swapGesture.update({padCell.x + 22.0f, padCell.y + 6.0f}) || !swapGesture.swapping(), "below the threshold nothing starts");
+    swapGesture.begin(4, padCell, {padCell.x + 20.0f, padCell.y + padCell.height - 5.0f}, true);
+    check(!swapGesture.update({padCell.x + 22.0f, padCell.y + padCell.height - 6.0f}) || !swapGesture.swapping(), "below the threshold nothing starts");
     check(swapGesture.update({padCell.x + 60.0f, padCell.y + 40.0f}) && swapGesture.swapping() &&
           swapGesture.due(PadQuickEdit::Clock::now()) == 0 && swapGesture.finish() == 0,
-          "an upper-third drag is a swap and sends no volume/pan");
+          "a lower-third drag is a swap and sends no volume/pan");
     PadQuickEdit lowerGesture;
-    lowerGesture.begin(4, padCell, {padCell.x + 20.0f, padCell.y + padCell.height - 5.0f}, true);
-    check(lowerGesture.update({padCell.x + 20.0f, padCell.y + 10.0f}) && lowerGesture.axis() == PadQuickAxis::volume,
-          "lower two-thirds keep the volume gesture");
+    lowerGesture.begin(4, padCell, {padCell.x + 20.0f, padCell.y + 5.0f}, true);
+    check(lowerGesture.update({padCell.x + 20.0f, padCell.y + 25.0f}) && lowerGesture.axis() == PadQuickAxis::volume,
+          "upper two-thirds keep the volume gesture");
     const auto swapMessages = [&] {
         std::size_t n = 0;
         for (const auto& [key, value] : f.states) if (key == "pad_structure_request" && value.starts_with("PS1;W;")) ++n;
         return n;
     };
     const auto padB = center(grid.cell(f.session.padLayout().visualIndex(1)));
-    const sms::ui::Point top{padCell.x + padCell.width * 0.5f, padCell.y + 4.0f};
-    check(f.input.mouse(top, InputButton::left, true), "press in the upper third");
+    const sms::ui::Point top{padCell.x + padCell.width * 0.5f, padCell.y + padCell.height - 4.0f};
+    check(f.input.mouse(top, InputButton::left, true), "press in the lower third");
     f.input.motion(padB);
     check(f.input.quickEditAxis() == 3 && f.input.swapTargetPad() == 1, "dragging over another pad targets it");
     f.input.mouse(padB, InputButton::left, false);
     check(swapMessages() == 1 && f.states.back().second == "PS1;W;0;1", "release over a pad sends one swap request");
-    check(f.input.mouse(top, InputButton::left, true), "press again in the upper third");
+    check(f.input.mouse(top, InputButton::left, true), "press again in the lower third");
     f.input.motion({top.x + 1.0f, top.y + 30.0f});
     f.input.motion({padCell.x + 5.0f, padCell.y + 20.0f});
     f.input.mouse({padCell.x + 5.0f, padCell.y + 20.0f}, InputButton::left, false);

@@ -83,6 +83,7 @@ private:
     bool pressMainSamplePad(int localPad);
     [[nodiscard]] std::uint32_t snappedFrame(float x) const;
     void toggleMainSamplePreview();
+    void assignSelectionToFreePad();
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;
     double fPanOriginStart = 0.0;

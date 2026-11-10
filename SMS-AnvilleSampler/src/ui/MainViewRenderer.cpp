@@ -1,3 +1,4 @@
+#include "PadQuickEdit.hpp"
 #include "PadStar.hpp"
 #include "ViewRenderers.hpp"
 #include "ProductControlsRenderer.hpp"
@@ -52,6 +53,18 @@ void drawQuickEdit(const ViewRenderContext& ctx, const sms::ui::Rect& cell)
             canvas.fill();
         }
     }
+    char line1[24];
+    char line2[24];
+    midichopper::ui::padQuickValueText(static_cast<midichopper::ui::PadQuickAxis>(ctx.state.quickEditAxis),
+                               ctx.state.quickEditVolume, ctx.state.quickEditPan, line1, sizeof(line1),
+                               line2, sizeof(line2));
+    canvas.resetScissor();
+    canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    canvas.fontSize(15.0f);
+    canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    canvas.fillColor(Color(1.0f, 1.0f, 1.0f, 0.95f));
+    canvas.text(cell.x + cell.width * 0.5f, cell.y + cell.height * (line2[0] ? 0.28f : 0.32f), line1, nullptr);
+    if (line2[0]) canvas.text(cell.x + cell.width * 0.5f, cell.y + cell.height * 0.42f, line2, nullptr);
 }
 
 void drawPadPanel(const ViewRenderContext& ctx)

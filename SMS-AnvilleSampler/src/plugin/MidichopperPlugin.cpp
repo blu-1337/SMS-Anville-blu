@@ -463,7 +463,7 @@ protected:
             if (midichopper::plugin::isPadQuickEdit(value)) {
                 // Main-view drag gesture: a gain/pan delta on the live settings, one undo step.
                 if (midichopper::plugin::decodePadQuickEdit(value, quick)) {
-                    undo_.record(UndoKind::action, UndoClock::now(), [&] {
+                    undo_.recordGesture(quick.phase, UndoClock::now(), [&] {
                         const std::lock_guard lock(padWorkflows_.mutationMutex());
                         sms::dsp::SamplePlaybackSettings playback;
                         sms::dsp::SampleMixerSettings current;

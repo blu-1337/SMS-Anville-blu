@@ -130,7 +130,9 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void pressPlaybackPad(int localPad);
     void releasePlaybackPad();
     /** Main-view pad drag: sends one gain or pan delta (one undo step) for that pad. */
-    void sendPadQuickEdit(int pad, PadQuickAxis axis, float volume, float pan);
+    void sendPadQuickEdit(int pad, PadQuickAxis axis, float volume, float pan, char phase = 'S');
+    /** Ctrl+click: volume 0 dB and pan centre as one undo step. */
+    void sendPadReset(int pad);
     void captureSpace();
     void captureAction(const char *action);
     void stopEditorAudition();

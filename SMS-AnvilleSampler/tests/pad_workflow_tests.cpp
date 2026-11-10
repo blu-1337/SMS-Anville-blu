@@ -1315,6 +1315,34 @@ void undoRedoRestoresState()
     check(undo.undoDepth() == 0U, "no steps right after a host restore");
 }
 
+void undoGestureCoalescesLiveUpdates()
+{
+    MainSampleFixture fixture;
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    const auto setGain = [&](const float db) {
+        auto mixer = fixture.engine.padMixerSettings(3U);
+        mixer.gainDecibels = db;
+        fixture.engine.setPadMixerSettings(3U, mixer);
+    };
+    undo.recordGesture('B', now, [&] { setGain(-3.0f); });
+    for (int i = 0; i < 10; ++i)
+        undo.recordGesture('U', now, [&] { setGain(-3.0f - static_cast<float>(i)); });
+    check(undo.undoDepth() == 0U && gainOf(fixture.engine, 3U) == -12.0f, "live updates make no step");
+    undo.recordGesture('E', now, [&] { setGain(-20.0f); });
+    check(undo.undoDepth() == 1U, "the whole drag is one undo step");
+    undo.undo();
+    check(gainOf(fixture.engine, 3U) == 0.0f, "undo restores the pre-drag value");
+    undo.redo();
+    check(gainOf(fixture.engine, 3U) == -20.0f, "redo restores the final value");
+    undo.recordGesture('B', now, [&] { setGain(-20.0f); });
+    undo.recordGesture('E', now, [&] { setGain(-20.0f); });
+    check(undo.undoDepth() == 1U, "an unchanged gesture leaves no step");
+    undo.recordGesture('S', now, [&] { setGain(0.0f); });
+    check(undo.undoDepth() == 2U, "a single-shot (Ctrl+click reset) is one step");
+}
+
 void favoriteGuards()
 {
     MainSampleFixture fixture(12.0);
@@ -1402,5 +1430,6 @@ int main()
     mainSampleArrange();
     favoriteGuards();
     undoRedoRestoresState();
+    undoGestureCoalescesLiveUpdates();
     std::cout << "Pad workflow tests passed\n";
 }

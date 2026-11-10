@@ -16,16 +16,21 @@ struct PadQuickEditDelta {
     bool hasPan = false;
     float gainDecibels = 0.0f;
     float pan = 0.0f;
+    /** S = single step, B = gesture begin, U = live update, E = gesture end (one undo step). */
+    char phase = 'S';
 };
 
 [[nodiscard]] inline std::string encodePadQuickEdit(const PadQuickEditDelta& edit)
 {
-    char text[56];
+    char text[64];
     char gain[24] = "-";
     char pan[24] = "-";
     if (edit.hasGain) std::snprintf(gain, sizeof(gain), "%.2f", static_cast<double>(edit.gainDecibels));
     if (edit.hasPan) std::snprintf(pan, sizeof(pan), "%.4f", static_cast<double>(edit.pan));
-    std::snprintf(text, sizeof(text), "QE1;%s;%s", gain, pan);
+    if (edit.phase != 'S')
+        std::snprintf(text, sizeof(text), "QE1;%s;%s;%c", gain, pan, edit.phase);
+    else
+        std::snprintf(text, sizeof(text), "QE1;%s;%s", gain, pan);
     return text;
 }
 
@@ -39,8 +44,13 @@ struct PadQuickEditDelta {
     if (!isPadQuickEdit(value)) return false;
     const char* const gainText = value + 4;
     const char* const split = std::strchr(gainText, ';');
-    if (split == nullptr || std::strchr(split + 1, ';') != nullptr) return false;
+    if (split == nullptr) return false;
+    const char* const tail = std::strchr(split + 1, ';');
     PadQuickEditDelta edit;
+    if (tail != nullptr) {
+        if (tail[1] == '\0' || tail[2] != '\0' || std::strchr("BUES", tail[1]) == nullptr) return false;
+        edit.phase = tail[1];
+    }
     const auto parse = [](const char* begin, const char* end, bool& has, float& number) noexcept {
         if (end - begin == 1 && *begin == '-') return true;
         if (end == begin || end - begin > 20) return false;
@@ -55,7 +65,7 @@ struct PadQuickEditDelta {
         return true;
     };
     if (!parse(gainText, split, edit.hasGain, edit.gainDecibels) ||
-        !parse(split + 1, split + 1 + std::strlen(split + 1), edit.hasPan, edit.pan) ||
+        !parse(split + 1, tail != nullptr ? tail : split + 1 + std::strlen(split + 1), edit.hasPan, edit.pan) ||
         (!edit.hasGain && !edit.hasPan))
         return false;
     out = edit;

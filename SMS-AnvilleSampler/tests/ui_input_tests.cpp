@@ -163,6 +163,10 @@ void padQuickEditGestures()
     const auto padCell = grid.cell(f.session.padLayout().visualIndex(0));
     const auto start = center(padCell);
     const auto mixerKey = std::string(kPadMixerStateKeys[0]);
+    const auto lastPhase = [&] {
+        PadQuickEditDelta d;
+        return decodePadQuickEdit(f.states.back().second.c_str(), d) ? d.phase : '?';
+    };
     const auto quickWrites = [&] {
         std::size_t n = 0;
         for (const auto& [key, value] : f.states) if (key == mixerKey && isPadQuickEdit(value.c_str())) ++n;
@@ -175,14 +179,59 @@ void padQuickEditGestures()
     check(f.input.mouse(start, InputButton::left, true), "press again");
     check(f.input.motion({start.x, start.y + 20.0f}) && f.input.quickEditPad() == 0 &&
           f.input.quickEditAxis() == 1, "vertical drag is tracked as volume");
+    check(quickWrites() == 1 && lastPhase() == 'B', "the first move past the threshold begins a live gesture");
     f.input.motion({start.x, start.y + 25.0f});
-    check(quickWrites() == 0, "nothing is sent mid-drag (one undo step per gesture)");
+    check(quickWrites() == 1, "updates are throttled (60 ms)");
     f.input.mouse({start.x, start.y + 25.0f}, InputButton::left, false);
-    check(quickWrites() == 1 && f.input.quickEditPad() == -1, "release sends exactly one delta");
+    check(quickWrites() == 2 && lastPhase() == 'E' && f.input.quickEditPad() == -1, "release ends the gesture");
     check(f.input.mouse(start, InputButton::left, true), "press for pan");
     f.input.motion({start.x + 30.0f, start.y + 1.0f});
     f.input.mouse({start.x + 30.0f, start.y + 1.0f}, InputButton::left, false);
-    check(quickWrites() == 2, "horizontal drag sends one pan delta");
+    check(quickWrites() == 4 && lastPhase() == 'E', "horizontal drag is a second gesture");
+
+    // Ctrl+click resets volume and pan in one message and does not play the pad.
+    const auto notesBefore = f.notes.size();
+    f.input.mouse(start, InputButton::left, true, KnobAdjustment::stepped);
+    f.input.mouse(start, InputButton::left, false, KnobAdjustment::stepped);
+    PadQuickEditDelta reset;
+    check(quickWrites() == 5 && f.notes.size() == notesBefore && decodePadQuickEdit(f.states.back().second.c_str(), reset) &&
+          reset.hasGain && reset.hasPan && reset.gainDecibels == 0.0f && reset.pan == 0.0f && reset.phase == 'S',
+          "Ctrl+click resets to 0 dB and centre as one single-step message");
+
+    // Throttle: begin once, update only after 60 ms and a real change, then end.
+    PadQuickEdit live;
+    live.begin(1, cell, {140.0f, 230.0f});
+    const auto t0 = PadQuickEdit::Clock::time_point{} + std::chrono::seconds(10);
+    check(live.due(t0) == 0 && live.finish() == 0, "no send before the threshold");
+    live.update({140.0f, 245.0f});
+    check(live.due(t0) == 'B', "begin on the first drag");
+    live.update({140.0f, 250.0f});
+    check(live.due(t0 + std::chrono::milliseconds(30)) == 0, "no update within 60 ms");
+    check(live.due(t0 + std::chrono::milliseconds(70)) == 'U', "update after 60 ms");
+    check(live.due(t0 + std::chrono::milliseconds(200)) == 0, "no update without a change");
+    check(live.finish() == 'E', "end after a begin");
+    PadQuickEdit quick;
+    quick.begin(1, cell, {140.0f, 230.0f});
+    quick.update({140.0f, 245.0f});
+    check(quick.finish() == 'S', "a gesture that never sent is a single step");
+
+    // Value text.
+    char a[24], b[24];
+    padQuickValueText(PadQuickAxis::volume, 0.5f, 0.0f, a, sizeof(a), b, sizeof(b));
+    check(std::string(a) == "VOL 50%" && std::string(b) == "-6.0 dB", "volume text");
+    padQuickValueText(PadQuickAxis::volume, 0.0f, 0.0f, a, sizeof(a), b, sizeof(b));
+    check(std::string(b) == "MUTE", "muted text");
+    padQuickValueText(PadQuickAxis::pan, 0.0f, -0.5f, a, sizeof(a), b, sizeof(b));
+    check(std::string(a) == "50% L" && b[0] == 0, "pan left text");
+    padQuickValueText(PadQuickAxis::pan, 0.0f, 0.3f, a, sizeof(a), b, sizeof(b));
+    check(std::string(a) == "30% R", "pan right text");
+    padQuickValueText(PadQuickAxis::pan, 0.0f, 0.0f, a, sizeof(a), b, sizeof(b));
+    check(std::string(a) == "C", "pan centre text");
+    PadQuickEditDelta phased;
+    const auto phasedText = encodePadQuickEdit(PadQuickAxis::volume, 0.5f, 0.0f, 'U');
+    check(decodePadQuickEdit(phasedText.c_str(), phased) && phased.phase == 'U' &&
+          !decodePadQuickEdit("QE1;-6;-;X", phased) && decodePadQuickEdit("QE1;-6;-", phased) && phased.phase == 'S',
+          "phase suffix round-trips and rejects unknown phases");
 }
 
 void overlaysAndFaderCapture()

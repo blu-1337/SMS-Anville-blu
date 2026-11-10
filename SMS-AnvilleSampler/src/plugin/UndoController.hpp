@@ -80,6 +80,34 @@ public:
         }
         apply();
     }
+    /**
+     * Live drag edits: 'B' captures the before-state, 'U' only applies, 'E' applies and
+     * pushes ONE step if the state differs from the 'B' capture, 'S' is a plain action.
+     * A stray 'U'/'E' without 'B' degrades to a plain action.
+     */
+    template <class F>
+    void recordGesture(const char phase, const Clock::time_point now, F&& apply)
+    {
+        if (phase == 'S' || ((phase == 'U' || phase == 'E') && !gestureActive_)) {
+            record(Kind::action, now, std::forward<F>(apply));
+            return;
+        }
+        const std::lock_guard lock(mutex_);
+        if (phase == 'B') {
+            gestureBefore_ = capture();
+            gestureActive_ = true;
+        }
+        apply();
+        if (phase == 'E') {
+            gestureActive_ = false;
+            if (!sameState(gestureBefore_, capture())) {
+                history_.push(std::move(gestureBefore_));
+                lastKind_ = Kind::action;
+                publishLocked();
+            }
+            gestureBefore_ = UndoSnapshot{};
+        }
+    }
     void undo() { step(true); }
     void redo() { step(false); }
     /** Host restored durable state: history no longer describes it. */
@@ -107,6 +135,8 @@ private:
     UndoHistory<UndoSnapshot> history_;
     std::array<CacheEntry, kPadCount> cache_{};
     std::unordered_map<std::uint64_t, std::weak_ptr<const PadData>> dedupe_;
+    UndoSnapshot gestureBefore_;
+    bool gestureActive_ = false;
     Kind lastKind_ = Kind::action;
     Clock::time_point lastEdit_{};
     Clock::time_point restoreStamp_{};

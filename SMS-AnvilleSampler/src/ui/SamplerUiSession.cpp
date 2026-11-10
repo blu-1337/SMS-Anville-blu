@@ -850,13 +850,22 @@ void SamplerUiSession::updateLocalPlayhead(const Time now, const float effective
 }
 
 void SamplerUiSession::sendPadQuickEdit(const int pad, const PadQuickAxis axis, const float volume,
-                                        const float pan)
+                                        const float pan, const char phase)
 {
     if (!fCapabilities.stateTransport || pad < 0 || pad >= static_cast<int>(midichopper::kPadCount) ||
         axis == PadQuickAxis::none)
         return;
     fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(pad)].c_str(),
-                      encodePadQuickEdit(axis, volume, pan).c_str());
+                      encodePadQuickEdit(axis, volume, pan, phase).c_str());
+}
+
+void SamplerUiSession::sendPadReset(const int pad)
+{
+    if (!fCapabilities.stateTransport || pad < 0 || pad >= static_cast<int>(midichopper::kPadCount)) return;
+    midichopper::plugin::PadQuickEditDelta edit;
+    edit.hasGain = edit.hasPan = true;
+    fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(pad)].c_str(),
+                      midichopper::plugin::encodePadQuickEdit(edit).c_str());
 }
 
 void SamplerUiSession::releasePlaybackPad()

@@ -2,6 +2,9 @@
 
 #include "DSP/SampleMixerSettings.hpp"
 #include "../plugin/PadQuickEditCodec.hpp"
+
+#include <chrono>
+#include <cstdio>
 #include "UI/Geometry.hpp"
 
 #include <algorithm>
@@ -37,6 +40,25 @@ inline constexpr float kPadQuickPanDeadZone = 0.05f;  // snaps to centre near th
     return std::fabs(pan) < kPadQuickPanDeadZone ? 0.0f : pan;
 }
 
+/** Overlay text while dragging: volume -> "VOL 50%" + "-6.0 dB" (or "MUTE"); pan -> "50% L", "C", "30% R". */
+inline void padQuickValueText(const PadQuickAxis axis, const float volume, const float pan,
+                              char* const line1, const std::size_t size1, char* const line2,
+                              const std::size_t size2) noexcept
+{
+    if (size1) line1[0] = '\0';
+    if (size2) line2[0] = '\0';
+    if (axis == PadQuickAxis::volume) {
+        const float v = std::clamp(volume, 0.0f, 1.0f);
+        std::snprintf(line1, size1, "VOL %d%%", static_cast<int>(std::lround(v * 100.0f)));
+        if (v <= 0.001f) std::snprintf(line2, size2, "MUTE");
+        else std::snprintf(line2, size2, "%.1f dB", static_cast<double>(padQuickGainDecibels(v)));
+    } else if (axis == PadQuickAxis::pan) {
+        const int percent = static_cast<int>(std::lround(std::fabs(std::clamp(pan, -1.0f, 1.0f)) * 100.0f));
+        if (percent == 0) std::snprintf(line1, size1, "C");
+        else std::snprintf(line1, size1, "%d%% %c", percent, pan < 0.0f ? 'L' : 'R');
+    }
+}
+
 class PadQuickEdit {
 public:
     void begin(const int pad, const sms::ui::Rect& cell, const sms::ui::Point start) noexcept
@@ -55,6 +77,29 @@ public:
     [[nodiscard]] float pan() const noexcept { return fPan; }
 
     /** Returns true while the gesture owns the pointer (the axis is locked on the first move past the threshold). */
+    using Clock = std::chrono::steady_clock;
+    static constexpr auto kSendInterval = std::chrono::milliseconds(60);
+    /** Phase to send now: 'B' on the first send, 'U' when 60 ms passed and the value moved, else 0. */
+    [[nodiscard]] char due(const Clock::time_point now) noexcept
+    {
+        if (!dragging()) return 0;
+        const float value = fAxis == PadQuickAxis::volume ? fVolume : fPan;
+        if (!fBegun) {
+            fBegun = true;
+            fLastSend = now;
+            fSent = value;
+            return 'B';
+        }
+        if (now - fLastSend < kSendInterval || std::fabs(value - fSent) < 0.002f) return 0;
+        fLastSend = now;
+        fSent = value;
+        return 'U';
+    }
+    /** Phase for the release: 'E' after a begin, 'S' for a drag that never sent, else 0. */
+    [[nodiscard]] char finish() const noexcept
+    {
+        return !dragging() ? char{0} : (fBegun ? 'E' : 'S');
+    }
     bool update(const sms::ui::Point point) noexcept
     {
         if (fPad < 0) return false;
@@ -76,16 +121,20 @@ private:
     PadQuickAxis fAxis = PadQuickAxis::none;
     float fVolume = 1.0f;
     float fPan = 0.0f;
+    bool fBegun = false;
+    Clock::time_point fLastSend{};
+    float fSent = 0.0f;
 };
 
 [[nodiscard]] inline std::string encodePadQuickEdit(const PadQuickAxis axis, const float volume,
-                                                    const float pan)
+                                                    const float pan, const char phase = 'S')
 {
     plugin::PadQuickEditDelta edit;
     edit.hasGain = axis == PadQuickAxis::volume;
     edit.hasPan = axis == PadQuickAxis::pan;
     edit.gainDecibels = padQuickGainDecibels(volume);
     edit.pan = pan;
+    edit.phase = phase;
     return plugin::encodePadQuickEdit(edit);
 }
 

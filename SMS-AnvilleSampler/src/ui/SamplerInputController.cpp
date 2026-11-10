@@ -455,7 +455,9 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }
         if (isTarget(clicked, InteractiveType::pad)) {
             if (s.armed) fSession.selectCaptureTarget(clicked.index);
-            else {
+            else if (adjustment == KnobAdjustment::stepped) {
+                fSession.sendPadReset(fSession.globalPad(clicked.index));
+            } else {
                 fSession.pressPlaybackPad(clicked.index);
                 // A press that turns into a drag edits volume (vertical) or pan (horizontal).
                 const auto grid = fSession.padLayout().grid(uiLayout::mainPadBounds, 10.0f);
@@ -535,8 +537,8 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return true;
     }
     if (fQuickEdit.pending()) {
-        if (fQuickEdit.dragging())
-            fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan());
+        if (const char phase = fQuickEdit.finish(); phase != 0)
+            fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan(), phase);
         fQuickEdit.cancel();
     }
     if (fSession.padPress().pad() >= 0) {
@@ -563,7 +565,11 @@ bool SamplerInputController::motion(const sms::ui::Point position)
         return fMixer.motion(mixerContext(), position);
     if (fMainSliderDrag >= 0) { updateMainSliderDrag(position.x); return true; }
     if (fQuickEdit.pending()) {
-        if (fQuickEdit.update(position)) fHost.repaintSamplerInput();
+        if (fQuickEdit.update(position)) {
+            if (const char phase = fQuickEdit.due(Clock::now()); phase != 0)
+                fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan(), phase);
+            fHost.repaintSamplerInput();
+        }
         return true;
     }
     const auto hovered = targetAt(position);

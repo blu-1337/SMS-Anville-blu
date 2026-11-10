@@ -451,6 +451,79 @@ void spectrogramBinsFollowFrequency()
     check(!spectrogramColumns(s, 100, 100, 4, cols), "empty range");
 }
 
+// Hard case: a sustained 55 Hz bass, a snare every second with a long low-passed tail,
+// and 16th-style hats 36 dB under the snare, some of them inside the tail.
+void addSnare(std::vector<float>& stereo, const double rate, const std::int64_t at, const float amplitude, const std::uint64_t seed)
+{
+    SplitMix64 rng(seed);
+    const std::int64_t length = static_cast<std::int64_t>(0.5 * rate);
+    float lp = 0.0F;
+    for (std::int64_t i = 0; i < length; ++i) {
+        const std::size_t f = static_cast<std::size_t>(at + i);
+        if (f * 2 + 1 >= stereo.size()) {
+            break;
+        }
+        const float n = static_cast<float>(rng.nextUnit() * 2.0 - 1.0);
+        lp += 0.15F * (n - lp);
+        const float t = static_cast<float>(i) / static_cast<float>(rate);
+        const float v = amplitude * (lp * 2.5F * std::exp(-t * 9.0F) + n * 0.5F * std::exp(-t * 80.0F));
+        stereo[f * 2] += v;
+        stereo[f * 2 + 1] += v;
+    }
+}
+
+std::vector<float> hardHatMix(const double rate, std::vector<std::int64_t>& snares, std::vector<std::int64_t>& hats)
+{
+    auto x = noiseBed(static_cast<std::size_t>(rate * 8.0), 0.0003F, 8);
+    for (std::size_t i = 0; i < x.size() / 2; ++i) {
+        const auto v = static_cast<float>(0.3 * std::sin(2.0 * std::numbers::pi * 55.0 * static_cast<double>(i) / rate));
+        x[i * 2] += v;
+        x[i * 2 + 1] += v;
+    }
+    for (int i = 0; i < 7; ++i) {
+        const auto at = static_cast<std::int64_t>(rate * (0.5 + 1.0 * i));
+        addSnare(x, rate, at, 0.6F, 400 + static_cast<std::uint64_t>(i));
+        snares.push_back(at);
+    }
+    for (int j = 0; j < 28; ++j) {
+        const auto at = static_cast<std::int64_t>(rate * (0.125 + 0.25 * j));
+        const bool nearSnare = std::any_of(snares.begin(), snares.end(), [&](const std::int64_t sn) {
+            return std::llabs(sn - at) < static_cast<std::int64_t>(0.04 * rate);
+        });
+        if (nearSnare) {
+            continue;
+        }
+        addHat(x, rate, at, 0.6F * 0.0158F * 4.0F, 900 + static_cast<std::uint64_t>(j));  // hp gain ~0.25: about -36 dB
+        hats.push_back(at);
+    }
+    return x;
+}
+
+void spectralModeHardHats()
+{
+    const double rate = 44100.0;
+    std::vector<std::int64_t> snares;
+    std::vector<std::int64_t> hats;
+    const auto x = hardHatMix(rate, snares, hats);
+    const auto a = analyzeOnsets(x, rate);
+    const std::int64_t tol = static_cast<std::int64_t>(0.025 * rate);
+    const auto picked = pickSpectralOnsets(a, 0.8F, 0.05, 0, a.sourceFrames);
+    std::size_t hatHits = 0;
+    std::size_t snareHits = 0;
+    for (const auto f : hats) {
+        hatHits += foundNear(picked, f, tol) ? 1U : 0U;
+    }
+    for (const auto f : snares) {
+        snareHits += foundNear(picked, f, tol) ? 1U : 0U;
+    }
+    std::cout << "info: hard hats: T2 found " << hatHits << " of " << hats.size() << " hats, " << snareHits << " of "
+              << snares.size() << " snares, " << picked.size() << " onsets\n";
+    std::printf("\n");
+    check(snareHits == snares.size(), "TRANSIENT 2 keeps every snare");
+    check(hatHits * 100 >= hats.size() * 85, "TRANSIENT 2 finds at least 85% of the -36 dB hats (was 32%)");
+    check(picked.size() <= (snares.size() + hats.size()) * 3 / 2, "bounded stray onsets on the hard mix");
+}
+
 void spectralModeSilenceAndSpeed()
 {
     const double rate = 48000.0;
@@ -550,5 +623,6 @@ int main()
     spectralModeFindsSoftHatAfterThump();
     spectralModeSilenceAndSpeed();
     spectrogramBinsFollowFrequency();
+    spectralModeHardHats();
     return EXIT_SUCCESS;
 }

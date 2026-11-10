@@ -24,12 +24,17 @@ struct Onset {
     std::int64_t frame = 0;  // refined source frame
     float strength = 0.0F;   // normalized flux, 0..1
     float localMedian = 0.0F;
+    std::uint8_t band = 0;   // spectral candidates: source band (high bands use a shorter gap)
 };
 
 // Spectral (TRANSIENT 2) analysis splits the spectrum into log-spaced bands:
-// <150, 150-600, 600-2.5k, 2.5k-6k and >6k Hz. Each band's flux is normalized on
+// <150, 150-600, 600-2.5k, 2.5k-4.5k, 4.5k-6.5k, 6.5k-10k and >10k Hz. Each band's flux is normalized on
 // its own, so a quiet high band counts as much as a loud low band.
-inline constexpr std::size_t kSpectralBands = 5;
+inline constexpr std::size_t kSpectralBands = 7;
+// Bands from this index up (>= 2.5 kHz) are normalized against their local envelope
+// and may use a shorter minimum gap, so soft hats next to loud hits still count.
+inline constexpr std::size_t kFirstHighBand = 3;
+inline constexpr double kHighBandMinGapSeconds = 0.030;
 
 // Low-resolution log-frequency spectrogram kept with the analysis (one row of
 // kSpectrogramBins bytes per hop): bin b spans 30 Hz * (10000/30)^(b/48) upward,

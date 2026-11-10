@@ -13,6 +13,7 @@ namespace {
 constexpr std::size_t kCancelInterval = 1024;
 constexpr std::size_t kMedianRadius = 8;
 constexpr std::size_t kPeakRadius = 3;
+constexpr float kHighBandMargin = 0.12F;
 constexpr std::int64_t kRefineBlock = 64;
 
 float medianOf(const std::span<const float> values)
@@ -181,7 +182,7 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
     for (auto& v : bandFlux) {
         v.assign(hops, 0.0F);
     }
-    constexpr std::array<double, kSpectralBands - 1> kBandEdgesHz{150.0, 600.0, 2500.0, 6000.0};
+    constexpr std::array<double, kSpectralBands - 1> kBandEdgesHz{150.0, 600.0, 2500.0, 4500.0, 6500.0, 10000.0};
     std::vector<std::uint8_t> bandOf(binCount, 0U);
     std::array<std::size_t, kSpectralBands> bandBins{};
     for (std::size_t k = 0; k < binCount; ++k) {
@@ -263,10 +264,11 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
 
     const std::int64_t d = static_cast<std::int64_t>(decimation);
     const std::int64_t zeroSearch = static_cast<std::int64_t>(settings.refineWindowMs * 0.001 * rate);
-    const auto collect = [&](const std::vector<float>& nov, std::vector<Onset>& dest) {
+    const auto collect = [&](const std::vector<float>& nov, std::vector<Onset>& dest, const std::uint8_t band,
+                             const float floorValue) {
         for (std::size_t n = 1; n < hops; ++n) {
             const float v = nov[n];
-            if (v < settings.candidateFloor) {
+            if (v < floorValue) {
                 continue;
             }
             bool isPeak = true;
@@ -290,10 +292,10 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
             // right edge, so search from one hop before the centre to the right edge.
             const std::int64_t before = static_cast<std::int64_t>(hop) * d;
             const std::int64_t after = static_cast<std::int64_t>(window / 2) * d;
-            dest.push_back({refine(interleavedStereo, frames, estimate, before, after, zeroSearch), v, med});
+            dest.push_back({refine(interleavedStereo, frames, estimate, before, after, zeroSearch), v, med, band});
         }
     };
-    collect(out.novelty, out.candidates);
+    collect(out.novelty, out.candidates, 0U, settings.candidateFloor);
 
     // Spectral mode: normalize every band on its own (99th percentile, with a floor
     // proportional to the band's share of the bins), then pick peaks per band.
@@ -302,13 +304,35 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
         std::vector<float> bsorted = bandFlux[b];
         std::nth_element(bsorted.begin(), bsorted.begin() + static_cast<std::ptrdiff_t>(p99), bsorted.end());
         const float share = static_cast<float>(bandBins[b]) / static_cast<float>(binCount);
-        const float bdenom = std::max(bsorted[p99], settings.fluxFloor * share);
+        const float bfloor = settings.fluxFloor * std::max(share, 0.05F);
+        const float bdenom = std::max(bsorted[p99], bfloor);
         std::vector<float> nov(hops);
+        if (b < kFirstHighBand) {
+            // Low bands also need a tenth of the whole-spectrum level: a sustained bass tone's
+            // tiny flux ripple must not normalize up to full scale just because it is the band's loudest.
+            const float lowDenom = std::max(bdenom, 0.1F * denom);
+            for (std::size_t n = 0; n < hops; ++n) {
+                nov[n] = std::clamp(bandFlux[b][n] / lowDenom, 0.0F, 1.0F);
+            }
+        } else {
+            // High bands: divide by the band's local peak (about +-0.12 s), capped by the global
+            // level, so a soft hat beside a loud hit is not drowned by that hit's size.
+            constexpr std::size_t kLocal = 10;
+            for (std::size_t n = 0; n < hops; ++n) {
+                const std::size_t lo = n >= kLocal ? n - kLocal : 0;
+                const std::size_t hi = std::min(hops, n + kLocal + 1);
+                float localMax = 0.0F;
+                for (std::size_t i = lo; i < hi; ++i) {
+                    localMax = std::max(localMax, bandFlux[b][i]);
+                }
+                const float denom = std::clamp(localMax, std::max(bfloor, 0.04F * bdenom), bdenom);
+                nov[n] = std::clamp(bandFlux[b][n] / denom, 0.0F, 1.0F);
+            }
+        }
         for (std::size_t n = 0; n < hops; ++n) {
-            nov[n] = std::clamp(bandFlux[b][n] / bdenom, 0.0F, 1.0F);
             out.bandNovelty[n][b] = nov[n];
         }
-        collect(nov, out.spectralCandidates);
+        collect(nov, out.spectralCandidates, static_cast<std::uint8_t>(b), settings.candidateFloor * 0.5F);
     }
     // Candidates of different bands that land within a few ms are one event: keep the strongest.
     std::sort(out.spectralCandidates.begin(), out.spectralCandidates.end(), [](const Onset& a, const Onset& b) {
@@ -336,13 +360,17 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
 namespace {
 std::vector<std::int64_t> pickFrom(const std::vector<Onset>& candidates, const OnsetAnalysis& analysis,
                                    const float sensitivity, const double minGapSeconds,
-                                   const std::int64_t rangeStart, const std::int64_t rangeEnd)
+                                   const std::int64_t rangeStart, const std::int64_t rangeEnd,
+                                   const float lowDelta, const bool bandGaps)
 {
     const float s = std::clamp(sensitivity, 0.0F, 1.0F);
-    const float delta = 0.35F + (0.02F - 0.35F) * s;
+    const float delta = 0.35F + (lowDelta - 0.35F) * s;
     std::vector<const Onset*> eligible;
     for (const Onset& o : candidates) {
-        if (o.frame >= rangeStart && o.frame < rangeEnd && o.strength >= delta + o.localMedian) {
+        // High-band candidates are normalized against their own local peak, so ripple in a
+        // decaying tail reads as large; they need a clearer margin over their median.
+        const float margin = bandGaps && o.band >= kFirstHighBand ? kHighBandMargin : 0.0F;
+        if (o.frame >= rangeStart && o.frame < rangeEnd && o.strength >= delta + margin + o.localMedian) {
             eligible.push_back(&o);
         }
     }
@@ -351,8 +379,11 @@ std::vector<std::int64_t> pickFrom(const std::vector<Onset>& candidates, const O
     const std::int64_t gap = static_cast<std::int64_t>(std::max(0.0, minGapSeconds) * analysis.sourceRate);
     std::vector<std::int64_t> picked;
     for (const Onset* o : eligible) {
+        const std::int64_t myGap = bandGaps && o->band >= kFirstHighBand
+            ? std::min(gap, static_cast<std::int64_t>(kHighBandMinGapSeconds * analysis.sourceRate))
+            : gap;
         const bool clear = std::none_of(picked.begin(), picked.end(), [&](const std::int64_t f) {
-            return std::llabs(f - o->frame) < gap;
+            return std::llabs(f - o->frame) < myGap;
         });
         if (clear) {
             picked.push_back(o->frame);
@@ -367,14 +398,14 @@ std::vector<std::int64_t> pickOnsets(const OnsetAnalysis& analysis, const float 
                                      const double minGapSeconds, const std::int64_t rangeStart,
                                      const std::int64_t rangeEnd)
 {
-    return pickFrom(analysis.candidates, analysis, sensitivity, minGapSeconds, rangeStart, rangeEnd);
+    return pickFrom(analysis.candidates, analysis, sensitivity, minGapSeconds, rangeStart, rangeEnd, 0.02F, false);
 }
 
 std::vector<std::int64_t> pickSpectralOnsets(const OnsetAnalysis& analysis, const float sensitivity,
                                              const double minGapSeconds, const std::int64_t rangeStart,
                                              const std::int64_t rangeEnd)
 {
-    return pickFrom(analysis.spectralCandidates, analysis, sensitivity, minGapSeconds, rangeStart, rangeEnd);
+    return pickFrom(analysis.spectralCandidates, analysis, sensitivity, minGapSeconds, rangeStart, rangeEnd, 0.005F, true);
 }
 
 } // namespace sms::analysis

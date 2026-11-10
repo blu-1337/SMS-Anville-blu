@@ -268,8 +268,9 @@ void drawChokeSelector(const ViewRenderContext& ctx)
 
 void drawLoopToggle(const ViewRenderContext& ctx)
 {
-    if (ctx.state.playbackMode < 0.5f)
-        return;
+    // Always shown; the setting is stored per pad and only plays in HOLD mode, so it is
+    // dimmed while the playback mode is not HOLD.
+    const bool applies = ctx.state.playbackMode >= 0.5f;
     const auto& colors = sms::ui::dpf::theme();
     const auto bounds = uiLayout::padLoop;
     const bool on = ctx.state.mixerSettings.holdLoop >= 0.5f;
@@ -277,7 +278,8 @@ void drawLoopToggle(const ViewRenderContext& ctx)
     ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
     ctx.canvas.fontSize(12.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
-    ctx.canvas.fillColor(on ? colors.controlAccent : colors.contentSecondary.withAlpha(0.5f));
+    const auto base = on ? colors.controlAccent : colors.contentSecondary.withAlpha(0.5f);
+    ctx.canvas.fillColor(applies ? base : base.withAlpha(0.3f));
     text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f,
          on ? "LOOP" : "ONCE", nullptr);
 }

@@ -735,7 +735,7 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::padDirection);
         if (uiLayout::padGlobalMixer.contains(point))
             return target(InteractiveType::padGlobalMixer);
-        if (context.holdPlayback && uiLayout::padLoop.contains(point))
+        if (uiLayout::padLoop.contains(point))
             return target(InteractiveType::padLoop);
         if (uiLayout::padChoke.contains(point))
             return target(InteractiveType::padChoke);

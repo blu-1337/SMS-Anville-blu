@@ -151,6 +151,9 @@ void editorWheelAndPointerRoutes()
     f.click(decay, InputButton::middle);
     check(f.session.state().editorSettings.decaySeconds == 0.0f, "middle press resets envelope slider");
 
+    check(f.session.state().playbackMode < 0.5f &&
+          isTarget(f.input.targetAt(center(layout::padLoop)), InteractiveType::padLoop),
+          "the Sample Editor LOOP toggle is reachable outside HOLD mode");
     const auto& waveform = layout::editorWaveform;
     const auto start = sms::ui::Point{waveform.x + waveform.width * 0.1f, waveform.y + 10.0f};
     check(isTarget(f.input.targetAt(start), InteractiveType::regionHandle), "start marker resolves correctly");

@@ -60,7 +60,7 @@ range. See [numeric entry and keyboard navigation](../README.md#general-controls
 Levels are host parameters saved with projects.
 
 **Lowpass** removes treble as you raise it from 0% to 100%. **Highpass** removes
-bass. At 0%, each filter is off. The Lowpass knob is drawn right to left (100% at the left) so both cutoffs rise left to right; its drag and wheel are mirrored, saved values are unchanged. Both add resonance as you turn them farther
+bass. At 0%, each filter is off. Lowpass is drawn right to left (100% at left), mirroring its drag and wheel; saved values are unchanged. Both add resonance as you turn them farther
 from off. **Slope** selects 6, 12, or 24 dB per octave; click or drag its
 slider, or use the wheel. A steeper slope removes unwanted frequencies faster.
 
@@ -97,4 +97,4 @@ disabled, that pad is silent.
 
 ## Hold looping
 
-The Sample Editor LOOP button (HOLD mode) is off for new pads. Saved pads keep their setting; pads saved before it existed still loop.
+The Sample Editor LOOP button is always shown (dimmed outside HOLD) and is off for new pads. Saved pads keep their setting; pads saved before it existed still loop.

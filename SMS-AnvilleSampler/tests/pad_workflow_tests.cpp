@@ -1506,6 +1506,18 @@ void padSwap()
     const auto tag5 = fixture.provenance(5U);
     check(tag2 != 0U && tag5 != 0U && tag2 != tag5, "two linked pads before the swap");
 
+    fixture.pads.setSwapPublishedHook([&](const std::uint32_t x, const std::uint32_t y) {
+        fixture.main.republishStatus((1ULL << x) | (1ULL << y));
+    });
+    const auto linkedSlice = [&](const std::uint32_t pad) {
+        MainSampleStatus status;
+        check(decodeMainSampleStatus(fixture.observer.latest(kMainSampleStatusKey), status), "status decodes");
+        for (const auto& link : status.links)
+            if (link.pad == pad) return static_cast<int>(link.sliceId);
+        return -1;
+    };
+    const int slice2 = static_cast<int>(tag2 & 0xFFFFU);
+    const int slice5 = static_cast<int>(tag5 & 0xFFFFU);
     UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
     const auto now = UndoController::Clock::now();
     const auto depth = undo.undoDepth();
@@ -1519,6 +1531,8 @@ void padSwap()
     check(gainOf(fixture.engine, 5U) == -6.0f && fixture.engine.padMixerSettings(5U).pan == -0.5f &&
           gainOf(fixture.engine, 2U) == 0.0f, "volume and pan travel with the pad");
     check(hooked.size() == 1U && colors[2] == (7 | 0x100) && colors[5] == 3, "colour and favourite flag swap");
+    check(linkedSlice(2U) == slice5 && linkedSlice(5U) == slice2,
+          "the published main-sample links swap with the pads (labels, badges, zone colours)");
     check(undo.undoDepth() == depth + 1U, "one undo step");
     undo.undo();
     check(padHoldsSlice(fixture.engine, 2U, 100U, 300U) && padHoldsSlice(fixture.engine, 5U, 400U, 500U) &&
@@ -1526,6 +1540,7 @@ void padSwap()
 
     // A pad may be swapped with an empty pad (the content simply moves).
     fixture.pads.handlePadStructureRequest("PS1;W;2;9");
+    check(linkedSlice(9U) == slice2 && linkedSlice(2U) == -1, "a slice moved to an empty pad keeps its link there");
     check(padHoldsSlice(fixture.engine, 9U, 100U, 300U) && !fixture.engine.padMetadata(2U).occupied &&
           fixture.provenance(2U) == 0U && fixture.provenance(9U) == tag2, "swap with an empty pad moves the pad");
     {

@@ -41,6 +41,8 @@ public:
     void handlePadStructureRequest(std::string_view encoded);
     /** Called under the pad mutation lock after a swap committed (colours and favourite flags live outside). */
     void setSwapHook(std::function<void(std::uint32_t, std::uint32_t)> hook) { swapHook_ = std::move(hook); }
+    /** Called after a swap, with the mutation lock released: republish what depends on pad links. */
+    void setSwapPublishedHook(std::function<void(std::uint32_t, std::uint32_t)> hook) { swapPublishedHook_ = std::move(hook); }
     void handleChopApplyRequest(std::string_view encoded);
     void handlePadClipboardRequest(std::string_view encoded);
     void handlePadFileRequest(std::string_view encoded);
@@ -68,6 +70,7 @@ private:
     /** Exchange two whole pads; caller holds the mutation lock. False (nothing changed) when refused. */
     [[nodiscard]] bool swapPadsLocked(std::uint32_t a, std::uint32_t b);
     std::function<void(std::uint32_t, std::uint32_t)> swapHook_;
+    std::function<void(std::uint32_t, std::uint32_t)> swapPublishedHook_;
     void publishFileStatus(const std::string& status)
     { observer_.publishUiState(kPadFileStatusKey, status.c_str()); }
     void handleChopApplyRequestImpl(std::string_view encoded);

@@ -165,6 +165,9 @@ void PadWorkflows::handlePadStructureRequest(const std::string_view encoded)
                 return; // the refusal was published
             committed = true;
             mutationLock.unlock();
+            // The pad->slice links (labels, badges, zone colours) follow the swapped provenance.
+            if (swapPublishedHook_)
+                swapPublishedHook_(request.firstPad, request.targetPad);
             observer_.publishUiState(kPadStructureStatusKey, "PS1;O;0;W");
             return;
         }

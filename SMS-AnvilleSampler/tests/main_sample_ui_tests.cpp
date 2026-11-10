@@ -366,6 +366,25 @@ struct SessionHost final : SamplerUiHost {
     void invalidateUiInteraction(UiInteractionInvalidation) override {}
 };
 
+void swapLinksRefreshLabels()
+{
+    SessionHost host;
+    SamplerUiSession session(host);
+    session.openMainSample();
+    const std::vector<MainSampleSlice> slices{{3U, 0U, 400U}, {4U, 400U, 1000U}};
+    check(session.acceptState(kMainSampleStatusKey, status(1U, MainSampleState::ready, slices, {{2U, 3U}, {5U, 4U}}).c_str()),
+          "links before the swap");
+    check(session.mainSample().sliceForPad(2U) == 0 && session.mainSample().sliceForPad(5U) == 1, "S3 on pad 2, S4 on pad 5");
+    check(session.acceptState(kMainSampleStatusKey, status(0U, MainSampleState::ready, slices, {{2U, 4U}, {5U, 3U}}, 0x24U).c_str()),
+          "the republished links are accepted");
+    check(session.mainSample().sliceForPad(2U) == 1 && session.mainSample().sliceForPad(5U) == 0,
+          "labels follow the swap in the UI state");
+    check(session.acceptState(kMainSampleStatusKey, status(0U, MainSampleState::ready, slices, {{2U, 4U}, {9U, 3U}}, 0x220U).c_str()),
+          "a move onto an empty pad is accepted");
+    check(session.mainSample().sliceForPad(9U) == 0 && session.mainSample().sliceForPad(5U) < 0,
+          "the slice label moves to the empty pad");
+}
+
 void sessionRouting()
 {
     SessionHost host;
@@ -993,6 +1012,7 @@ int main()
     transportPlaysSelectedSlice();
     zoomHelpers();
     padChangesRequery();
+    swapLinksRefreshLabels();
     sessionRouting();
     editorHeaderChipsFit();
     sliceBadgesAreSmallAndComplete();

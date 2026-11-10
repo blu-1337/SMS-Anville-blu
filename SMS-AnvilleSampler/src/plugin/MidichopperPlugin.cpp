@@ -119,6 +119,9 @@ public:
                 publishUiState(kPadColorStateKeys[pad].c_str(), std::to_string(
                     padColors_[pad].load(std::memory_order_relaxed)).c_str());
         });
+        padWorkflows_.setSwapPublishedHook([this](const std::uint32_t first, const std::uint32_t second) {
+            mainSampleWorkflows_.republishStatus((1ULL << first) | (1ULL << second));
+        });
         sampler_.setControlDispatcher(&controlDispatcher_,
             &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
     }

@@ -83,6 +83,8 @@ public:
         const MainSampleSession* session = nullptr; // adopted if the source id still matches
         std::uint64_t affected = 0U;
     };
+    /** Republish the current status (links follow pad provenance); takes the mutation lock. */
+    void republishStatus(std::uint64_t affected) { publishStatus(0U, MainSampleState::ready, {}, affected); }
     /** False (nothing changed) when the pad transaction is refused, e.g. while armed. */
     [[nodiscard]] bool applyHistory(const HistoryChange& change);
     /** Restore pad audio (nullptr clears), with a staged link if its fingerprint matches. */

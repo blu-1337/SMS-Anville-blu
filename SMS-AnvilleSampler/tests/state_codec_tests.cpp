@@ -559,13 +559,23 @@ void mixerStateRoundTrip()
     check(midichopper::plugin::decodeMixerSettings("MX6;0;0;0;0;0;0;0;0;1;99;99", other) &&
               other.chokeGroup == 8.0f && other.outputBus == 16.0f,
           "choke group and output bus are clamped");
-    check(decoded.holdLoop == 1.0f, "hold loop defaults On");
+    check(sms::dsp::SampleMixerSettings{}.holdLoop == 0.0f &&
+              sms::dsp::sanitize(sms::dsp::SampleMixerSettings{}).holdLoop == 0.0f,
+          "hold loop defaults Off for new pads");
+    original.holdLoop = 1.0f;
+    check(midichopper::plugin::decodeMixerSettings(
+              midichopper::plugin::encodeMixerSettings(original).c_str(), decoded) &&
+              decoded.holdLoop == 1.0f, "hold loop On round-trips");
     original.holdLoop = 0.0f;
     check(midichopper::plugin::decodeMixerSettings(
               midichopper::plugin::encodeMixerSettings(original).c_str(), decoded) &&
               decoded.holdLoop == 0.0f, "hold loop Off round-trips");
     check(midichopper::plugin::decodeMixerSettings("MX6;0;0;0;0;0;0;0;0;1;2;3", other) &&
               other.holdLoop == 1.0f, "MX6 states decode with the hold loop On");
+    check(midichopper::plugin::decodeMixerSettings("MX1;0;0;0", other) && other.holdLoop == 1.0f &&
+              midichopper::plugin::decodeMixerSettings("MX5;0;0;0;0;0;0;0;0;1;4", other) &&
+              other.holdLoop == 1.0f,
+          "older saved pads keep looping (their stored behaviour)");
     check(std::abs(decoded.gainDecibels - original.gainDecibels) < 1.0e-6f,
           "mixer gain round-trips");
     check(std::abs(decoded.pan - original.pan) < 1.0e-6f,

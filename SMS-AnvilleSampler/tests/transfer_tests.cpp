@@ -20,6 +20,21 @@
 
 #ifdef _WIN32
 #include <malloc.h>
+
+// These tests were written when pads looped in Hold mode by default. The product default is now
+// "play once" (LOOP off), so engine imports and mixer settings opt back in explicitly.
+template <class... Args>
+inline bool importLooping(midichopper::SamplerEngine& engine, const std::uint32_t pad, Args&&... args)
+{
+    const bool imported = engine.importPad(pad, std::forward<Args>(args)...);
+    if (imported) {
+        auto mixer = engine.padMixerSettings(pad);
+        mixer.holdLoop = 1.0f;
+        engine.setPadMixerSettings(pad, mixer);
+    }
+    return imported;
+}
+
 #endif
 
 // Count destruction as well as allocation: retiring a retained sample on the
@@ -180,6 +195,7 @@ public:
         }
         sampler.setSettings(settings);
         sms::dsp::SampleMixerSettings reverse;
+        reverse.holdLoop = 1.0f;
         reverse.reverse = 1.0f;
         sampler.setPadMixerSettings(15U, reverse);
         sampler.setControlDispatcher(this, dispatch);
@@ -295,7 +311,7 @@ void setPerformancePad(SamplerEngine& engine)
         pad.stereo[frame * 2 + 1] = -0.25f;
     }
     pad.peak = pad.rms = 0.25f;
-    check(engine.importPad(15, pad), "install unrelated performance pad");
+    check(importLooping(engine, 15, pad), "install unrelated performance pad");
 }
 
 // Main Sample re-cuts: a 64-pad importPads commit and clear allocate and free
@@ -368,12 +384,13 @@ void transferContinuity(const PadData& source)
     PadData exported, left, middle, right;
     for (unsigned repetition = 0; repetition < 3; ++repetition) {
         const auto before = audio.blocks.load();
-        check(engine.importPad(0, source), "long import during performance");
+        check(importLooping(engine, 0, source), "long import during performance");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f; playback.end = 0.875f;
         playback.attackSeconds = 0.01f; playback.decaySeconds = 0.02f;
         playback.sustainLevel = 0.75f; playback.releaseSeconds = 0.03f;
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.gainDecibels = -6.0f; mixer.pan = 0.25f;
         mixer.tuneSemitones = -3.0f; mixer.lowpass = 0.125f;
         mixer.highpass = 0.25f; mixer.filterSlope = 2; mixer.dirty = 1; mixer.reverse = 1;
@@ -382,6 +399,7 @@ void transferContinuity(const PadData& source)
         engine.setPadMixerSettings(0, mixer);
         sms::dsp::SamplePlaybackSettings copiedPlayback;
         sms::dsp::SampleMixerSettings copiedMixer;
+        copiedMixer.holdLoop = 1.0f;
         check(engine.exportPad(0, exported, &copiedPlayback, &copiedMixer) &&
               exported.stereo == source.stereo && exported.frames == source.frames &&
               exported.sampleRate == source.sampleRate && exported.generation != 0 &&
@@ -449,10 +467,11 @@ void retainedSnapshotsAndStalePlans()
     const auto original = sample(250000);
     const auto replacement = sample(250000, 0.5f);
     setPerformancePad(engine);
-    check(engine.importPad(0, original), "install retained-reader source");
+    check(importLooping(engine, 0, original), "install retained-reader source");
     sms::dsp::SamplePlaybackSettings playback;
     playback.start = 0.25f; playback.end = 0.75f; playback.sustainLevel = 0.5f;
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.pan = -0.5f; mixer.gainDecibels = -3.0f;
     engine.setPadPlaybackSettings(0, playback);
     engine.setPadMixerSettings(0, mixer);
@@ -468,6 +487,7 @@ void retainedSnapshotsAndStalePlans()
     PadData captured;
     sms::dsp::SamplePlaybackSettings capturedPlayback;
     sms::dsp::SampleMixerSettings capturedMixer;
+    capturedMixer.holdLoop = 1.0f;
     check(engine.exportPad(0, captured, &capturedPlayback, &capturedMixer) &&
           captured.stereo == original.stereo && captured.generation == generation &&
           same(capturedPlayback, playback) && same(capturedMixer, mixer),
@@ -486,6 +506,7 @@ void retainedSnapshotsAndStalePlans()
     audio.afterContext = &engine;
     audio.afterCapture = [](void* opaque) {
         sms::dsp::SampleMixerSettings changed;
+        changed.holdLoop = 1.0f;
         changed.pan = 0.5f;
         static_cast<SamplerEngine*>(opaque)->setPadMixerSettings(0, changed);
     };
@@ -494,12 +515,12 @@ void retainedSnapshotsAndStalePlans()
     check(engine.exportPad(0, captured) && captured.stereo == replacement.stereo,
           "rejected staged split preserves replacement audio");
     auto tooLarge = sample(2000000);
-    check(!engine.importPad(0, tooLarge), "over-capacity import is rejected");
+    check(!importLooping(engine, 0, tooLarge), "over-capacity import is rejected");
     check(engine.exportPad(0, captured) && captured.stereo == replacement.stereo,
           "capacity rejection preserves published pad");
     const auto large = sample(900000);
-    check(engine.importPad(0, large), "one pad accepts most of the shared capacity");
-    check(!engine.importPad(1, large), "sum of imported pad lengths respects shared capacity");
+    check(importLooping(engine, 0, large), "one pad accepts most of the shared capacity");
+    check(!importLooping(engine, 1, large), "sum of imported pad lengths respects shared capacity");
     check(engine.exportPad(0, captured) && captured.stereo == large.stereo &&
           engine.exportPad(1, captured) && captured.frames == 0,
           "shared-capacity rejection changes neither source nor destination");
@@ -515,7 +536,7 @@ void recordingContinuity()
     for (unsigned iteration = 0; iteration < 3; ++iteration) {
         const auto before = audio.blocks.load();
         audio.blockLimit.store(before + 32);
-        check(engine.importPad(0, source) && engine.exportPad(0, exported) &&
+        check(importLooping(engine, 0, source) && engine.exportPad(0, exported) &&
               exported.stereo == source.stereo, "unrelated transfer during active recording");
         await([&] { return audio.blocks.load() >= before + 32; },
               "active recording keeps processing during transfer");
@@ -789,8 +810,9 @@ void publishedStateWithoutCallbacks()
     sms::dsp::SamplePlaybackSettings playback;
     playback.start = 0.125f; playback.end = 0.75f; playback.sustainLevel = 0.625f;
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.pan = -0.5f; mixer.gainDecibels = -6;
-    check(engine.importPad(0, source, false, &playback, &mixer),
+    check(importLooping(engine, 0, source, false, &playback, &mixer),
           "install complete published state transaction");
     RealtimeCommandDispatcher dispatcher;
     dispatcher.activate();
@@ -798,6 +820,7 @@ void publishedStateWithoutCallbacks()
     PadData exported;
     sms::dsp::SamplePlaybackSettings copiedPlayback;
     sms::dsp::SampleMixerSettings copiedMixer;
+    copiedMixer.holdLoop = 1.0f;
     check(engine.exportPublishedPad(0, exported, &copiedPlayback, &copiedMixer) &&
           exported.stereo == source.stereo && same(copiedPlayback, playback) &&
           same(copiedMixer, mixer), "published state reads do not require active host callbacks");
@@ -818,9 +841,11 @@ void concurrentImportedPublication()
     firstPlayback.start = 0.125f; firstPlayback.end = 0.75f;
     secondPlayback.start = 0.25f; secondPlayback.end = 0.875f;
     sms::dsp::SampleMixerSettings firstMixer, secondMixer;
+    firstMixer.holdLoop = 1.0f;
+    secondMixer.holdLoop = 1.0f;
     firstMixer.pan = -0.5f; firstMixer.gainDecibels = -3;
     secondMixer.pan = 0.5f; secondMixer.gainDecibels = -9;
-    check(engine.importPad(0, first, false, &firstPlayback, &firstMixer),
+    check(importLooping(engine, 0, first, false, &firstPlayback, &firstMixer),
           "install first published import revision");
     setPerformancePad(engine);
     AudioHarness audio(engine);
@@ -830,6 +855,7 @@ void concurrentImportedPublication()
         PadData exported;
         sms::dsp::SamplePlaybackSettings playback;
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         std::uint64_t priorGeneration = 0;
         while (!finished.load() || reads.load() < 2000) {
             check(engine.exportPublishedPad(0, exported, &playback, &mixer),
@@ -852,7 +878,7 @@ void concurrentImportedPublication()
     await([&] { return reads.load() >= 1; }, "published import reader starts");
     for (unsigned revision = 0; revision < 128; ++revision) {
         const bool isFirst = revision % 2 == 0;
-        check(engine.importPad(0, isFirst ? first : second, false,
+        check(importLooping(engine, 0, isFirst ? first : second, false,
                                isFirst ? &firstPlayback : &secondPlayback,
                                isFirst ? &firstMixer : &secondMixer),
               "publish alternating complete import transactions");
@@ -893,6 +919,7 @@ void concurrentCapturedPublication()
     PadData exported;
     sms::dsp::SamplePlaybackSettings playback;
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     std::uint64_t priorGeneration = 0;
     unsigned occupiedReads = 0;
     for (unsigned read = 0; read < 5000 || occupiedReads < 128; ++read) {
@@ -927,7 +954,7 @@ void ordinaryChopSnapshots()
 {
     SamplerEngine engine(kRate, 1.0);
     const auto first = sample(8192), second = sample(4096, 0.5f);
-    check(engine.importPad(0, first) && engine.importPad(1, second),
+    check(importLooping(engine, 0, first) && importLooping(engine, 1, second),
           "install ordinary chop source");
     setPerformancePad(engine);
     AudioHarness audio(engine);
@@ -958,6 +985,7 @@ void ordinaryChopSnapshots()
     audio.afterContext = &engine;
     audio.afterCapture = [](void* opaque) {
         sms::dsp::SampleMixerSettings changed;
+        changed.holdLoop = 1.0f;
         changed.pan = 0.375f;
         static_cast<SamplerEngine*>(opaque)->setPadMixerSettings(0, changed);
     };
@@ -1005,6 +1033,7 @@ void suspendedHostRestore()
         PadData exported;
         sms::dsp::SamplePlaybackSettings actualPlayback;
         sms::dsp::SampleMixerSettings actualMixer;
+        actualMixer.holdLoop = 1.0f;
         for (unsigned pad = 0; pad < midichopper::kPadCount; ++pad) {
             check(engine.exportPublishedPad(pad, exported, &actualPlayback, &actualMixer) &&
                   exported.stereo == sources[pad].stereo && same(actualPlayback, playback[pad]) &&
@@ -1022,6 +1051,7 @@ void suspendedHostRestore()
     PadData cleared;
     sms::dsp::SamplePlaybackSettings clearedPlayback;
     sms::dsp::SampleMixerSettings clearedMixer;
+    clearedMixer.holdLoop = 1.0f;
     check(engine.exportPublishedPad(5, cleared, &clearedPlayback, &clearedMixer) &&
           cleared.frames == 0 && same(clearedPlayback, {}) && same(clearedMixer, {}),
           "queued clear immediately exports empty PCM and default settings");
@@ -1036,7 +1066,7 @@ void durableRestoreCapacityAndConsumption()
 {
     SamplerEngine engine(kRate, 0.001); // Minimum shared pool: 64 blocks of 1,024 frames.
     const auto full = sample(64 * 1024), small = sample(64, 0.5f);
-    check(engine.importPad(63, full), "fill shared capacity before durable restore");
+    check(importLooping(engine, 63, full), "fill shared capacity before durable restore");
     RealtimeCommandDispatcher dispatcher;
     dispatcher.activate();
     engine.setControlDispatcher(&dispatcher, RealtimeCommandDispatcher::dispatchFromEngine);
@@ -1048,11 +1078,13 @@ void durableRestoreCapacityAndConsumption()
           exported.stereo == full.stereo && engine.exportPublishedPad(63, exported) && exported.frames == 0,
           "restore clears old full pad before admitting earlier-index full replacement");
     sms::dsp::SampleMixerSettings changed;
+    changed.holdLoop = 1.0f;
     changed.pan = 0.5f; changed.gainDecibels = -6;
     engine.restorePadMixerSettings(0, changed);
     check(engine.restorePad(1, &small), "queue syntactically valid over-capacity batch");
     resumePendingState(engine);
     sms::dsp::SampleMixerSettings actualMixer;
+    actualMixer.holdLoop = 1.0f;
     sms::dsp::SamplePlaybackSettings actualPlayback;
     check(engine.stateRestoreFailed() && engine.exportPublishedPad(0, exported, &actualPlayback, &actualMixer) &&
           exported.stereo == full.stereo && same(actualMixer, {}) &&
@@ -1091,10 +1123,12 @@ void concurrentDurablePublication()
     firstPlayback.start = 0.125f; firstPlayback.end = 0.75f; firstPlayback.sustainLevel = 0.625f;
     secondPlayback.start = 0.25f; secondPlayback.end = 0.875f; secondPlayback.sustainLevel = 0.875f;
     sms::dsp::SampleMixerSettings firstMixer, secondMixer;
+    firstMixer.holdLoop = 1.0f;
+    secondMixer.holdLoop = 1.0f;
     firstMixer.pan = -0.5f; firstMixer.gainDecibels = -3;
     secondMixer.pan = 0.5f; secondMixer.gainDecibels = -9;
     firstMixer.reverse = 1.0f;
-    check(engine.importPad(0, first, false, &firstPlayback, &firstMixer), "install durable reader baseline");
+    check(importLooping(engine, 0, first, false, &firstPlayback, &firstMixer), "install durable reader baseline");
     setPerformancePad(engine);
     AudioHarness audio(engine);
     std::atomic<bool> finished{false};
@@ -1103,6 +1137,7 @@ void concurrentDurablePublication()
         PadData exported;
         sms::dsp::SamplePlaybackSettings playback;
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         while (!finished.load() || reads.load() < 2000) {
             check(engine.exportPublishedPad(0, exported, &playback, &mixer), "read queued durable state concurrently");
             check(exported.stereo == first.stereo || exported.stereo == second.stereo,
@@ -1135,6 +1170,7 @@ void concurrentDurablePublication()
     PadData exported;
     sms::dsp::SamplePlaybackSettings playback;
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     check(engine.exportPad(0, exported, &playback, &mixer) && exported.stereo == second.stereo &&
           same(playback, secondPlayback) && same(mixer, secondMixer),
           "bounded command commits final durable state before returning its snapshot");

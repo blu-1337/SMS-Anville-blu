@@ -29,6 +29,7 @@ struct Source {
         storage = pool.prepareImport(data, 2000.0, 4U);
         check(storage != nullptr, "prepare immutable source");
         storage->references.store(1U); // The engine owns the storage reference.
+        parameters.mixer.holdLoop = 1.0f; // Hold tests loop
         parameters.frames = data.frames;
         parameters.sourceSampleRate = data.sampleRate;
         parameters.sampleRate = 2000.0;

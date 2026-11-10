@@ -38,6 +38,7 @@ namespace sms::state {
     if (!legacy && !version2 && !version3 && !version4 && !version5 && !version6 && !version7)
         return false;
     const char* cursor = encoded + 4U;
+    // Last slot = hold loop: states older than MX7 had no such field and always looped, so they decode as On.
     float values[12]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f};
     const std::size_t count = legacy ? 3U : version7 ? 12U : version6 ? 11U : version5 ? 10U : version4 ? 9U : version3 ? 8U : 7U;
     for (std::size_t index = 0; index < count; ++index) {

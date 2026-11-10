@@ -471,7 +471,7 @@ private:
         std::atomic<float> mixerGlobalMixer{1.0f};
         std::atomic<float> mixerChokeGroup{0.0f};
         std::atomic<float> mixerOutputBus{0.0f};
-        std::atomic<float> mixerHoldLoop{1.0f};
+        std::atomic<float> mixerHoldLoop{0.0f};
         Pad() = default;
         Pad(const Pad&) = delete;
         Pad& operator=(const Pad&) = delete;

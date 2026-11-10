@@ -84,7 +84,7 @@ private:
     std::uint32_t chokeTotal_ = 0;
     bool releaseFromEnd_ = false;
     bool noteReleased_ = false;
-    bool holdLoop_ = true; // latched at trigger: Hold mode wraps while held
+    bool holdLoop_ = false; // latched at trigger: Hold mode wraps while held
     float velocityGain_ = 1.0f;
     float gainLeft_ = 1.0f;
     float gainRight_ = 1.0f;

@@ -13,6 +13,21 @@
 #include <utility>
 #include <vector>
 
+// These tests were written when pads looped in Hold mode by default. The product default is now
+// "play once" (LOOP off), so engine imports and mixer settings opt back in explicitly.
+template <class... Args>
+inline bool importLooping(midichopper::SamplerEngine& engine, const std::uint32_t pad, Args&&... args)
+{
+    const bool imported = engine.importPad(pad, std::forward<Args>(args)...);
+    if (imported) {
+        auto mixer = engine.padMixerSettings(pad);
+        mixer.holdLoop = 1.0f;
+        engine.setPadMixerSettings(pad, mixer);
+    }
+    return imported;
+}
+
+
 namespace {
 void check(bool value, const char* message) {
     if (!value) { std::cerr << "FAIL: " << message << '\n'; std::exit(EXIT_FAILURE); }
@@ -190,6 +205,7 @@ void color_effects()
 {
     using sms::dsp::ColorFilters;
     sms::dsp::SampleMixerSettings color;
+    color.holdLoop = 1.0f;
     ColorFilters filter;
     color.lowpass = 0.5f;
     color.filterSlope = 0.0f;
@@ -237,7 +253,7 @@ void color_effects()
         source.stereo[frame * 2U] = 0.3f + 0.01f * static_cast<float>(frame);
         source.stereo[frame * 2U + 1U] = -0.1f;
     }
-    check(engine.importPad(0, source), "import dirty source");
+    check(importLooping(engine, 0, source), "import dirty source");
     auto settings = engine.settings();
     settings.monitorInput = false;
     settings.dirty = 1.0f;
@@ -265,7 +281,7 @@ void color_effects()
             5000.0 * static_cast<double>(frame) / 48000.0);
         wave.stereo[frame * 2U] = wave.stereo[frame * 2U + 1U] = sample;
     }
-    check(filtered.importPad(0, wave), "import filter test tone");
+    check(importLooping(filtered, 0, wave), "import filter test tone");
     auto filterSettings = filtered.settings();
     filterSettings.monitorInput = false;
     filtered.setSettings(filterSettings);
@@ -299,10 +315,10 @@ void visible_waveform_range() {
     pad.frames = 256;
     pad.stereo.assign(512, 0.0f);
     pad.stereo[200U * 2U] = 0.8f;
-    check(engine.importPad(0, pad), "import first waveform pad");
+    check(importLooping(engine, 0, pad), "import first waveform pad");
     pad.stereo.assign(512, 0.0f);
     pad.stereo[20U * 2U + 1U] = -0.6f;
-    check(engine.importPad(1, pad), "import second waveform pad");
+    check(importLooping(engine, 1, pad), "import second waveform pad");
     sms::audio::WaveformSummary summary;
     check(engine.summarizePadRange(0, 2, 180, 290, summary) &&
           summary.frames == 110U && summary.pad == 0U &&
@@ -420,8 +436,8 @@ void rechop_and_raw_preview() {
     right.stereo = {5, 5, 6, 6, 7, 7, 8, 8};
     right.peak = 8.0f;
     right.rms = 1.0f;
-    check(engine.importPad(0, left) && engine.importPad(1, right) &&
-          engine.importPad(2, right), "import a contiguous pad run");
+    check(importLooping(engine, 0, left) && importLooping(engine, 1, right) &&
+          importLooping(engine, 2, right), "import a contiguous pad run");
     sms::dsp::SamplePlaybackSettings shaped;
     shaped.start = 0.25f;
     shaped.end = 0.75f;
@@ -432,6 +448,7 @@ void rechop_and_raw_preview() {
     engine.setPadPlaybackSettings(0, shaped);
     engine.setPadPlaybackSettings(2, shaped);
     sms::dsp::SampleMixerSettings mix;
+    mix.holdLoop = 1.0f;
     mix.gainDecibels = -6.0f;
     mix.pan = -0.25f;
     mix.tuneSemitones = 7.0f;
@@ -489,7 +506,7 @@ void rechop_and_raw_preview() {
     settings.armed = false;
     engine.setSettings(settings);
 
-    check(engine.importPad(3, right), "import an out-of-editor pad");
+    check(importLooping(engine, 3, right), "import an out-of-editor pad");
     midichopper::ChopMidiPreview midiPreview;
     midiPreview.active = true;
     midiPreview.firstPad = 0U;
@@ -657,6 +674,7 @@ void rechop_preserves_source_markers()
                     if (edgeMarkers & 2U) shaped.end = 1.0f;
                     if (reverse) shaped = sms::dsp::mirroredRegion(shaped);
                     sms::dsp::SampleMixerSettings mix;
+                    mix.holdLoop = 1.0f;
                     mix.reverse = reverse ? 1.0f : 0.0f;
                     mix.gainDecibels = -6.0f;
                     std::vector<float> original;
@@ -670,7 +688,7 @@ void rechop_preserves_source_markers()
                             data.stereo.push_back(-value);
                         }
                         original.insert(original.end(), data.stereo.begin(), data.stereo.end());
-                        check(engine.importPad(pad, data), "seed source-marker regression");
+                        check(importLooping(engine, pad, data), "seed source-marker regression");
                         engine.setPadPlaybackSettings(pad, shaped);
                         engine.setPadMixerSettings(pad, mix);
                     }
@@ -720,9 +738,10 @@ void rechop_repeated_asymmetric_markers()
             data.sampleRate = 1000;
             data.frames = 100 + pad * 60;
             data.stereo.resize(data.frames * 2U, 0.5f);
-            check(engine.importPad(pad, data), "seed unequal pads for repeated marker moves");
+            check(importLooping(engine, pad, data), "seed unequal pads for repeated marker moves");
             engine.setPadPlaybackSettings(pad, stored);
             sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = 1.0f;
             mixer.reverse = reverse ? 1.0f : 0.0f;
             engine.setPadMixerSettings(pad, mixer);
         }
@@ -752,7 +771,7 @@ void rechop_empty_neighbors()
     second.peak = 8.0f;
 
     midichopper::SamplerEngine emptyLeft(1000.0, 1.0);
-    check(emptyLeft.importPad(1, first) && emptyLeft.importPad(2, second),
+    check(importLooping(emptyLeft, 1, first) && importLooping(emptyLeft, 2, second),
           "import two pads after an empty slot");
     auto settings = emptyLeft.settings();
     settings.monitorInput = false;
@@ -776,7 +795,7 @@ void rechop_empty_neighbors()
     close(middle.stereo[0], 3.0f, "selected pad starts at the moved left cut");
 
     midichopper::SamplerEngine emptyRight(1000.0, 1.0);
-    check(emptyRight.importPad(0, first) && emptyRight.importPad(1, second),
+    check(importLooping(emptyRight, 0, first) && importLooping(emptyRight, 1, second),
           "import two pads before an empty slot");
     const std::array<std::int64_t, 2> claimRight{{0, -2}};
     check(emptyRight.rechopPads(0, 3, claimRight),
@@ -789,7 +808,7 @@ void rechop_empty_neighbors()
     close(right.stereo[0], 7.0f, "new right pad receives the source suffix");
 
     midichopper::SamplerEngine preserveEmpty(1000.0, 1.0);
-    check(preserveEmpty.importPad(0, first) && preserveEmpty.importPad(1, second),
+    check(importLooping(preserveEmpty, 0, first) && importLooping(preserveEmpty, 1, second),
           "import a second two-pad run");
     const std::array<std::int64_t, 2> moveOccupiedCut{{2, 0}};
     check(preserveEmpty.rechopPads(0, 3, moveOccupiedCut),
@@ -812,8 +831,9 @@ void long_sample_split_and_roll()
         song.stereo[static_cast<std::size_t>(frame) * 2U + 1U] = -value;
     }
     song.peak = song.rms = 1.0f;
-    check(engine.importPad(0, song), "one pad accepts audio longer than 30 seconds");
+    check(importLooping(engine, 0, song), "one pad accepts audio longer than 30 seconds");
     sms::dsp::SampleMixerSettings reverseMixer;
+    reverseMixer.holdLoop = 1.0f;
     reverseMixer.reverse = 1.0f;
     engine.setPadMixerSettings(0U, reverseMixer);
     const std::array<std::uint64_t, 2> generations{{
@@ -838,7 +858,7 @@ void long_sample_split_and_roll()
 
     song.frames = 1000000U;
     song.stereo.assign(static_cast<std::size_t>(song.frames) * 2U, 0.0f);
-    check(!engine.importPad(0, song) && engine.padMetadata(0).frames == 15500U,
+    check(!importLooping(engine, 0, song) && engine.padMetadata(0).frames == 15500U,
           "over-capacity import leaves the existing pad intact");
 }
 
@@ -865,6 +885,7 @@ void pad_structure_edits()
     shaped.sustainLevel = 0.6f;
     shaped.releaseSeconds = 0.3f;
     sms::dsp::SampleMixerSettings mixed;
+    mixed.holdLoop = 1.0f;
     mixed.gainDecibels = -4.0f;
     mixed.pan = 0.35f;
     mixed.tuneSemitones = -3.0f;
@@ -874,8 +895,8 @@ void pad_structure_edits()
     const auto second = sample(2000.0, {3.0f, 4.0f, 5.0f});
     const auto third = sample(32000.0, {6.0f});
     const auto later = sample(44100.0, {9.0f, 10.0f});
-    check(collapse.importPad(0, first) && collapse.importPad(3, second) &&
-          collapse.importPad(4, third) && collapse.importPad(6, later),
+    check(importLooping(collapse, 0, first) && importLooping(collapse, 3, second) &&
+          importLooping(collapse, 4, third) && importLooping(collapse, 6, later),
           "populate separated runs for gap collapse");
     collapse.setPadPlaybackSettings(3, shaped);
     collapse.setPadMixerSettings(3, mixed);
@@ -906,8 +927,8 @@ void pad_structure_edits()
 
     midichopper::SamplerEngine split(1000.0, 10.0);
     const auto source = sample(1000.0, {1.0f, 2.0f, 3.0f, 4.0f, 5.0f});
-    check(split.importPad(0, source) && split.importPad(1, second) &&
-          split.importPad(2, third), "populate a run for inserted split");
+    check(importLooping(split, 0, source) && importLooping(split, 1, second) &&
+          importLooping(split, 2, third), "populate a run for inserted split");
     split.setPadPlaybackSettings(0, shaped);
     split.setPadMixerSettings(0, mixed);
     sms::dsp::SamplePlaybackSettings shiftedPlayback = shaped;
@@ -946,7 +967,7 @@ void pad_structure_edits()
           "shifted pad keeps mixer settings");
 
     midichopper::SamplerEngine stale(1000.0, 10.0);
-    check(stale.importPad(0, source) && stale.importPad(1, second),
+    check(importLooping(stale, 0, source) && importLooping(stale, 1, second),
           "populate a stale split plan");
     std::array<std::uint64_t, 3> staleGenerations{};
     for (std::uint32_t pad = 0; pad < staleGenerations.size(); ++pad)
@@ -973,7 +994,7 @@ void pad_structure_edits()
     bankSettings.midiBankMode = midichopper::MidiBankMode::SelectedBank;
     bankSettings.padsPerBank = 12U;
     banked.setSettings(bankSettings);
-    check(banked.importPad(26U, source), "populate the end of a 12-pad visible bank");
+    check(importLooping(banked, 26U, source), "populate the end of a 12-pad visible bank");
     std::array<std::uint64_t, 2> bankGenerations{
         banked.padMetadata(26U).generation, banked.padMetadata(27U).generation};
     check(banked.splitPadAndShiftRight(26U, 27U, 2U, bankGenerations),
@@ -987,7 +1008,7 @@ void pad_structure_edits()
     pageSettings.midiBankMode = midichopper::MidiBankMode::AllBanks;
     pageSettings.padsPerBank = 8U;
     paged.setSettings(pageSettings);
-    check(paged.importPad(22U, source), "populate the end of an eight-pad page");
+    check(importLooping(paged, 22U, source), "populate the end of an eight-pad page");
     std::array<std::uint64_t, 2> pageGenerations{
         paged.padMetadata(22U).generation, paged.padMetadata(23U).generation};
     check(paged.splitPadAndShiftRight(22U, 23U, 2U, pageGenerations),
@@ -1030,7 +1051,7 @@ void cross_bank_edits_and_preview() {
                     const auto hidden = bank * kPadsPerBank + layout;
                     check(visiblePadIndex(hidden, layout, mode) == kPadCount,
                           "hidden slots are excluded from visible sequence");
-                    check(engine.importPad(hidden, sample(99.0f)), "populate hidden sentinel");
+                    check(importLooping(engine, hidden, sample(99.0f)), "populate hidden sentinel");
                     hiddenGenerations[hidden] = engine.padMetadata(hidden).generation;
                 }
             }
@@ -1040,7 +1061,7 @@ void cross_bank_edits_and_preview() {
                 if (mode == MidiBankMode::SelectedBank && layout < kPadsPerBank) {
                     for (std::uint32_t b = 0; b < kBankCount; ++b) {
                         const auto hidden = b * kPadsPerBank + layout;
-                        check(engine.importPad(hidden, sample(99.0f)), "restore hidden sentinel");
+                        check(importLooping(engine, hidden, sample(99.0f)), "restore hidden sentinel");
                         hiddenGenerations[hidden] = engine.padMetadata(hidden).generation;
                     }
                 }
@@ -1048,9 +1069,10 @@ void cross_bank_edits_and_preview() {
                 const auto first = padForVisibleIndex(firstIndex, layout, mode);
                 const auto next = padForVisibleIndex(firstIndex + 1U, layout, mode);
                 const auto third = padForVisibleIndex(firstIndex + 2U, layout, mode);
-                check(engine.importPad(first, sample(1.0f)) && engine.importPad(next, sample(5.0f)) &&
-                      engine.importPad(third, sample(9.0f)), "populate cross-bank cuts");
+                check(importLooping(engine, first, sample(1.0f)) && importLooping(engine, next, sample(5.0f)) &&
+                      importLooping(engine, third, sample(9.0f)), "populate cross-bank cuts");
                 sms::dsp::SampleMixerSettings mix;
+                mix.holdLoop = 1.0f;
                 mix.pan = 0.25f;
                 engine.setPadMixerSettings(next, mix);
                 std::array<sms::audio::WaveformSummary, 3> summaries;
@@ -1121,14 +1143,14 @@ void cross_bank_edits_and_preview() {
                 if (mode == MidiBankMode::SelectedBank && layout < kPadsPerBank) {
                     for (std::uint32_t b = 0; b < kBankCount; ++b) {
                         const auto hidden = b * kPadsPerBank + layout;
-                        check(engine.importPad(hidden, sample(99.0f)), "restore split hidden sentinel");
+                        check(importLooping(engine, hidden, sample(99.0f)), "restore split hidden sentinel");
                         hiddenGenerations[hidden] = engine.padMetadata(hidden).generation;
                     }
                 }
                 const auto lastIndex = total - 1U;
                 for (auto i = firstIndex; i < lastIndex; ++i) {
                     const auto pad = padForVisibleIndex(i, layout, mode);
-                    check(engine.importPad(pad, sample(static_cast<float>(i))), "populate split shift run");
+                    check(importLooping(engine, pad, sample(static_cast<float>(i))), "populate split shift run");
                     engine.setPadMixerSettings(pad, mix);
                 }
                 std::array<std::uint64_t, kPadCount> expected{};
@@ -1237,7 +1259,7 @@ void bank_and_layout_mapping() {
     pad.frames = 4;
     pad.stereo.assign(8U, 1.0f);
     pad.peak = pad.rms = 1.0f;
-    check(e.importPad(16, pad), "import pad in second bank");
+    check(importLooping(e, 16, pad), "import pad in second bank");
     const midichopper::MidiEvent play{0, 36, 127, midichopper::MidiEventType::NoteOn};
     e.process(nullptr, nullptr, output, output, 1, &play, 1);
     check(e.padMetadata(16).active, "MIDI playback targets the selected bank");
@@ -1245,14 +1267,14 @@ void bank_and_layout_mapping() {
     settings.padsPerBank = 8;
     settings.activeBank = 2;
     e.setSettings(settings);
-    check(e.importPad(32, pad), "import pad in eight-pad bank");
+    check(importLooping(e, 32, pad), "import pad in eight-pad bank");
     e.process(nullptr, nullptr, output, output, 1, &play, 1);
     check(e.padMetadata(32).active, "eight-pad layout maps from the bank base");
 
     settings.padsPerBank = 16;
     settings.activeBank = 0;
     e.setSettings(settings);
-    check(e.importPad(12, pad), "import pad hidden by smaller layouts");
+    check(importLooping(e, 12, pad), "import pad hidden by smaller layouts");
     settings.padsPerBank = 12;
     e.setSettings(settings);
     const midichopper::MidiEvent hiddenPlay{0, 48, 127, midichopper::MidiEventType::NoteOn};
@@ -1278,11 +1300,12 @@ void hold_loop_toggle()
             source.sampleRate = 1000.0;
             source.frames = 32U;
             source.stereo.assign(64U, 0.25f);
-            check(engine.importPad(0U, source), "import hold loop source");
+            check(importLooping(engine, 0U, source), "import hold loop source");
             sms::dsp::SamplePlaybackSettings playback;
             playback.releaseSeconds = 0.0f;
             engine.setPadPlaybackSettings(0U, playback);
             sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = 1.0f;
             mixer.holdLoop = loopFlag;
             engine.setPadMixerSettings(0U, mixer);
             std::array<float, 8> left{}, right{};
@@ -1324,7 +1347,7 @@ void hold_release_after_bank_switch()
                 source.stereo[frame * 2U] = 0.25f;
                 source.stereo[frame * 2U + 1U] = -0.5f;
             }
-            check(engine.importPad(0U, source) && engine.importPad(otherPad, source),
+            check(importLooping(engine, 0U, source) && importLooping(engine, otherPad, source),
                   "import Hold bank-switch sources");
             sms::dsp::SamplePlaybackSettings playback;
             playback.releaseSeconds = releaseSeconds;
@@ -1375,7 +1398,7 @@ void hold_note_ownership()
     source.sampleRate = 1000.0;
     source.frames = 32U;
     source.stereo.assign(64U, 0.25f);
-    check(engine.importPad(0U, source) && engine.importPad(16U, source),
+    check(importLooping(engine, 0U, source) && importLooping(engine, 16U, source),
           "import MIDI ownership sources");
     float left[2]{}, right[2]{};
     const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
@@ -1462,7 +1485,7 @@ void all_bank_midi_mapping() {
     pad.frames = 16;
     pad.stereo.assign(32U, 1.0f);
     pad.peak = pad.rms = 1.0f;
-    check(e.importPad(0, pad) && e.importPad(16, pad) && e.importPad(63, pad),
+    check(importLooping(e, 0, pad) && importLooping(e, 16, pad) && importLooping(e, 63, pad),
           "import pads across all MIDI banks");
 
     float outputLeft[2]{};
@@ -1497,7 +1520,7 @@ void all_bank_midi_mapping() {
 
     settings.padsPerBank = 8;
     e.setSettings(settings);
-    check(e.importPad(8, pad), "import the first Bank B pad in the eight-pad layout");
+    check(importLooping(e, 8, pad), "import the first Bank B pad in the eight-pad layout");
     const midichopper::MidiEvent regroupedOn{0, 44, 127, midichopper::MidiEventType::NoteOn};
     e.process(nullptr, nullptr, outputLeft, outputRight, 1, &regroupedOn, 1);
     check(e.padMetadata(8).active &&
@@ -1562,7 +1585,7 @@ void capture_target_selection() {
     midichopper::SamplerEngine selected(1000.0, 1.0);
     check(selected.captureTargetPad() == midichopper::kPadCount,
           "Play mode has no capture target");
-    check(selected.importPad(16, pad) && selected.importPad(17, pad),
+    check(importLooping(selected, 16, pad) && importLooping(selected, 17, pad),
           "populate leading Selected Bank pads");
     auto settings = selected.settings();
     settings.armed = true;
@@ -1603,7 +1626,7 @@ void capture_target_selection() {
           "mid-capture routing changes preserve the established sequence");
 
     midichopper::SamplerEngine unique(1000.0, 1.0);
-    check(unique.importPad(16, pad), "populate the leading All Banks pad");
+    check(importLooping(unique, 16, pad), "populate the leading All Banks pad");
     settings = unique.settings();
     settings.armed = true;
     settings.activeBank = 2;
@@ -1615,7 +1638,7 @@ void capture_target_selection() {
 
     midichopper::SamplerEngine full(1000.0, 1.0);
     for (std::uint32_t localPad = 0; localPad < 8U; ++localPad)
-        check(full.importPad(16U + localPad, pad), "populate a full visible bank");
+        check(importLooping(full, 16U + localPad, pad), "populate a full visible bank");
     settings = full.settings();
     settings.armed = true;
     settings.activeBank = 2;
@@ -1679,7 +1702,7 @@ void playback_and_rate_conversion() {
     midichopper::SamplerEngine e(1000.0, 1.0);
     midichopper::PadData source; source.sampleRate = 500.0; source.frames = 2;
     source.stereo = {1, 1, -1, -1}; source.peak = 1.0f; source.rms = 1.0f;
-    check(e.importPad(0, source), "import source-rate pad");
+    check(importLooping(e, 0, source), "import source-rate pad");
     float outL[5]{}; float outR[5]{};
     midichopper::MidiEvent on{0, 36, 127, midichopper::MidiEventType::NoteOn};
     e.process(nullptr, nullptr, outL, outR, 5, &on, 1);
@@ -1696,7 +1719,7 @@ void playback_trigger_notifications() {
     source.frames = 100;
     source.stereo.assign(200U, 1.0f);
     source.peak = source.rms = 1.0f;
-    check(e.importPad(0, source) && e.importPad(1, source),
+    check(importLooping(e, 0, source) && importLooping(e, 1, source),
           "import pads for playback notifications");
 
     float left[1]{};
@@ -1758,7 +1781,7 @@ void shared_storage_blocks() {
     }
     source.peak = 0.75f;
     source.rms = 0.4f;
-    check(e.importPad(0, source), "import sample spanning storage blocks");
+    check(importLooping(e, 0, source), "import sample spanning storage blocks");
     midichopper::PadData restored;
     check(e.exportPad(0, restored), "export sample spanning storage blocks");
     close(restored.stereo[2046], source.stereo[2046], "sample before block boundary survives");
@@ -1766,7 +1789,7 @@ void shared_storage_blocks() {
     close(restored.stereo.back(), source.stereo.back(), "sample tail survives pooled storage");
 
     e.clearPad(0);
-    check(e.importPad(63, source), "cleared blocks are reusable by another bank");
+    check(importLooping(e, 63, source), "cleared blocks are reusable by another bank");
     check(e.exportPad(63, restored), "export reused storage blocks");
     close(restored.stereo[2048], source.stereo[2048], "reused block retains imported audio");
 }
@@ -1778,7 +1801,7 @@ void maximum_voice_limit() {
     source.frames = 32;
     source.stereo.assign(64U, 1.0f);
     source.peak = source.rms = 1.0f;
-    check(e.importPad(0, source) && e.importPad(1, source) && e.importPad(2, source),
+    check(importLooping(e, 0, source) && importLooping(e, 1, source) && importLooping(e, 2, source),
           "import polyphony test pads");
 
     auto settings = e.settings();
@@ -1821,7 +1844,7 @@ void stop_all_playback()
     source.sampleRate = 1000.0;
     source.frames = 100U;
     source.stereo.assign(200U, 1.0f);
-    check(engine.importPad(0, source) && engine.importPad(1, source),
+    check(importLooping(engine, 0, source) && importLooping(engine, 1, source),
           "import stop-button test pads");
     auto settings = engine.settings();
     settings.monitorInput = false;
@@ -1868,7 +1891,7 @@ void sample_region_and_adsr() {
     source.frames = 8;
     source.stereo = {1,1, 2,2, 3,3, 4,4, 5,5, 6,6, 7,7, 8,8};
     source.peak = 8.0f;
-    check(e.importPad(0, source), "import sample-editor source");
+    check(importLooping(e, 0, source), "import sample-editor source");
 
     sms::dsp::SamplePlaybackSettings region;
     region.start = 0.25f;
@@ -1889,7 +1912,7 @@ void sample_region_and_adsr() {
     source.frames = 6;
     source.stereo.assign(12U, 1.0f);
     source.peak = source.rms = 1.0f;
-    check(envelopeEngine.importPad(0, source), "import ADSR source");
+    check(importLooping(envelopeEngine, 0, source), "import ADSR source");
     sms::dsp::SamplePlaybackSettings envelope;
     envelope.attackSeconds = 0.002f;
     envelope.decaySeconds = 0.0f;
@@ -1931,8 +1954,9 @@ void hold_region_looping()
         settings.monitorInput = false;
         settings.playbackMode = mode;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import trimmed stereo loop");
+        check(importLooping(engine, 0U, loop_source()), "import trimmed stereo loop");
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = reverse ? 1.0f : 0.0f;
         engine.setPadMixerSettings(0U, mixer);
         sms::dsp::SamplePlaybackSettings region;
@@ -1964,13 +1988,14 @@ void hold_region_looping()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source(fast ? 1625.0 : 1500.0)),
+        check(importLooping(engine, 0U, loop_source(fast ? 1625.0 : 1500.0)),
               "import resampled loop");
         sms::dsp::SamplePlaybackSettings region;
         region.start = 0.25f;
         region.end = 0.75f;
         engine.setPadPlaybackSettings(0U, region);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.tuneSemitones = fast ? 24.0f : -12.0f;
         mixer.reverse = reverse ? 1.0f : 0.0f;
         engine.setPadMixerSettings(0U, mixer);
@@ -1998,8 +2023,9 @@ void hold_loop_release_and_edits()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import release loop");
+        check(importLooping(engine, 0U, loop_source()), "import release loop");
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = reverse ? 1.0f : 0.0f;
         engine.setPadMixerSettings(0U, mixer);
         sms::dsp::SamplePlaybackSettings region;
@@ -2036,7 +2062,7 @@ void hold_loop_release_and_edits()
     settings.monitorInput = false;
     settings.playbackMode = PlaybackMode::Hold;
     engine.setSettings(settings);
-    check(engine.importPad(0U, loop_source()), "import live End loop");
+    check(importLooping(engine, 0U, loop_source()), "import live End loop");
     sms::dsp::SamplePlaybackSettings region;
     region.start = 0.25f;
     region.end = 0.75f;
@@ -2058,6 +2084,7 @@ void hold_loop_release_and_edits()
     region.end = 0.75f;
     engine.setPadPlaybackSettings(0U, region);
     sms::dsp::SampleMixerSettings reverse;
+    reverse.holdLoop = 1.0f;
     reverse.reverse = 1.0f;
     reverse.tuneSemitones = -12.0f;
     engine.setPadMixerSettings(0U, reverse);
@@ -2087,8 +2114,9 @@ void live_loop_region_edits()
             settings.playbackMode = audition ? PlaybackMode::OneShot : PlaybackMode::Hold;
             settings.reverse = globalReverse;
             engine.setSettings(settings);
-            check(engine.importPad(0U, loop_source()), "import live loop-boundary source");
+            check(importLooping(engine, 0U, loop_source()), "import live loop-boundary source");
             sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = 1.0f;
             mixer.reverse = padReverse ? 1.0f : 0.0f;
             mixer.tuneSemitones = -12.0f;
             engine.setPadMixerSettings(0U, mixer);
@@ -2161,9 +2189,10 @@ void playback_direction_latched_at_trigger()
         settings.maxVoices = 2U;
         engine.setSettings(settings);
         const auto source = loop_source();
-        check(engine.importPad(0U, source) && engine.importPad(1U, source),
+        check(importLooping(engine, 0U, source) && importLooping(engine, 1U, source),
               "import independent direction pads");
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = initiallyReverse ? 1.0f : 0.0f;
         engine.setPadMixerSettings(0U, mixer);
         const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
@@ -2213,12 +2242,13 @@ void reverse_boundaries_and_envelopes()
         settings.monitorInput = false;
         settings.playbackMode = mode;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import reverse boundary source");
+        check(importLooping(engine, 0U, loop_source()), "import reverse boundary source");
         sms::dsp::SamplePlaybackSettings region;
         region.start = singleFrame ? 0.0f : 0.25f;
         region.end = singleFrame ? 0.125f : 0.75f;
         engine.setPadPlaybackSettings(0U, region);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = 1.0f;
         mixer.tuneSemitones = singleFrame ? 24.0f : -12.0f;
         engine.setPadMixerSettings(0U, mixer);
@@ -2245,7 +2275,7 @@ void reverse_boundaries_and_envelopes()
         auto settings = engine.settings();
         settings.monitorInput = false;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import direction ADSR source");
+        check(importLooping(engine, 0U, loop_source()), "import direction ADSR source");
         sms::dsp::SamplePlaybackSettings region;
         region.attackSeconds = 0.002f;
         region.decaySeconds = 0.002f;
@@ -2253,6 +2283,7 @@ void reverse_boundaries_and_envelopes()
         region.releaseSeconds = 0.002f;
         engine.setPadPlaybackSettings(0U, region);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = reverse ? 1.0f : 0.0f;
         engine.setPadMixerSettings(0U, mixer);
         const MidiEvent events[]{{0U, 36U, 127U, MidiEventType::NoteOn},
@@ -2280,12 +2311,13 @@ void asymmetric_trim_reverse_coordinates()
     auto settings = engine.settings();
     settings.monitorInput = false;
     engine.setSettings(settings);
-    check(engine.importPad(0U, loop_source()), "import asymmetric reverse region");
+    check(importLooping(engine, 0U, loop_source()), "import asymmetric reverse region");
     sms::dsp::SamplePlaybackSettings region;
     region.start = 0.125f; // virtual frames [1, 5)
     region.end = 0.625f;
     engine.setPadPlaybackSettings(0U, region);
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.reverse = 1.0f;
     engine.setPadMixerSettings(0U, mixer);
 
@@ -2325,7 +2357,7 @@ void live_editor_flip_preserves_voice()
     settings.maxVoices = 2U;
     engine.setSettings(settings);
     const auto source = loop_source();
-    check(engine.importPad(0U, source) && engine.importPad(1U, source),
+    check(importLooping(engine, 0U, source) && importLooping(engine, 1U, source),
           "import live editor flip voices");
     sms::dsp::SamplePlaybackSettings playback;
     playback.start = 0.125f;
@@ -2336,6 +2368,7 @@ void live_editor_flip_preserves_voice()
     playback.releaseSeconds = 0.002f;
     engine.setPadPlaybackSettings(0U, playback);
     sms::dsp::SampleMixerSettings forward;
+    forward.holdLoop = 1.0f;
     engine.setPadMixerSettings(0U, forward);
     const MidiEvent starts[]{{0U, 36U, 127U, MidiEventType::NoteOn},
                              {0U, 37U, 127U, MidiEventType::NoteOn}};
@@ -2350,6 +2383,7 @@ void live_editor_flip_preserves_voice()
     mirrored.start = 0.375f;
     mirrored.end = 0.875f;
     sms::dsp::SampleMixerSettings reverse;
+    reverse.holdLoop = 1.0f;
     reverse.reverse = 1.0f;
     engine.restorePadEditorSettings(0U, mirrored, reverse);
     engine.process(nullptr, nullptr, left, right, 2U);
@@ -2361,6 +2395,7 @@ void live_editor_flip_preserves_voice()
     // active without retriggering or changing the other pad's voice.
     auto back = playback;
     sms::dsp::SampleMixerSettings forwardAgain;
+    forwardAgain.holdLoop = 1.0f;
     engine.restorePadEditorSettings(0U, mirrored, reverse);
     engine.restorePadEditorSettings(0U, back, forwardAgain);
     const MidiEvent offs[]{{0U, 36U, 0U, MidiEventType::NoteOff},
@@ -2382,12 +2417,13 @@ void live_editor_flip_fractional_and_single_frame()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import fractional live flip source");
+        check(importLooping(engine, 0U, loop_source()), "import fractional live flip source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
         engine.setPadPlaybackSettings(0U, playback);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.tuneSemitones = -12.0f;
         engine.setPadMixerSettings(0U, mixer);
         const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
@@ -2411,7 +2447,7 @@ void live_editor_flip_fractional_and_single_frame()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import one-frame live flip source");
+        check(importLooping(engine, 0U, loop_source()), "import one-frame live flip source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.end = 0.125f;
         engine.setPadPlaybackSettings(0U, playback);
@@ -2422,6 +2458,7 @@ void live_editor_flip_fractional_and_single_frame()
         playback.start = 0.875f;
         playback.end = 1.0f;
         sms::dsp::SampleMixerSettings reverse;
+        reverse.holdLoop = 1.0f;
         reverse.reverse = 1.0f;
         engine.restorePadEditorSettings(0U, playback, reverse);
         engine.process(nullptr, nullptr, left, right, 2U);
@@ -2440,7 +2477,7 @@ void live_editor_flip_during_one_shot_and_release()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::OneShot;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import live OneShot flip source");
+        check(importLooping(engine, 0U, loop_source()), "import live OneShot flip source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
@@ -2453,6 +2490,7 @@ void live_editor_flip_during_one_shot_and_release()
         playback.start = 0.375f;
         playback.end = 0.875f;
         sms::dsp::SampleMixerSettings reverse;
+        reverse.holdLoop = 1.0f;
         reverse.reverse = 1.0f;
         engine.restorePadEditorSettings(0U, playback, reverse);
         engine.process(nullptr, nullptr, left, right, 2U);
@@ -2466,7 +2504,7 @@ void live_editor_flip_during_one_shot_and_release()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import Hold release live flip source");
+        check(importLooping(engine, 0U, loop_source()), "import Hold release live flip source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
@@ -2480,6 +2518,7 @@ void live_editor_flip_during_one_shot_and_release()
         playback.start = 0.375f;
         playback.end = 0.875f;
         sms::dsp::SampleMixerSettings reverse;
+        reverse.holdLoop = 1.0f;
         reverse.reverse = 1.0f;
         engine.restorePadEditorSettings(0U, playback, reverse);
         engine.process(nullptr, nullptr, left, right, 4U);
@@ -2499,12 +2538,13 @@ void live_editor_flip_fractional_seam_and_coalesced_noop()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import fractional seam flip source");
+        check(importLooping(engine, 0U, loop_source()), "import fractional seam flip source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
         engine.setPadPlaybackSettings(0U, playback);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.tuneSemitones = -12.0f;
         engine.setPadMixerSettings(0U, mixer);
         const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
@@ -2529,12 +2569,13 @@ void live_editor_flip_fractional_seam_and_coalesced_noop()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import coalesced no-op flip source");
+        check(importLooping(engine, 0U, loop_source()), "import coalesced no-op flip source");
         sms::dsp::SamplePlaybackSettings original;
         original.start = 0.125f;
         original.end = 0.625f;
         engine.setPadPlaybackSettings(0U, original);
         sms::dsp::SampleMixerSettings forward;
+        forward.holdLoop = 1.0f;
         engine.setPadMixerSettings(0U, forward);
         const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
         float left[3]{}, right[3]{};
@@ -2543,6 +2584,7 @@ void live_editor_flip_fractional_seam_and_coalesced_noop()
         mirrored.start = 0.375f;
         mirrored.end = 0.875f;
         sms::dsp::SampleMixerSettings reverse;
+        reverse.holdLoop = 1.0f;
         reverse.reverse = 1.0f;
         engine.restorePadEditorSettings(0U, mirrored, reverse);
         engine.restorePadEditorSettings(0U, original, forward);
@@ -2551,6 +2593,7 @@ void live_editor_flip_fractional_seam_and_coalesced_noop()
         close(left[1], 4.0f, "coalesced forward cuts retain their original progression");
         sms::dsp::SamplePlaybackSettings actualPlayback;
         sms::dsp::SampleMixerSettings actualMixer;
+        actualMixer.holdLoop = 1.0f;
         engine.snapshotPadSettings(0U, actualPlayback, actualMixer);
         check(actualPlayback.start == original.start && actualPlayback.end == original.end &&
               actualMixer.reverse == 0.0f,
@@ -2566,7 +2609,7 @@ void editor_flip_target_survives_later_mixer_restore()
     settings.monitorInput = false;
     settings.playbackMode = PlaybackMode::Hold;
     engine.setSettings(settings);
-    check(engine.importPad(0U, loop_source()), "import editor-target merge source");
+    check(importLooping(engine, 0U, loop_source()), "import editor-target merge source");
     const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
     float left[2]{}, right[2]{};
     engine.process(nullptr, nullptr, left, right, 2U, &on, 1U);
@@ -2575,15 +2618,18 @@ void editor_flip_target_survives_later_mixer_restore()
 
     sms::dsp::SamplePlaybackSettings playback;
     sms::dsp::SampleMixerSettings reverse;
+    reverse.holdLoop = 1.0f;
     reverse.reverse = 1.0f;
     engine.restorePadEditorSettings(0U, playback, reverse);
     sms::dsp::SampleMixerSettings forward;
+    forward.holdLoop = 1.0f;
     engine.restorePadMixerSettings(0U, forward);
     engine.process(nullptr, nullptr, left, right, 2U);
     close(left[0], 3.0f, "editor flip target applies despite later durable forward mixer state");
     close(left[1], 2.0f, "active voice follows the explicit editor flip target");
     sms::dsp::SamplePlaybackSettings actualPlayback;
     sms::dsp::SampleMixerSettings actualMixer;
+    actualMixer.holdLoop = 1.0f;
     engine.snapshotPadSettings(0U, actualPlayback, actualMixer);
     check(actualMixer.reverse == 0.0f,
           "ordinary mixer restore remains the desired next-trigger direction");
@@ -2605,7 +2651,7 @@ void global_reverse_xor_matrix()
             settings.playbackMode = PlaybackMode::OneShot;
             settings.reverse = globalReverse;
             engine.setSettings(settings);
-            check(engine.importPad(0U, loop_source()), "import global XOR ramp source");
+            check(importLooping(engine, 0U, loop_source()), "import global XOR ramp source");
             sms::dsp::SamplePlaybackSettings playback;
             playback.start = 0.125f;
             playback.end = 0.625f;
@@ -2614,6 +2660,7 @@ void global_reverse_xor_matrix()
             playback.sustainLevel = 0.5f;
             engine.setPadPlaybackSettings(0U, playback);
             sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = 1.0f;
             mixer.reverse = localReverse ? 1.0f : 0.0f;
             mixer.tuneSemitones = -12.0f;
             engine.setPadMixerSettings(0U, mixer);
@@ -2631,6 +2678,7 @@ void global_reverse_xor_matrix()
             }
             sms::dsp::SamplePlaybackSettings actualPlayback;
             sms::dsp::SampleMixerSettings actualMixer;
+            actualMixer.holdLoop = 1.0f;
             engine.snapshotPadSettings(0U, actualPlayback, actualMixer);
             check(actualPlayback.start == playback.start && actualPlayback.end == playback.end &&
                   actualMixer.reverse == mixer.reverse,
@@ -2647,9 +2695,11 @@ void global_reverse_live_voices_and_editor()
     settings.playbackMode = PlaybackMode::Hold;
     settings.maxVoices = 2U;
     engine.setSettings(settings);
-    check(engine.importPad(0U, loop_source()) && engine.importPad(1U, loop_source()),
+    check(importLooping(engine, 0U, loop_source()) && importLooping(engine, 1U, loop_source()),
           "import independent global reverse voices");
     sms::dsp::SampleMixerSettings forward, localReverse;
+    forward.holdLoop = 1.0f;
+    localReverse.holdLoop = 1.0f;
     localReverse.reverse = 1.0f;
     engine.setPadMixerSettings(0U, forward);
     engine.setPadMixerSettings(1U, localReverse);
@@ -2709,7 +2759,7 @@ void global_reverse_audition_release_and_raw_preview()
         auto settings = engine.settings();
         settings.monitorInput = false;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import global reverse audition source");
+        check(importLooping(engine, 0U, loop_source()), "import global reverse audition source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
@@ -2735,7 +2785,7 @@ void global_reverse_audition_release_and_raw_preview()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import global reverse release source");
+        check(importLooping(engine, 0U, loop_source()), "import global reverse release source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
@@ -2761,12 +2811,13 @@ void global_reverse_audition_release_and_raw_preview()
         settings.monitorInput = false;
         settings.playbackMode = PlaybackMode::Hold;
         engine.setSettings(settings);
-        check(engine.importPad(0U, loop_source()), "import global seam turn source");
+        check(importLooping(engine, 0U, loop_source()), "import global seam turn source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
         playback.end = 0.625f;
         engine.setPadPlaybackSettings(0U, playback);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.tuneSemitones = -12.0f;
         engine.setPadMixerSettings(0U, mixer);
         const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
@@ -2794,7 +2845,7 @@ void independent_pad_audition()
             settings.monitorInput = false;
             settings.playbackMode = mode;
             engine.setSettings(settings);
-            check(engine.importPad(0U, loop_source()), "import editor audition");
+            check(importLooping(engine, 0U, loop_source()), "import editor audition");
             sms::dsp::SamplePlaybackSettings region;
             region.start = 0.25f;
             region.end = 0.75f;
@@ -2803,6 +2854,7 @@ void independent_pad_audition()
             region.releaseSeconds = loop ? 0.008f : 0.0f;
             engine.setPadPlaybackSettings(0U, region);
             sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = 1.0f;
             mixer.gainDecibels = -6.0205999f;
             mixer.pan = 0.5f;
             mixer.reverse = reverse ? 1.0f : 0.0f;
@@ -2850,8 +2902,9 @@ std::vector<float> choke_run(const float groupA, const float groupB, const bool 
         source.sampleRate = 1000.0;
         source.frames = 200U;
         source.stereo.assign(400U, pad == 0U ? 1.0f : 100.0f);
-        check(engine.importPad(pad, source), "choke import");
+        check(importLooping(engine, pad, source), "choke import");
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.chokeGroup = pad == 0U ? groupA : groupB;
         engine.setPadMixerSettings(pad, mixer);
     }
@@ -2895,8 +2948,9 @@ void multi_output_routing()
         source.sampleRate = 1000.0;
         source.frames = 50U;
         source.stereo.assign(100U, 1.0f);
-        check(engine.importPad(0U, source), "routing import");
+        check(importLooping(engine, 0U, source), "routing import");
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.outputBus = bus;
         engine.setPadMixerSettings(0U, mixer);
         std::vector<float> buffers(32U * 20U, 9.0f);
@@ -2940,7 +2994,7 @@ void pad_audition_lifecycle()
     settings.maxVoices = 2U;
     engine.setSettings(settings);
     for (std::uint32_t pad = 0U; pad < 3U; ++pad)
-        check(engine.importPad(pad, loop_source()), "import audition lifecycle pads");
+        check(importLooping(engine, pad, loop_source()), "import audition lifecycle pads");
     float left[2]{}, right[2]{};
     const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
     engine.process(nullptr, nullptr, left, right, 1U, &on, 1U);
@@ -2987,7 +3041,7 @@ void arm_stops_hold_without_interrupting_capture()
     settings.monitorInput = false;
     settings.playbackMode = PlaybackMode::Hold;
     engine.setSettings(settings);
-    check(engine.importPad(0U, loop_source()), "import Hold source before Arm");
+    check(importLooping(engine, 0U, loop_source()), "import Hold source before Arm");
     sms::dsp::SamplePlaybackSettings playback;
     playback.releaseSeconds = 0.008f;
     engine.setPadPlaybackSettings(0U, playback);
@@ -3026,7 +3080,7 @@ void arm_stops_hold_without_interrupting_capture()
     settings.armed = false;
     settings.playbackMode = PlaybackMode::OneShot;
     oneShot.setSettings(settings);
-    check(oneShot.importPad(0U, loop_source()), "import OneShot source before Arm");
+    check(importLooping(oneShot, 0U, loop_source()), "import OneShot source before Arm");
     oneShot.process(nullptr, nullptr, left.data(), right.data(), 1U, &on, 1U);
     settings.armed = true;
     oneShot.setSettings(settings);
@@ -3053,9 +3107,10 @@ void sample_mixer_and_varispeed() {
     source.stereo = {1,10, 2,20, 3,30, 4,40, 5,50, 6,60};
     source.peak = 60.0f;
     source.rms = 20.0f;
-    check(engine.importPad(0, source), "import mixer source");
+    check(importLooping(engine, 0, source), "import mixer source");
 
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.gainDecibels = -6.0205999f;
     mixer.pan = -1.0f;
     mixer.tuneSemitones = 12.0f;
@@ -3098,7 +3153,7 @@ void sample_mixer_and_varispeed() {
     combinedSettings.pan = 1.0f;
     combinedSettings.tuneSemitones = 5.0f;
     combined.setSettings(combinedSettings);
-    check(combined.importPad(0, source), "import global mixer source");
+    check(importLooping(combined, 0, source), "import global mixer source");
     mixer = {};
     mixer.pan = -0.25f;
     mixer.tuneSemitones = 7.0f;
@@ -3118,7 +3173,7 @@ void sample_mixer_and_varispeed() {
     sms::dsp::SamplePlaybackSettings editedPlayback;
     editedPlayback.start = 0.25f;
     engine.setPadPlaybackSettings(0, editedPlayback);
-    check(engine.importPad(0, source), "replacement import succeeds");
+    check(importLooping(engine, 0, source), "replacement import succeeds");
     const auto reset = engine.padMixerSettings(0);
     close(reset.gainDecibels, 0.0f, "import resets mixer gain");
     close(reset.pan, 0.0f, "import resets mixer pan");
@@ -3132,7 +3187,7 @@ void sample_mixer_and_varispeed() {
     engine.setPadMixerSettings(0, mixer);
     editedPlayback.start = 0.125f;
     engine.setPadPlaybackSettings(0, editedPlayback);
-    check(engine.importPad(0, source, false), "project-state audio restore succeeds");
+    check(importLooping(engine, 0, source, false), "project-state audio restore succeeds");
     close(engine.padPlaybackSettings(0).start, editedPlayback.start,
           "project-state audio restore preserves cut and ADSR state ordering");
     close(engine.padMixerSettings(0).gainDecibels, mixer.gainDecibels,
@@ -3150,7 +3205,7 @@ void live_sample_editor_updates() {
     source.frames = 100U;
     source.stereo.assign(200U, 1.0f);
     source.peak = source.rms = 1.0f;
-    check(engine.importPad(0, source), "import live editor source");
+    check(importLooping(engine, 0, source), "import live editor source");
 
     const midichopper::MidiEvent on{0, 36, 127, midichopper::MidiEventType::NoteOn};
     float left[4]{};
@@ -3161,6 +3216,7 @@ void live_sample_editor_updates() {
           "active sample reports an encoded waveform playhead");
 
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.gainDecibels = -6.0205999f;
     mixer.pan = 1.0f;
     mixer.tuneSemitones = 12.0f;
@@ -3204,7 +3260,7 @@ void live_sample_editor_updates() {
 
     midichopper::SamplerEngine extended(1000.0, 1.0);
     extended.setSettings(settings);
-    check(extended.importPad(0, source), "import source for live End extension");
+    check(importLooping(extended, 0, source), "import source for live End extension");
     playback = {};
     playback.end = 0.1f;
     playback.releaseSeconds = 0.004f;
@@ -3234,8 +3290,9 @@ void repeating_live_envelopes() {
         source.sampleRate = 1000.0;
         source.frames = 8U;
         source.stereo.assign(16U, 1.0f);
-        check(engine.importPad(0U, source), "import repeating envelope source");
+        check(importLooping(engine, 0U, source), "import repeating envelope source");
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = reverse ? 1.0f : 0.0f;
         engine.setPadMixerSettings(0U, mixer);
         float left[16]{}, right[16]{};
@@ -3282,7 +3339,7 @@ void repeating_live_envelopes() {
         source.sampleRate = 1000.0;
         source.frames = 8U;
         source.stereo.assign(16U, 1.0f);
-        check(engine.importPad(0U, source), "import multi-pass release source");
+        check(importLooping(engine, 0U, source), "import multi-pass release source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.releaseSeconds = 0.012f;
         engine.setPadPlaybackSettings(0U, playback);
@@ -3326,6 +3383,7 @@ void sample_global_mixer_bypass() {
             source.stereo.push_back(-static_cast<float>(frame) / 256.0f);
         }
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.globalMixer = 0.0f;
         mixer.gainDecibels = -6.0205999f;
         mixer.pan = -0.25f;
@@ -3377,7 +3435,7 @@ void sample_global_mixer_bypass() {
     settings.reverse = true;
     settings.playbackMode = PlaybackMode::Hold;
     engine.setSettings(settings);
-    check(engine.importPad(0U, loop_source()), "import live bypass turn source");
+    check(importLooping(engine, 0U, loop_source()), "import live bypass turn source");
     sms::dsp::SamplePlaybackSettings region;
     region.start = 0.125f;
     region.end = 0.625f;
@@ -3387,6 +3445,7 @@ void sample_global_mixer_bypass() {
     engine.process(nullptr, nullptr, left, right, 2U, &on, 1U);
     close(left[0], 5.0f, "default-enabled pad uses global Reverse with mirrored cuts");
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.globalMixer = 0.0f;
     engine.restorePadMixerSettings(0U, mixer);
     engine.process(nullptr, nullptr, left, right, 2U);
@@ -3411,7 +3470,7 @@ void sample_global_mixer_bypass() {
     SamplerEngine coalesced(1000.0, 1.0);
     settings.playbackMode = PlaybackMode::OneShot;
     coalesced.setSettings(settings);
-    check(coalesced.importPad(0U, loop_source()), "import coalesced bypass source");
+    check(importLooping(coalesced, 0U, loop_source()), "import coalesced bypass source");
     mixer = {};
     mixer.tuneSemitones = -12.0f;
     coalesced.setPadMixerSettings(0U, mixer);
@@ -3447,10 +3506,10 @@ void pad_replacement_hardening() {
     invalid.sampleRate = std::numeric_limits<double>::quiet_NaN();
     invalid.frames = 1;
     invalid.stereo = {0.0f, 0.0f};
-    check(!e.importPad(0, invalid), "non-finite source rate is rejected");
+    check(!importLooping(e, 0, invalid), "non-finite source rate is rejected");
     invalid.sampleRate = 1000.0;
     invalid.stereo[0] = std::numeric_limits<float>::infinity();
-    check(!e.importPad(0, invalid), "non-finite source sample is rejected");
+    check(!importLooping(e, 0, invalid), "non-finite source sample is rejected");
 }
 
 void pad_clipboard_snapshot() {
@@ -3462,7 +3521,7 @@ void pad_clipboard_snapshot() {
                      0.25f, 0.5f, 0.75f, 1.0f};
     source.peak = 1.0f;
     source.rms = 0.6f;
-    check(engine.importPad(0, source), "clipboard source imports");
+    check(importLooping(engine, 0, source), "clipboard source imports");
 
     sms::dsp::SamplePlaybackSettings settings;
     settings.start = 0.25f;
@@ -3473,6 +3532,7 @@ void pad_clipboard_snapshot() {
     settings.releaseSeconds = 0.03f;
     engine.setPadPlaybackSettings(0, settings);
     sms::dsp::SampleMixerSettings mixerSettings;
+    mixerSettings.holdLoop = 1.0f;
     mixerSettings.gainDecibels = -9.0f;
     mixerSettings.pan = 0.4f;
     mixerSettings.tuneSemitones = -5.0f;
@@ -3490,7 +3550,7 @@ void pad_clipboard_snapshot() {
 
     midichopper::PadData oldTarget = source;
     oldTarget.stereo.assign(oldTarget.stereo.size(), 0.1f);
-    check(engine.importPad(17, oldTarget) && clipboard.pasteTo(engine, 17),
+    check(importLooping(engine, 17, oldTarget) && clipboard.pasteTo(engine, 17),
           "paste replaces an occupied target after the source is cleared");
 
     midichopper::PadData pasted;
@@ -3553,6 +3613,7 @@ void disarm_note_off_gain_and_rate_change() {
     }
 
     sms::dsp::SampleMixerSettings mixer;
+    mixer.holdLoop = 1.0f;
     mixer.gainDecibels = -3.0f;
     mixer.pan = 0.25f;
     mixer.tuneSemitones = 5.0f;
@@ -3604,7 +3665,7 @@ void independent_monitor_and_playback_gain() {
         pad.stereo.push_back(0.8f);
         pad.stereo.push_back(-0.4f);
     }
-    check(engine.importPad(0U, pad), "import stereo pad for independent gain paths");
+    check(importLooping(engine, 0U, pad), "import stereo pad for independent gain paths");
     settings.monitorInput = false;
     settings.monitorGain = 0.0f;
     settings.gain = 0.5f;
@@ -3702,7 +3763,7 @@ void unbounded_midi_source_preserves_late_note_off() {
     pad.sampleRate = 1000.0;
     pad.frames = 20;
     pad.stereo.assign(40, 1.0f);
-    check(engine.importPad(0, pad), "import Hold-playback pad");
+    check(importLooping(engine, 0, pad), "import Hold-playback pad");
     auto settings = engine.settings();
     settings.monitorInput = false;
     settings.playbackMode = midichopper::PlaybackMode::Hold;

@@ -9,6 +9,21 @@
 #include <span>
 #include <vector>
 
+// These tests were written when pads looped in Hold mode by default. The product default is now
+// "play once" (LOOP off), so engine imports and mixer settings opt back in explicitly.
+template <class... Args>
+inline bool importLooping(midichopper::SamplerEngine& engine, const std::uint32_t pad, Args&&... args)
+{
+    const bool imported = engine.importPad(pad, std::forward<Args>(args)...);
+    if (imported) {
+        auto mixer = engine.padMixerSettings(pad);
+        mixer.holdLoop = 1.0f;
+        engine.setPadMixerSettings(pad, mixer);
+    }
+    return imported;
+}
+
+
 namespace {
 using namespace midichopper;
 
@@ -120,7 +135,7 @@ Audio renderPlayback(const double rate, const PlaybackMode mode, const bool effe
     }
     engine.setSettings(settings);
     for (std::uint32_t pad = 0U; pad < 3U; ++pad) {
-        check(engine.importPad(pad, playbackSource(pad == 1U ? 32000.0 : 96000.0, pad)),
+        check(importLooping(engine, pad, playbackSource(pad == 1U ? 32000.0 : 96000.0, pad)),
               "import partition playback source");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.125f;
@@ -131,6 +146,7 @@ Audio renderPlayback(const double rate, const PlaybackMode mode, const bool effe
         playback.releaseSeconds = 0.002f;
         engine.setPadPlaybackSettings(pad, playback);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.reverse = reverse && pad != 1U ? 1.0f : 0.0f;
         if (effects) {
             mixer.pan = pad == 1U ? -0.4f : 0.3f;
@@ -203,7 +219,7 @@ void reverseMatchesReversedSourceBeforeTrimmingAndEffects()
         settings.filterSlope = 2.0f;
         settings.tuneSemitones = -2.0f;
         engine.setSettings(settings);
-        check(engine.importPad(0U, audio), "import full-source reverse oracle sample");
+        check(importLooping(engine, 0U, audio), "import full-source reverse oracle sample");
         sms::dsp::SamplePlaybackSettings playback;
         playback.start = 0.117f;
         playback.end = 0.641f;
@@ -213,6 +229,7 @@ void reverseMatchesReversedSourceBeforeTrimmingAndEffects()
         playback.releaseSeconds = 0.019f;
         engine.setPadPlaybackSettings(0U, playback);
         sms::dsp::SampleMixerSettings mixer;
+        mixer.holdLoop = 1.0f;
         mixer.gainDecibels = -3.0f;
         mixer.pan = 0.23f;
         mixer.tuneSemitones = 1.5f;
@@ -300,13 +317,14 @@ void loopingPlaybackPartitions()
                 source.stereo.push_back(static_cast<float>(frame + 1U) / 8.0f);
                 source.stereo.push_back(-static_cast<float>(frame + 1U) / 16.0f);
             }
-            check(engine.importPad(0U, source), "import multiple-turn partition loop");
+            check(importLooping(engine, 0U, source), "import multiple-turn partition loop");
             sms::dsp::SamplePlaybackSettings playback;
             playback.start = 0.25f;
             playback.end = 0.75f;
             playback.releaseSeconds = static_cast<float>(releaseFrames) / 48000.0f;
             engine.setPadPlaybackSettings(0U, playback);
             sms::dsp::SampleMixerSettings mixer;
+            mixer.holdLoop = 1.0f;
             mixer.tuneSemitones = -12.0f;
             engine.setPadMixerSettings(0U, mixer);
             compare(processTimeline(engine, nullptr, events, partition, true), expected);
@@ -412,7 +430,7 @@ void eventOrdering()
         source.sampleRate = 1000.0;
         source.frames = 8U;
         source.stereo.assign(16U, 0.5f);
-        check(engine.importPad(0U, source), "import event ordering sample");
+        check(importLooping(engine, 0U, source), "import event ordering sample");
         const MidiEvent on{0U, 36U, 127U, MidiEventType::NoteOn};
         const MidiEvent off{0U, 36U, 0U, MidiEventType::NoteOff};
         const std::array<MidiEvent, 2> events = offFirst
@@ -446,7 +464,7 @@ void playbackOffsets()
         source.sampleRate = 48000.0;
         source.frames = 8U;
         source.stereo.assign(16U, 0.5f);
-        check(engine.importPad(0U, source), "import exact MIDI timing sample");
+        check(importLooping(engine, 0U, source), "import exact MIDI timing sample");
         const auto actual = processTimeline(engine, nullptr, events, partition, true);
         for (std::uint32_t frame = 0U; frame < kFrames; ++frame) {
             const float expected = frame < 2U || frame == 63U || frame == 256U ||

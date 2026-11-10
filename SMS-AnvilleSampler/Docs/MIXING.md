@@ -95,4 +95,6 @@ output, not on Main. Main keeps its level control and monitoring. In FL Studio, 
 wrapper's Processing tab and route each output to a mixer track. If the host leaves an output
 disabled, that pad is silent.
 
-Max Voices defaults to 16 in new instances. Saved projects restore the value they stored.
+## Hold looping
+
+The Sample Editor LOOP button (HOLD mode) is off for new pads. Saved pads keep their setting; pads saved before it existed still loop.

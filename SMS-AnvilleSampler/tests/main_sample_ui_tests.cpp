@@ -658,6 +658,9 @@ void autoChopPanel()
     controller.acceptStatus(status(1U));
     host.sent.clear();
     controller.cycleAutoChopMode();
+    check(controller.autoChopMode() == AutoChopMode::spectral &&
+          std::string(controller.autoChopModeName()) == "TRANSIENT 2", "TRANSIENT 2 follows TRANSIENT");
+    controller.cycleAutoChopMode();
     controller.adjustAutoChopCount(-3);
     controller.adjustAutoChopFirstPad(4);
     check(controller.autoChop(), "auto chop sends");

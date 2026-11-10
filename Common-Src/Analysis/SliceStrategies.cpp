@@ -120,6 +120,19 @@ std::vector<SliceRegion> transientSlices(const SliceContext& ctx, const std::siz
     return finalize(std::move(regions), ctx);
 }
 
+std::vector<SliceRegion> spectralTransientSlices(const SliceContext& ctx, const std::size_t maxSlices,
+                                                const float sensitivity, const double minGapSeconds)
+{
+    std::vector<std::int64_t> onsets =
+        pickSpectralOnsets(ctx.analysis, sensitivity, minGapSeconds, ctx.rangeStart, ctx.rangeEnd);
+    std::vector<SliceRegion> regions;
+    for (std::size_t i = 0; i < onsets.size() && regions.size() < maxSlices; ++i) {
+        const std::int64_t end = i + 1 < onsets.size() ? onsets[i + 1] : ctx.rangeEnd;
+        regions.push_back({onsets[i], end});
+    }
+    return finalize(std::move(regions), ctx);
+}
+
 std::vector<SliceRegion> equalSlices(const SliceContext& ctx, const std::size_t count)
 {
     std::vector<SliceRegion> regions;

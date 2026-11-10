@@ -26,6 +26,11 @@ struct Onset {
     float localMedian = 0.0F;
 };
 
+// Spectral (TRANSIENT 2) analysis splits the spectrum into log-spaced bands:
+// <150, 150-600, 600-2.5k, 2.5k-6k and >6k Hz. Each band's flux is normalized on
+// its own, so a quiet high band counts as much as a loud low band.
+inline constexpr std::size_t kSpectralBands = 5;
+
 struct OnsetAnalysis {
     double sourceRate = 0.0;
     std::int64_t sourceFrames = 0;
@@ -35,6 +40,10 @@ struct OnsetAnalysis {
     std::vector<float> rms;                     // per hop, at the analysis rate
     std::vector<std::array<float, 3>> bands;    // <250 Hz, 250 Hz..4 kHz, >4 kHz magnitude
     std::vector<Onset> candidates;              // sorted by frame
+    // Per-band normalized flux per hop (0..1) and the merged per-band candidates
+    // (sorted by frame, strength relative to the band's own median).
+    std::vector<std::array<float, kSpectralBands>> bandNovelty;
+    std::vector<Onset> spectralCandidates;
 };
 
 // Interleaved stereo float. Checks `cancel` every 1024 hops; a cancelled
@@ -49,5 +58,10 @@ struct OnsetAnalysis {
 [[nodiscard]] std::vector<std::int64_t> pickOnsets(const OnsetAnalysis& analysis, float sensitivity,
                                                    double minGapSeconds, std::int64_t rangeStart,
                                                    std::int64_t rangeEnd);
+
+// Like pickOnsets() but over the per-band candidates (TRANSIENT 2).
+[[nodiscard]] std::vector<std::int64_t> pickSpectralOnsets(const OnsetAnalysis& analysis, float sensitivity,
+                                                           double minGapSeconds, std::int64_t rangeStart,
+                                                           std::int64_t rangeEnd);
 
 } // namespace sms::analysis

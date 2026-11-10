@@ -22,6 +22,7 @@ A cancelled analysis has `cancelled` set and must not be cached.
 `SliceStrategies.hpp/.cpp` selects `SliceRegion{start,end}` frames from a cached `OnsetAnalysis`. The `SliceContext` carries the range, `minFrames`, `maxFrames` (`kMaximumPadFrames`) and the BPM. Results are sorted, clamped, and may be fewer than requested; nothing is invented.
 
 - Transient: first N onsets in time order; slice i ends at onset i+1, the last at the range end.
+- Transient 2 (`S`): same slicing over `spectralCandidates`. The analysis splits the same log-magnitude FFT into 5 bands (<150, 150-600, 600-2.5k, 2.5-6k, >6k Hz), normalizes each band's flux by its own 99th percentile (floor scaled by the band's bin share) and picks peaks against the band's own median. Cross-band candidates within two hops merge, strongest first; the picker then applies sensitivity and min gap as in T. Cached with the analysis.
 - Find Samples: onsets at medium sensitivity, each 1, 2 or 4 beats long and ending before the next strong onset. Score is onset strength times length fit times RMS; regions under -40 dBFS are rejected. Greedy selection subtracts half the largest band-cosine similarity to picked regions, forbids overlap, requires one beat between starts and at most ceil(N/4) picks per range quarter. A nonzero seed jitters scores by 10%.
 - Equal: N equal parts; remainder spread by integer division.
 - Beat: boundaries `anchor + round(i * step)` computed cumulatively, so there is no drift; optional snap to an onset within 30 ms.
@@ -35,7 +36,7 @@ Beat-based modes return nothing when the BPM is 0.
 
 ## AC1 protocol and workflow
 
-`AutoChopProtocol.hpp` (DPF-free). Request key `auto_chop_request` (worker, `kStateIsOnlyForDSP`): `AC1;<seq>;T|F|E|B|R;<firstPad>;<count 1..64>;<confirm 0|1>;<rangeStart>;<rangeEnd 0=all>;<mode params>`. Numbers are integers: T `sensitivity‰;minGapMs`, F `seed`, E none, B `bpm×100 (0=host);beats×1000;anchorFrame;snap`, R `bpm×100;lengthBeats×1000;seed;snap`. Status key `auto_chop_status` (UI-only): `OK;<maskHex>;<found>;<requested>`, `CONFIRM;<conflictMaskHex>;<count>`, `BUSY`, or `ERROR;<text>`.
+`AutoChopProtocol.hpp` (DPF-free). Request key `auto_chop_request` (worker, `kStateIsOnlyForDSP`): `AC1;<seq>;T|S|F|E|B|R;<firstPad>;<count 1..64>;<confirm 0|1>;<rangeStart>;<rangeEnd 0=all>;<mode params>`. Numbers are integers: T and S `sensitivity‰;minGapMs`, F `seed`, E none, B `bpm×100 (0=host);beats×1000;anchorFrame;snap`, R `bpm×100;lengthBeats×1000;seed;snap`. Status key `auto_chop_status` (UI-only): `OK;<maskHex>;<found>;<requested>`, `CONFIRM;<conflictMaskHex>;<count>`, `BUSY`, or `ERROR;<text>`.
 
 `MainSampleWorkflows::handleAutoChop` runs under the pad mutation mutex:
 

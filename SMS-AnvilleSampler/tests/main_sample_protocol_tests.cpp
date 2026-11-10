@@ -250,7 +250,7 @@ void autoChop()
     r.rangeStart = 100U;
     r.rangeEnd = 90000U;
     for (const auto mode : {AutoChopMode::transient, AutoChopMode::findSamples, AutoChopMode::equal,
-                            AutoChopMode::beat, AutoChopMode::random}) {
+                            AutoChopMode::beat, AutoChopMode::random, AutoChopMode::spectral}) {
         r.mode = mode;
         r.sensitivityPermille = 700U;
         r.minGapMs = 80U;
@@ -267,7 +267,7 @@ void autoChop()
     }
     for (const char* bad : {"", "AC1;", "AC2;1;E;0;4;0;0;0", "AC1;1;X;0;4;0;0;0", "AC1;1;E;64;4;0;0;0",
                             "AC1;1;E;0;0;0;0;0", "AC1;1;E;0;65;0;0;0", "AC1;1;E;0;4;2;0;0",
-                            "AC1;1;E;0;4;0;50;40", "AC1;1;E;0;4;0;0;0;9", "AC1;1;T;0;4;0;0;0;1001;5",
+                            "AC1;1;E;0;4;0;50;40", "AC1;1;E;0;4;0;0;0;9", "AC1;1;T;0;4;0;0;0;1001;5", "AC1;1;S;0;4;0;0;0;500", "AC1;1;S;0;4;0;0;0;1001;5",
                             "AC1;1;T;0;4;0;0;0;500", "AC1;1;B;0;4;0;0;0;0;0;0;2", "AC1;1;B;0;4;0;0;0;0;0;0;0",
                             "AC1;1;R;0;4;0;0;0;12000;1000;5", "AC1;x;E;0;4;0;0;0"}) {
         AutoChopRequest d;

@@ -63,7 +63,7 @@ Double-click an occupied pad to open its Sample Editor.
 
 Auto chop cuts the main sample into pads in one step (issue #54). Pick a mode, a first pad and a count, then apply:
 
-- **Transient** cuts at detected hits; **Find Samples** picks the most useful 1, 2 or 4 beat parts; **Equal** divides the range evenly; **Beat** cuts every N beats from an anchor; **Random** picks seeded parts.
+- **Transient** cuts at detected hits by overall loudness; **Transient 2** compares each frequency band on its own, so a soft hi-hat after a snare gets its own slice; **Find Samples** picks the most useful 1, 2 or 4 beat parts; **Equal** divides the range evenly; **Beat** cuts every N beats from an anchor; **Random** picks seeded parts.
 - Beat and Random use the tempo you enter, or the host tempo when it is 0. Without either you get "No tempo".
 - Pads are filled from the first pad upward. If a pad already holds other audio you are asked to confirm; pads that already belong to this main sample are replaced without asking.
 - Analysis runs once per loaded sample and is not saved with the project.

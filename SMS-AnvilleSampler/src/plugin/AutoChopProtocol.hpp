@@ -12,7 +12,9 @@
 
 namespace midichopper::plugin {
 
-enum class AutoChopMode : char { transient = 'T', findSamples = 'F', equal = 'E', beat = 'B', random = 'R' };
+enum class AutoChopMode : char {
+    transient = 'T', findSamples = 'F', equal = 'E', beat = 'B', random = 'R', spectral = 'S'
+};
 
 inline constexpr std::uint32_t kAutoChopMaxCount = 64U;
 
@@ -42,6 +44,7 @@ struct AutoChopRequest {
          std::to_string(r.rangeEnd);
     switch (r.mode) {
     case AutoChopMode::transient:
+    case AutoChopMode::spectral:
         s += ";" + std::to_string(r.sensitivityPermille) + ";" + std::to_string(r.minGapMs);
         break;
     case AutoChopMode::findSamples: s += ";" + std::to_string(r.seed); break;
@@ -83,6 +86,12 @@ struct AutoChopRequest {
             d.sensitivityPermille > 1000U || d.minGapMs > 10000U)
             return false;
         d.mode = AutoChopMode::transient;
+        break;
+    case 'S':
+        if (!f.number(d.sensitivityPermille) || !f.number(d.minGapMs) ||
+            d.sensitivityPermille > 1000U || d.minGapMs > 10000U)
+            return false;
+        d.mode = AutoChopMode::spectral;
         break;
     case 'F':
         if (!f.number(d.seed)) return false;

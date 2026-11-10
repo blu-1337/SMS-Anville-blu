@@ -679,6 +679,11 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
             static_cast<float>(request.sensitivityPermille) / 1000.0F,
             static_cast<double>(request.minGapMs) / 1000.0);
         break;
+    case AutoChopMode::spectral:
+        regions = sms::analysis::spectralTransientSlices(context, want,
+            static_cast<float>(request.sensitivityPermille) / 1000.0F,
+            static_cast<double>(request.minGapMs) / 1000.0);
+        break;
     case AutoChopMode::findSamples:
         regions = sms::analysis::findSamples(context, want, request.seed);
         break;

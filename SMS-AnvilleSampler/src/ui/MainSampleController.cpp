@@ -766,6 +766,7 @@ const char* MainSampleController::autoChopModeName() const noexcept
 {
     switch (fAutoMode) {
     case plugin::AutoChopMode::transient: return "TRANSIENT";
+    case plugin::AutoChopMode::spectral: return "TRANSIENT 2";
     case plugin::AutoChopMode::findSamples: return "FIND SAMPLES";
     case plugin::AutoChopMode::equal: return "EQUAL";
     case plugin::AutoChopMode::beat: return "BEAT";
@@ -777,12 +778,12 @@ const char* MainSampleController::autoChopModeName() const noexcept
 void MainSampleController::cycleAutoChopMode() noexcept
 {
     constexpr plugin::AutoChopMode order[] = {
-        plugin::AutoChopMode::transient, plugin::AutoChopMode::findSamples,
+        plugin::AutoChopMode::transient, plugin::AutoChopMode::spectral, plugin::AutoChopMode::findSamples,
         plugin::AutoChopMode::equal, plugin::AutoChopMode::beat, plugin::AutoChopMode::random};
     std::size_t index = 0;
-    while (index < 5U && order[index] != fAutoMode)
+    while (index < 6U && order[index] != fAutoMode)
         ++index;
-    fAutoMode = order[(index + 1U) % 5U];
+    fAutoMode = order[(index + 1U) % 6U];
     fHost.repaintMainSample();
 }
 

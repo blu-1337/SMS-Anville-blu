@@ -134,6 +134,22 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
     std::vector<float> mags(binCount);
     std::vector<float> previous(binCount, 0.0F);
     std::vector<float> flux(hops, 0.0F);
+    std::array<std::vector<float>, kSpectralBands> bandFlux;
+    for (auto& v : bandFlux) {
+        v.assign(hops, 0.0F);
+    }
+    constexpr std::array<double, kSpectralBands - 1> kBandEdgesHz{150.0, 600.0, 2500.0, 6000.0};
+    std::vector<std::uint8_t> bandOf(binCount, 0U);
+    std::array<std::size_t, kSpectralBands> bandBins{};
+    for (std::size_t k = 0; k < binCount; ++k) {
+        const double hz = static_cast<double>(k) * analysisRate / static_cast<double>(window);
+        std::size_t b = 0;
+        while (b < kSpectralBands - 1 && hz >= kBandEdgesHz[b]) {
+            ++b;
+        }
+        bandOf[k] = static_cast<std::uint8_t>(b);
+        ++bandBins[b];
+    }
     out.rms.resize(hops);
     out.bands.resize(hops);
     for (std::size_t n = 0; n < hops; ++n) {
@@ -160,7 +176,9 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
             const float m = mags[k] * scale;
             const float y = std::log1p(100.0F * m);
             if (n > 0) {
-                sum += std::max(0.0F, y - previous[k]);
+                const float rise = std::max(0.0F, y - previous[k]);
+                sum += rise;
+                bandFlux[bandOf[k]][n] += rise;
             }
             previous[k] = y;
             (k < lowEnd ? low : (k < midEnd ? mid : high)) += m * m;
@@ -181,47 +199,85 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
 
     const std::int64_t d = static_cast<std::int64_t>(decimation);
     const std::int64_t zeroSearch = static_cast<std::int64_t>(settings.refineWindowMs * 0.001 * rate);
-    for (std::size_t n = 1; n < hops; ++n) {
-        const float v = out.novelty[n];
-        if (v < settings.candidateFloor) {
-            continue;
-        }
-        bool isPeak = true;
-        for (std::size_t r = 1; r <= kPeakRadius && isPeak; ++r) {
-            if (n >= r && out.novelty[n - r] > v) {
-                isPeak = false;
+    const auto collect = [&](const std::vector<float>& nov, std::vector<Onset>& dest) {
+        for (std::size_t n = 1; n < hops; ++n) {
+            const float v = nov[n];
+            if (v < settings.candidateFloor) {
+                continue;
             }
-            if (n + r < hops && out.novelty[n + r] >= v) {
-                isPeak = false;
+            bool isPeak = true;
+            for (std::size_t r = 1; r <= kPeakRadius && isPeak; ++r) {
+                if (n >= r && nov[n - r] > v) {
+                    isPeak = false;
+                }
+                if (n + r < hops && nov[n + r] >= v) {
+                    isPeak = false;
+                }
+            }
+            if (!isPeak) {
+                continue;
+            }
+            const std::size_t from = n >= kMedianRadius ? n - kMedianRadius : 0;
+            const std::size_t to = std::min(hops, n + kMedianRadius + 1);
+            const float med = medianOf(std::span<const float>(nov).subspan(from, to - from));
+            const std::int64_t estimate =
+                (static_cast<std::int64_t>(n * hop) + static_cast<std::int64_t>(window / 2)) * d;
+            // The log-compressed flux peaks when an attack first enters the window's
+            // right edge, so search from one hop before the centre to the right edge.
+            const std::int64_t before = static_cast<std::int64_t>(hop) * d;
+            const std::int64_t after = static_cast<std::int64_t>(window / 2) * d;
+            dest.push_back({refine(interleavedStereo, frames, estimate, before, after, zeroSearch), v, med});
+        }
+    };
+    collect(out.novelty, out.candidates);
+
+    // Spectral mode: normalize every band on its own (99th percentile, with a floor
+    // proportional to the band's share of the bins), then pick peaks per band.
+    out.bandNovelty.assign(hops, {});
+    for (std::size_t b = 0; b < kSpectralBands; ++b) {
+        std::vector<float> bsorted = bandFlux[b];
+        std::nth_element(bsorted.begin(), bsorted.begin() + static_cast<std::ptrdiff_t>(p99), bsorted.end());
+        const float share = static_cast<float>(bandBins[b]) / static_cast<float>(binCount);
+        const float bdenom = std::max(bsorted[p99], settings.fluxFloor * share);
+        std::vector<float> nov(hops);
+        for (std::size_t n = 0; n < hops; ++n) {
+            nov[n] = std::clamp(bandFlux[b][n] / bdenom, 0.0F, 1.0F);
+            out.bandNovelty[n][b] = nov[n];
+        }
+        collect(nov, out.spectralCandidates);
+    }
+    // Candidates of different bands that land within a few ms are one event: keep the strongest.
+    std::sort(out.spectralCandidates.begin(), out.spectralCandidates.end(), [](const Onset& a, const Onset& b) {
+        return a.frame != b.frame ? a.frame < b.frame : a.strength > b.strength;
+    });
+    {
+        const std::int64_t merge = static_cast<std::int64_t>(2 * hop) * d;
+        std::vector<Onset> merged;
+        for (const Onset& o : out.spectralCandidates) {
+            if (!merged.empty() && o.frame - merged.back().frame < merge) {
+                if (o.strength - o.localMedian > merged.back().strength - merged.back().localMedian) {
+                    merged.back() = o;
+                }
+            } else {
+                merged.push_back(o);
             }
         }
-        if (!isPeak) {
-            continue;
-        }
-        const std::size_t from = n >= kMedianRadius ? n - kMedianRadius : 0;
-        const std::size_t to = std::min(hops, n + kMedianRadius + 1);
-        const float med = medianOf(std::span<const float>(out.novelty).subspan(from, to - from));
-        const std::int64_t estimate =
-            (static_cast<std::int64_t>(n * hop) + static_cast<std::int64_t>(window / 2)) * d;
-        // The log-compressed flux peaks when an attack first enters the window's
-        // right edge, so search from one hop before the centre to the right edge.
-        const std::int64_t before = static_cast<std::int64_t>(hop) * d;
-        const std::int64_t after = static_cast<std::int64_t>(window / 2) * d;
-        out.candidates.push_back({refine(interleavedStereo, frames, estimate, before, after, zeroSearch), v, med});
+        out.spectralCandidates = std::move(merged);
     }
     std::sort(out.candidates.begin(), out.candidates.end(),
               [](const Onset& a, const Onset& b) { return a.frame < b.frame; });
     return out;
 }
 
-std::vector<std::int64_t> pickOnsets(const OnsetAnalysis& analysis, const float sensitivity,
-                                     const double minGapSeconds, const std::int64_t rangeStart,
-                                     const std::int64_t rangeEnd)
+namespace {
+std::vector<std::int64_t> pickFrom(const std::vector<Onset>& candidates, const OnsetAnalysis& analysis,
+                                   const float sensitivity, const double minGapSeconds,
+                                   const std::int64_t rangeStart, const std::int64_t rangeEnd)
 {
     const float s = std::clamp(sensitivity, 0.0F, 1.0F);
     const float delta = 0.35F + (0.02F - 0.35F) * s;
     std::vector<const Onset*> eligible;
-    for (const Onset& o : analysis.candidates) {
+    for (const Onset& o : candidates) {
         if (o.frame >= rangeStart && o.frame < rangeEnd && o.strength >= delta + o.localMedian) {
             eligible.push_back(&o);
         }
@@ -240,6 +296,21 @@ std::vector<std::int64_t> pickOnsets(const OnsetAnalysis& analysis, const float 
     }
     std::sort(picked.begin(), picked.end());
     return picked;
+}
+} // namespace
+
+std::vector<std::int64_t> pickOnsets(const OnsetAnalysis& analysis, const float sensitivity,
+                                     const double minGapSeconds, const std::int64_t rangeStart,
+                                     const std::int64_t rangeEnd)
+{
+    return pickFrom(analysis.candidates, analysis, sensitivity, minGapSeconds, rangeStart, rangeEnd);
+}
+
+std::vector<std::int64_t> pickSpectralOnsets(const OnsetAnalysis& analysis, const float sensitivity,
+                                             const double minGapSeconds, const std::int64_t rangeStart,
+                                             const std::int64_t rangeEnd)
+{
+    return pickFrom(analysis.spectralCandidates, analysis, sensitivity, minGapSeconds, rangeStart, rangeEnd);
 }
 
 } // namespace sms::analysis

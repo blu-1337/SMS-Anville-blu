@@ -320,6 +320,115 @@ void equalAndTransientSlices()
     check(all.size() == 16 && all.back().end == a.sourceFrames, "fewer onsets than asked: no invented cuts");
 }
 
+// A loud 60 Hz thump, then a soft high-passed noise burst (hi-hat) 120 ms later.
+void addThump(std::vector<float>& stereo, const double rate, const std::int64_t at, const float amplitude)
+{
+    const std::int64_t length = static_cast<std::int64_t>(0.25 * rate);
+    for (std::int64_t i = 0; i < length; ++i) {
+        const std::size_t f = static_cast<std::size_t>(at + i);
+        if (f * 2 + 1 >= stereo.size()) {
+            break;
+        }
+        const double t = static_cast<double>(i) / rate;
+        const auto v = static_cast<float>(amplitude * std::exp(-t * 14.0) * std::sin(2.0 * std::numbers::pi * 60.0 * t));
+        stereo[f * 2] += v;
+        stereo[f * 2 + 1] += v;
+    }
+}
+
+void addHat(std::vector<float>& stereo, const double rate, const std::int64_t at, const float amplitude, const std::uint64_t seed)
+{
+    SplitMix64 rng(seed);
+    const std::int64_t length = static_cast<std::int64_t>(0.05 * rate);
+    float prev = 0.0F;
+    float prev2 = 0.0F;
+    for (std::int64_t i = 0; i < length; ++i) {
+        const std::size_t f = static_cast<std::size_t>(at + i);
+        if (f * 2 + 1 >= stereo.size()) {
+            break;
+        }
+        const float n = static_cast<float>(rng.nextUnit() * 2.0 - 1.0);
+        const float hp = (n - 2.0F * prev + prev2) * 0.25F;  // second difference: high-pass
+        prev2 = prev;
+        prev = n;
+        const float v = amplitude * hp * std::exp(-static_cast<float>(i) / static_cast<float>(rate) * 60.0F);
+        stereo[f * 2] += v;
+        stereo[f * 2 + 1] += v;
+    }
+}
+
+std::vector<float> thumpAndHat(const double rate, std::vector<std::int64_t>& truth)
+{
+    auto x = noiseBed(static_cast<std::size_t>(rate * 6.0), 0.0005F, 5);
+    for (int i = 0; i < 4; ++i) {
+        const auto thump = static_cast<std::int64_t>(rate * (0.5 + 1.4 * i));
+        const auto hat = thump + static_cast<std::int64_t>(rate * 0.120);
+        addThump(x, rate, thump, 0.9F);
+        addHat(x, rate, hat, 0.9F * 0.0631F, 99 + static_cast<std::uint64_t>(i));  // -24 dB peak vs the thump
+        truth.push_back(thump);
+        truth.push_back(hat);
+    }
+    return x;
+}
+
+bool foundNear(const std::vector<std::int64_t>& onsets, const std::int64_t frame, const std::int64_t tolerance)
+{
+    return std::any_of(onsets.begin(), onsets.end(),
+                       [&](const std::int64_t f) { return std::llabs(f - frame) <= tolerance; });
+}
+
+void spectralModeFindsSoftHatAfterThump()
+{
+    const double rate = 44100.0;
+    std::vector<std::int64_t> truth;
+    const auto x = thumpAndHat(rate, truth);
+    const auto a = analyzeOnsets(x, rate);
+    const std::int64_t tol = static_cast<std::int64_t>(0.015 * rate);
+    const auto spectral = pickSpectralOnsets(a, 0.6F, 0.05, 0, a.sourceFrames);
+    const auto plain = pickOnsets(a, 0.6F, 0.05, 0, a.sourceFrames);
+    std::size_t plainHits = 0;
+    for (const auto t : truth) {
+        check(foundNear(spectral, t, tol), "TRANSIENT 2 finds every thump and every soft hat");
+        plainHits += foundNear(plain, t, tol) ? 1U : 0U;
+    }
+    check(spectral.size() <= truth.size() + 2, "TRANSIENT 2 adds no more than two stray onsets");
+    std::cout << "info: thump+hat truth " << truth.size() << ", TRANSIENT found " << plainHits
+              << " of them (" << plain.size() << " onsets), TRANSIENT 2 found " << spectral.size() << '\n';
+
+    const SliceContext ctx{a, 0, a.sourceFrames, 1, 0, 0.0};
+    const auto slices = spectralTransientSlices(ctx, 64, 0.6F, 0.05);
+    check(slices.size() == spectral.size(), "TRANSIENT 2 slices follow its onsets");
+    check(a.bandNovelty.size() == a.novelty.size(), "per-band flux is cached with the analysis");
+
+    const auto again = analyzeOnsets(x, rate);
+    check(again.spectralCandidates.size() == a.spectralCandidates.size() &&
+          pickSpectralOnsets(again, 0.6F, 0.05, 0, again.sourceFrames) == spectral, "TRANSIENT 2 is deterministic");
+    for (std::size_t i = 0; i < a.spectralCandidates.size(); ++i) {
+        check(a.spectralCandidates[i].frame == again.spectralCandidates[i].frame &&
+              a.spectralCandidates[i].strength == again.spectralCandidates[i].strength, "same candidates, bit for bit");
+    }
+}
+
+void spectralModeSilenceAndSpeed()
+{
+    const double rate = 48000.0;
+    const std::vector<float> silence(static_cast<std::size_t>(rate * 4.0) * 2, 0.0F);
+    const auto a = analyzeOnsets(silence, rate);
+    check(pickSpectralOnsets(a, 1.0F, 0.0, 0, a.sourceFrames).empty(), "TRANSIENT 2 finds nothing in silence");
+    check(spectralTransientSlices(SliceContext{a, 0, a.sourceFrames, 1, 0, 0.0}, 16, 1.0F, 0.0).empty(), "no slices in silence");
+    check(pickSpectralOnsets(OnsetAnalysis{}, 0.5F, 0.05, 0, 100).empty(), "empty analysis");
+    const std::vector<float> tiny(100, 0.5F);
+    check(analyzeOnsets(tiny, rate).spectralCandidates.empty(), "too short for TRANSIENT 2");
+#ifdef NDEBUG
+    const auto x = clickTrack(44100.0, 180.0, 128.0);
+    const auto start = std::chrono::steady_clock::now();
+    const auto b = analyzeOnsets(x, 44100.0);
+    const auto seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    check(!b.spectralCandidates.empty(), "TRANSIENT 2 speed test finds onsets");
+    check(seconds < 1.5, "3 minutes of band analysis (cached with the analysis) in under 1.5 s");
+#endif
+}
+
 void findSamplesAndRandom()
 {
     const double rate = 44100.0;
@@ -396,5 +505,7 @@ int main()
     beatMathHasNoDrift();
     equalAndTransientSlices();
     findSamplesAndRandom();
+    spectralModeFindsSoftHatAfterThump();
+    spectralModeSilenceAndSpeed();
     return EXIT_SUCCESS;
 }

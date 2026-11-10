@@ -29,6 +29,11 @@ struct SliceContext {
 [[nodiscard]] std::vector<SliceRegion> transientSlices(const SliceContext& ctx, std::size_t maxSlices,
                                                        float sensitivity, double minGapSeconds);
 
+// Spectral transient (TRANSIENT 2): same slicing as transientSlices() but the
+// onsets come from the per-band analysis, so quiet high-frequency events count.
+[[nodiscard]] std::vector<SliceRegion> spectralTransientSlices(const SliceContext& ctx, std::size_t maxSlices,
+                                                               float sensitivity, double minGapSeconds);
+
 // Find Samples: musically useful regions of 1, 2 or 4 beats picked by score and
 // diversity, spread across the range. A nonzero seed jitters scores by +-10%.
 [[nodiscard]] std::vector<SliceRegion> findSamples(const SliceContext& ctx, std::size_t count,

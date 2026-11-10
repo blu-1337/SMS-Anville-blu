@@ -133,6 +133,8 @@ void drawPadPanel(const ViewRenderContext& ctx)
              nullptr);
     }
     if (swapping) drawSwapGhost(ctx, swapSource);
+    else if (ctx.state.quickEditAxis == 3 && ctx.state.quickEditPad >= 0)
+        drawSwapGhost(ctx, grid.cell(pads.visualIndex(0))); // source pad is in another bank
 }
 
 void drawControlPanel(const ViewRenderContext& ctx)

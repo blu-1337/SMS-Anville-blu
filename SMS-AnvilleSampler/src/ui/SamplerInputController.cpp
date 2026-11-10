@@ -558,6 +558,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         if (fQuickEdit.swapping() && fSwapTarget >= 0 && fSwapTarget != fQuickEdit.pad())
             fSession.sendPadSwap(fQuickEdit.pad(), fSwapTarget);
         fSwapTarget = -1;
+        fSwapBankHover = -1;
         if (const char phase = fQuickEdit.finish(); phase != 0)
             fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan(), phase);
         fQuickEdit.cancel();
@@ -593,6 +594,12 @@ bool SamplerInputController::motion(const sms::ui::Point position)
                                    isTarget(over, InteractiveType::mainSamplePad);
                 const int target = isPad ? fSession.globalPad(over.index) : -1;
                 fSwapTarget = target == fQuickEdit.pad() ? -1 : target;
+                const int bankHover = isTarget(over, InteractiveType::bank) ? over.index : -1;
+                if (bankHover != fSwapBankHover) {
+                    fSwapBankHover = bankHover;
+                    fSwapBankSince = Clock::now();
+                }
+                if (fHover.update(over)) fHost.repaintSamplerInput();
             } else if (const char phase = fQuickEdit.due(Clock::now()); phase != 0)
                 fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan(), phase);
             fHost.repaintSamplerInput();
@@ -796,6 +803,15 @@ void SamplerInputController::idle(const Clock::time_point now)
     if (fClearArmed && now >= fClearDeadline) {
         fClearArmed = false;
         fHost.repaintSamplerInput();
+    }
+    if (fQuickEdit.swapping() && fSwapBankHover >= 0 && now - fSwapBankSince >= kSwapBankDelay) {
+        const int bank = fSwapBankHover;
+        fSwapBankHover = -1;
+        if (bank != fSession.state().bank) {
+            fSession.selectBank(bank);
+            fSwapTarget = -1;
+            fHost.repaintSamplerInput();
+        }
     }
     fMenu.idle(now);
     fMixer.idle(now);

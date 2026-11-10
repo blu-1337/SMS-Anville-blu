@@ -223,6 +223,29 @@ void padQuickEditGestures()
     f.input.mouse({padCell.x + 5.0f, padCell.y + 20.0f}, InputButton::left, false);
     check(swapMessages() == 1, "release over the source pad sends nothing");
 
+    // Hover a bank button during a swap drag: after the delay the bank switches; the drop uses global indices.
+    const auto bankC = center(layout::mainBank(2));
+    const auto hoverStart = SamplerInputController::Clock::now();
+    check(f.input.mouse(top, InputButton::left, true), "press for a cross-bank swap");
+    f.input.motion({top.x + 1.0f, top.y + 30.0f});
+    f.input.motion(bankC);
+    f.input.idle(hoverStart + std::chrono::milliseconds(100));
+    check(f.session.state().bank == 0, "no bank switch before the hover delay");
+    f.input.motion(padB);
+    f.input.motion(bankC);
+    f.input.idle(SamplerInputController::Clock::now() + std::chrono::milliseconds(100));
+    check(f.session.state().bank == 0, "leaving and re-entering restarts the delay");
+    f.input.idle(SamplerInputController::Clock::now() + SamplerInputController::kSwapBankDelay +
+                 std::chrono::milliseconds(50));
+    check(f.session.state().bank == 2 && f.input.quickEditAxis() == 3 && f.input.quickEditPad() == 0,
+          "hovering a bank switches it while the swap drag (and its ghost) continues");
+    const auto padInC = center(grid.cell(f.session.padLayout().visualIndex(3)));
+    f.input.motion(padInC);
+    check(f.input.swapTargetPad() == 2 * 16 + 3, "target is a global pad index in the new bank");
+    f.input.mouse(padInC, InputButton::left, false);
+    check(swapMessages() == 2 && f.states.back().second == "PS1;W;0;35", "drop sends a cross-bank swap");
+    f.session.selectBank(0);
+
     // Ctrl+click resets volume and pan in one message and does not play the pad.
     const auto notesBefore = f.notes.size();
     f.input.mouse(start, InputButton::left, true, KnobAdjustment::stepped);

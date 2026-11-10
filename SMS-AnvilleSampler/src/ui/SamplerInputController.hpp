@@ -42,6 +42,7 @@ public:
     bool character(std::uint32_t codepoint);
     void focus(bool focused);
     void idle(Clock::time_point now);
+    static constexpr auto kSwapBankDelay = std::chrono::milliseconds(400);
     void invalidate(UiInteractionInvalidation reason);
     void clearHover() noexcept { static_cast<void>(fHover.clear()); }
 
@@ -78,6 +79,8 @@ private:
     SpaceKeyTracker fSpaceKey;
     PadQuickEdit fQuickEdit;
     int fSwapTarget = -1;
+    int fSwapBankHover = -1; // bank button under a swap drag, waiting for the hover delay
+    Clock::time_point fSwapBankSince{};
     bool fPadContextPointerCaptured = false;
     bool fResetPointerCaptured = false;
     bool fPlayButtonPressCaptured = false;

@@ -91,3 +91,5 @@ to another slice stays there.
 Pads view: UNDO/REDO sit under the A-D bank buttons (shared history with Main Sample); the BANK/PAD BANK labels are gone.
 
 Pads view: left-click the tall waveform block opens the Sample Editor for the displayed pad; right-click opens that pad's context menu. Nothing happens when it is empty.
+
+Cross-bank swap: while swap-dragging (lower third of a pad), hover an A-D bank button for 400 ms to switch bank (button highlights, ghost stays), then drop on a pad there. Same swap semantics and one undo step.

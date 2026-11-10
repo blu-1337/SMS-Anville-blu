@@ -1528,6 +1528,21 @@ void padSwap()
     fixture.pads.handlePadStructureRequest("PS1;W;2;9");
     check(padHoldsSlice(fixture.engine, 9U, 100U, 300U) && !fixture.engine.padMetadata(2U).occupied &&
           fixture.provenance(2U) == 0U && fixture.provenance(9U) == tag2, "swap with an empty pad moves the pad");
+    {
+        // Cross-bank swap (bank A pad 9 <-> bank C pad 40): global indices, one undo step.
+        const auto tag9 = fixture.provenance(9U);
+        const auto crossDepth = undo.undoDepth();
+        undo.record(UndoController::Kind::action, now + std::chrono::seconds(5), [&] {
+            fixture.pads.handlePadStructureRequest("PS1;W;9;40");
+        });
+        check(fixture.observer.latest(kPadStructureStatusKey) == "PS1;O;0;W", "cross-bank swap succeeds");
+        check(fixture.provenance(40U) == tag9 && !fixture.engine.padMetadata(9U).occupied,
+              "cross-bank swap moves the pad to its global index");
+        check(undo.undoDepth() == crossDepth + 1U, "cross-bank swap is one undo step");
+        undo.undo();
+        check(fixture.provenance(9U) == tag9 && !fixture.engine.padMetadata(40U).occupied,
+              "undo restores the cross-bank swap");
+    }
 
     // Refusals change nothing.
     const auto before = fixture.provenance(9U);

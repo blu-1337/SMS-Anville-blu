@@ -79,6 +79,7 @@ private:
     void updateMainSampleDrag(sms::ui::Point position);
     bool endMainSampleDrag(sms::ui::Point position);
     bool pressMainSamplePad(int localPad);
+    [[nodiscard]] std::uint32_t snappedFrame(float x) const;
     void toggleMainSamplePreview();
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;

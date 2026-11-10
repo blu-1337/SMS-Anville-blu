@@ -278,9 +278,10 @@ inline constexpr sms::ui::Rect mainSampleModal{300.0f, 270.0f, 380.0f, 150.0f};
 inline constexpr sms::ui::Rect mainSampleConfirm{330.0f, 366.0f, 150.0f, 34.0f};
 inline constexpr sms::ui::Rect mainSampleCancel{500.0f, 366.0f, 150.0f, 34.0f};
 // Transport and zoom buttons in the header row: play/stop, loop, zoom out, zoom in, fit.
-inline constexpr std::array<sms::ui::Rect, 5> mainSampleTransport{{
+// Index 5 is the SNAP on/off toggle for edge and selection drags.
+inline constexpr std::array<sms::ui::Rect, 6> mainSampleTransport{{
     {190.0f, 114.0f, 84.0f, 30.0f}, {282.0f, 114.0f, 64.0f, 30.0f}, {366.0f, 114.0f, 36.0f, 30.0f},
-    {408.0f, 114.0f, 36.0f, 30.0f}, {450.0f, 114.0f, 52.0f, 30.0f}}};
+    {408.0f, 114.0f, 36.0f, 30.0f}, {450.0f, 114.0f, 52.0f, 30.0f}, {510.0f, 114.0f, 56.0f, 30.0f}}};
 // Auto chop panel in the free column right of the waveform.
 inline constexpr sms::ui::Rect autoChopMode{994.0f, 166.0f, 222.0f, 28.0f};
 inline constexpr sms::ui::Rect autoChopCountMinus{994.0f, 202.0f, 44.0f, 28.0f};

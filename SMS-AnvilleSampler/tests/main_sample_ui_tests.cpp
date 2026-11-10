@@ -390,6 +390,30 @@ void countFieldEntry()
           field.x + field.width <= layout::autoChopCountPlus.x, "count field sits between - and +");
 }
 
+void snapToSliceBoundaries()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    check(controller.acceptStatus(status(1U), now), "source arrives");
+    check(controller.snapEnabled(), "snap defaults to on");
+    const auto edge = controller.status().slices.front().end; // shared boundary
+    check(controller.snapFrame(edge + 3U, 1.0) == edge && controller.snapFrame(edge - 7U, 1.0) == edge,
+          "within 8 px the frame snaps to the boundary");
+    check(controller.snapFrame(edge + 9U, 1.0) == edge + 9U, "beyond 8 px nothing snaps");
+    check(controller.snapFrame(edge + 30U, 4.0) == edge, "the threshold scales with the zoom (pixels, not frames)");
+    controller.toggleSnap();
+    check(!controller.snapEnabled() && controller.snapFrame(edge + 3U, 1.0) == edge + 3U, "snap off passes frames through");
+    controller.toggleSnap();
+    check(controller.beginEdgeDrag(edge - 2U, 10U), "grab the shared boundary");
+    check(controller.snapFrame(edge + 2U, 1.0) == edge + 2U, "an edge never snaps back onto its own start");
+    controller.endDrag();
+    using namespace layout;
+    check(mainSampleTransport[5].x >= mainSampleTransport[4].x + mainSampleTransport[4].width &&
+          mainSampleTransport[5].x + mainSampleTransport[5].width < 640.0f, "SNAP sits after FIT, clear of the hint");
+}
+
 void layoutRects()
 {
     using namespace layout;
@@ -640,6 +664,7 @@ int main()
     sessionRouting();
     editorHeaderChipsFit();
     countFieldEntry();
+    snapToSliceBoundaries();
     layoutRects();
     assignPicksFirstFreePad();
     autoChopPanel();

@@ -159,6 +159,12 @@ public:
      */
     /** Right-press inside the selection: grabs the edge on the pressed half (start on the left, end on the right). */
     bool beginSelectionHalfDrag(std::uint32_t frame) noexcept;
+    /** Edge/selection drags snap to slice boundaries within kSnapPixels of screen space. */
+    static constexpr float kSnapPixels = 8.0f;
+    [[nodiscard]] bool snapEnabled() const noexcept { return fSnap; }
+    void toggleSnap() noexcept { fSnap = !fSnap; fHost.repaintMainSample(); }
+    /** The nearest committed slice start/end within kSnapPixels (framesPerPixel * 8), else the frame. */
+    [[nodiscard]] std::uint32_t snapFrame(std::uint32_t frame, double framesPerPixel) const noexcept;
     bool beginEdgeDrag(std::uint32_t frame, std::uint32_t toleranceFrames) noexcept;
     bool endDrag();
     void cancelDrag() noexcept;
@@ -219,6 +225,7 @@ private:
     std::uint32_t fPlayStart = 0U;
     std::uint32_t fPlayEnd = 0U;
     float fPreviewPosition = 0.0f;
+    bool fSnap = true;
     std::uint32_t fSelectionAnchor = 0U;
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;

@@ -334,6 +334,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 if (clicked.index == 0) main.togglePlay();
                 else if (clicked.index == 1) main.toggleLoop();
                 else if (clicked.index == 4) main.zoomFit(Clock::now());
+                else if (clicked.index == 5) main.toggleSnap();
                 else if (clicked.index >= 2) {
                     const auto& waveform = uiLayout::mainSampleWaveform;
                     main.zoom(clicked.index == 3 ? 1.0f : -1.0f, waveform.x + waveform.width * 0.5f,
@@ -748,8 +749,7 @@ void SamplerInputController::toggleMainSamplePreview()
 bool SamplerInputController::beginMainSampleWaveform(const sms::ui::Point position)
 {
     auto& main = fSession.mainSample();
-    main.beginSelection(static_cast<std::uint32_t>(
-        main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform)));
+    main.beginSelection(snappedFrame(position.x));
     fMainSampleOriginX = position.x;
     fMainSampleMoved = false;
     const auto now = Clock::now();
@@ -762,11 +762,20 @@ bool SamplerInputController::beginMainSampleWaveform(const sms::ui::Point positi
     return true;
 }
 
+std::uint32_t SamplerInputController::snappedFrame(const float x) const
+{
+    const auto& main = fSession.mainSample();
+    const auto& viewport = main.viewport();
+    const double framesPerPixel = static_cast<double>(viewport.end - viewport.start) /
+                                  static_cast<double>(uiLayout::mainSampleWaveform.width);
+    return main.snapFrame(static_cast<std::uint32_t>(viewport.frameAt(x, uiLayout::mainSampleWaveform)),
+                          framesPerPixel);
+}
+
 void SamplerInputController::updateMainSampleDrag(const sms::ui::Point position)
 {
     auto& main = fSession.mainSample();
-    const auto frame = static_cast<std::uint32_t>(
-        main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform));
+    const auto frame = snappedFrame(position.x);
     if (fMainSampleDrag == MainSampleDrag::marker) main.dragTo(frame);
     else if (fMainSampleDrag == MainSampleDrag::selecting) {
         if (!fMainSampleMoved && std::abs(position.x - fMainSampleOriginX) < 3.0f) return;

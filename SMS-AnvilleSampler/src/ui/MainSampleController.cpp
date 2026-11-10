@@ -437,6 +437,26 @@ bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bo
     return true;
 }
 
+std::uint32_t MainSampleController::snapFrame(const std::uint32_t frame, const double framesPerPixel) const noexcept
+{
+    if (!fSnap)
+        return frame;
+    const double tolerance = framesPerPixel * static_cast<double>(kSnapPixels);
+    double best = tolerance;
+    std::uint32_t result = frame;
+    const auto consider = [&](const std::uint32_t edge) {
+        if (fDrag && edge == fDrag->original)
+            return; // never snap an edge onto the position it is leaving
+        const double distance = std::abs(static_cast<double>(edge) - static_cast<double>(frame));
+        if (distance <= best) { best = distance; result = edge; }
+    };
+    for (const auto& slice : fStatus.slices) {
+        consider(slice.start);
+        consider(slice.end);
+    }
+    return result;
+}
+
 bool MainSampleController::beginSelectionHalfDrag(const std::uint32_t frame) noexcept
 {
     if (!hasSource() || !hasSelection() || frame < fSelectionStart || frame > fSelectionEnd)

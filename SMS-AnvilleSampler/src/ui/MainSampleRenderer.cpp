@@ -522,7 +522,7 @@ void drawMainSampleView(const ViewRenderContext& ctx)
     text(ctx, 46.0f, 120.0f, "MAIN SAMPLE", nullptr);
     ctx.canvas.fontSize(10.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-    text(ctx, 936.0f, 122.0f, "SPACE PLAY/STOP   1-9 PICK SLICE   DRAG SELECT, THEN CLICK A PAD", nullptr);
+    text(ctx, 936.0f, 122.0f, "SPACE PLAY/STOP  1-9 PICK SLICE  DRAG, THEN CLICK A PAD", nullptr);
     if (main.hasSource()) {
         const auto drawTransport = [&](const int index, const char* label, const bool active) {
             sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleTransport[static_cast<std::size_t>(index)],
@@ -533,6 +533,7 @@ void drawMainSampleView(const ViewRenderContext& ctx)
         drawTransport(1, "LOOP", main.looping());
         drawTransport(2, "-", false);
         drawTransport(3, "+", false);
+        drawTransport(5, "SNAP", main.snapEnabled());
         drawTransport(4, "FIT", main.viewport().zoomed());
     }
 

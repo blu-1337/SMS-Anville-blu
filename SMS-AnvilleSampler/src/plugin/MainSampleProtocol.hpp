@@ -236,6 +236,8 @@ struct MainSampleRequest {
     std::uint32_t tiles = 0U;               // waveform; spectrogram: columns
     /** edit only: S = single step, B/U/E = live drag begin/update/end (one undo step). */
     char phase = 'S';
+    /** edit, assign: the worker snaps changed edges to the nearest zero crossing (SNAP on, no Alt/Shift). */
+    bool zeroCross = false;
 };
 
 [[nodiscard]] inline std::string encodeMainSampleRequest(const MainSampleRequest& request)
@@ -248,10 +250,13 @@ struct MainSampleRequest {
     case MainSampleVerb::edit:
         return encoded + "S;" + main_sample_detail::encodeSlices(std::vector<MainSampleSlice>(
             request.edits.begin(), request.edits.begin() + (request.editCount > 1U ? 2 : 1))) +
-            (request.phase == 'S' ? std::string() : std::string(";") + request.phase);
+            (request.phase == 'S' && !request.zeroCross ? std::string()
+                : std::string(";") + (request.phase == 'S' ? std::string() : std::string(1, request.phase)) +
+                      (request.zeroCross ? "Z" : ""));
     case MainSampleVerb::assign:
         return encoded + "A;" + std::to_string(request.pad) + ";" + std::to_string(request.start) +
-               ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0");
+               ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0") +
+               (request.zeroCross ? ";Z" : "");
     case MainSampleVerb::arrange: return encoded + "R";
     case MainSampleVerb::remove: return encoded + "D;" + std::to_string(request.sliceId);
     case MainSampleVerb::spectrogram:
@@ -299,10 +304,17 @@ struct MainSampleRequest {
             return false;
         if (!fields.finished()) {
             std::string_view phase;
-            if (!fields.next(phase) || !fields.finished() || phase.size() != 1U ||
-                (phase[0] != 'B' && phase[0] != 'U' && phase[0] != 'E'))
+            if (!fields.next(phase) || !fields.finished() || phase.empty() || phase.size() > 2U)
                 return false;
-            decoded.phase = phase[0];
+            if (phase.back() == 'Z') {
+                decoded.zeroCross = true;
+                phase.remove_suffix(1U);
+            }
+            if (phase.size() > 1U ||
+                (phase.size() == 1U && phase[0] != 'B' && phase[0] != 'U' && phase[0] != 'E'))
+                return false;
+            if (!phase.empty())
+                decoded.phase = phase[0];
         }
         if (!main_sample_detail::decodeSlices(list, UINT32_MAX, edits) || edits.empty() ||
             edits.size() > 2U)
@@ -316,9 +328,15 @@ struct MainSampleRequest {
     case 'A': {
         unsigned confirm = 2U;
         if (!fields.number(decoded.pad) || !fields.number(decoded.start) ||
-            !fields.number(decoded.end) || !fields.number(confirm) || !fields.finished() ||
+            !fields.number(decoded.end) || !fields.number(confirm) ||
             decoded.pad >= kPadCount || decoded.start >= decoded.end || confirm > 1U)
             return false;
+        if (!fields.finished()) {
+            std::string_view flag;
+            if (!fields.next(flag) || !fields.finished() || flag != "Z")
+                return false;
+            decoded.zeroCross = true;
+        }
         decoded.verb = MainSampleVerb::assign;
         decoded.confirm = confirm == 1U;
         break;

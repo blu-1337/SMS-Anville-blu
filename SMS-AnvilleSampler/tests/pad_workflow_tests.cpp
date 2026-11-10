@@ -1286,6 +1286,66 @@ void arrangeKeepsColours()
           "the audio is in time order");
 }
 
+void zeroCrossSnap()
+{
+    MainSampleFixture fixture;
+    constexpr std::uint32_t frames = 4000U;
+    sms::audio::WavAudio audio;
+    audio.sampleRate = 48000U;
+    audio.frames = frames;
+    for (std::uint32_t frame = 0; frame < frames; ++frame) {
+        const float value = 0.5f * std::sin(6.2831853f * static_cast<float>(frame) / 100.0f);
+        audio.stereo.push_back(value);
+        audio.stereo.push_back(value);
+    }
+    const auto path = std::filesystem::temp_directory_path() / "sms-zero-cross.wav";
+    check(writePadWav(path, audio).empty(), "write sine source");
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    PadData source;
+    check(fixture.engine.exportSource(source), "read the source back");
+    const auto nearCrossing = [&](const std::uint32_t f) {
+        const auto at = [&](const std::uint32_t i) { return source.stereo[2U * i]; };
+        return (at(f - 1U) < 0.0f) != (at(f) < 0.0f) || (at(f) < 0.0f) != (at(f + 1U) < 0.0f) ||
+               std::fabs(at(f)) < 0.02f;
+    };
+    const std::uint32_t radius = 144U; // 3 ms at 48 kHz
+
+    auto snapped = assignRequest(0U, 1013U, 2037U);
+    snapped.zeroCross = true;
+    auto status = fixture.send(snapped);
+    check(status.state == MainSampleState::ready && status.slices.size() == 1U, "snapped assign succeeds");
+    const auto slice = status.slices.front();
+    check(nearCrossing(slice.start) && nearCrossing(slice.end), "both edges land on a sign change");
+    check(slice.start != 1013U && slice.end != 2037U, "the edges moved");
+    check(std::abs(static_cast<int>(slice.start) - 1013) <= static_cast<int>(radius) &&
+          std::abs(static_cast<int>(slice.end) - 2037) <= static_cast<int>(radius),
+          "the edges never leave the window");
+
+    // Bypass (flag off) leaves the edges exact.
+    status = fixture.send(assignRequest(1U, 2513U, 3537U));
+    check(status.slices.back().start == 2513U && status.slices.back().end == 3537U, "bypass keeps the exact frames");
+
+    // A drag edit snaps only the edge it moved, and region snap wins over zero crossing.
+    const auto second = status.slices.back();
+    auto edit = editRequest({second.id, 2530U, second.end});
+    edit.zeroCross = true;
+    status = fixture.send(edit);
+    const auto moved = std::find_if(status.slices.begin(), status.slices.end(),
+        [&](const MainSampleSlice& s) { return s.id == second.id; });
+    check(moved != status.slices.end() && moved->end == 3537U && nearCrossing(moved->start) &&
+          std::abs(static_cast<int>(moved->start) - 2530) <= static_cast<int>(radius),
+          "an edit snaps the moved edge only");
+    edit = editRequest({second.id, slice.end, second.end}); // lands exactly on the other slice's end
+    edit.zeroCross = true;
+    status = fixture.send(edit);
+    const auto onBoundary = std::find_if(status.slices.begin(), status.slices.end(),
+        [&](const MainSampleSlice& s) { return s.id == second.id; });
+    check(onBoundary != status.slices.end() && onBoundary->start == slice.end,
+          "an edge on another slice boundary stays (region snap wins)");
+}
+
 float gainOf(const SamplerEngine& engine, const std::uint32_t pad)
 {
     sms::dsp::SamplePlaybackSettings playback;
@@ -1555,5 +1615,6 @@ int main()
     undoGestureCoalescesLiveUpdates();
     padSwap();
     arrangeKeepsColours();
+    zeroCrossSnap();
     std::cout << "Pad workflow tests passed\n";
 }

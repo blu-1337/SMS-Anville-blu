@@ -62,3 +62,8 @@ Tests: `main-sample-ui`, `ui-input-routing`.
 Arrange moves pad colours (and favourite flags) in the plug-in, in the same undo step as the
 audio (`MainSampleWorkflows::setArrangeHook`). The UI no longer replays the moves: replaying
 raced the UD1/colour echoes and shuffled colours on repeated Arrange.
+
+Zero-crossing snap: MS1 `edit`/`assign` carry a `Z` flag when SNAP is on and Alt/Shift is not held. The worker
+(`zeroCrossFrameLocked`, `ZeroCrossing.hpp`) moves each changed edge to the nearest sign change of the mono sum
+within 3 ms. An edge on another slice's boundary stays (region snap wins); an invalid result falls back to the
+exact frames. The edge jumps when the reply arrives.

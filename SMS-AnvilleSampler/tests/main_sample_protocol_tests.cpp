@@ -3,8 +3,10 @@
 #include "AutoChopProtocol.hpp"
 #include "MainSampleProtocol.hpp"
 #include "MainSampleSession.hpp"
+#include "ZeroCrossing.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -26,6 +28,48 @@ MainSampleRequest roundTrip(const MainSampleRequest& request)
     MainSampleRequest decoded;
     check(decodeMainSampleRequest(encodeMainSampleRequest(request), decoded), "request round-trip");
     return decoded;
+}
+
+void zeroCrossCodecAndSearch()
+{
+    MainSampleRequest request;
+    request.sequence = 4U;
+    request.verb = MainSampleVerb::edit;
+    request.editCount = 1U;
+    request.edits[0] = MainSampleSlice{1U, 0U, 10U};
+    request.zeroCross = true;
+    check(encodeMainSampleRequest(request) == "MS1;4;S;1:0:10;Z" && roundTrip(request).zeroCross &&
+          roundTrip(request).phase == 'S', "a single-step edit can carry the zero-cross flag");
+    request.phase = 'U';
+    check(encodeMainSampleRequest(request) == "MS1;4;S;1:0:10;UZ" && roundTrip(request).zeroCross &&
+          roundTrip(request).phase == 'U', "a live edit carries phase and flag");
+    request.zeroCross = false;
+    check(!roundTrip(request).zeroCross, "the flag is off by default");
+    MainSampleRequest assign;
+    assign.verb = MainSampleVerb::assign;
+    assign.pad = 2U;
+    assign.start = 5U;
+    assign.end = 9U;
+    assign.zeroCross = true;
+    check(encodeMainSampleRequest(assign) == "MS1;0;A;2;5;9;0;Z" && roundTrip(assign).zeroCross,
+          "assign carries the flag");
+    MainSampleRequest ignored;
+    check(!decodeMainSampleRequest("MS1;1;S;1:0:10;ZZ", ignored) && !decodeMainSampleRequest("MS1;1;A;2;5;9;0;Y", ignored) &&
+          !decodeMainSampleRequest("MS1;1;S;1:0:10;", ignored), "bad flags are refused");
+
+    std::vector<float> sine(400);
+    for (std::size_t i = 0; i < sine.size(); ++i)
+        sine[i] = 0.5f * std::sin(6.2831853f * static_cast<float>(i) / 100.0f);
+    const auto found = nearestZeroCrossing(sine, 213U, 30U);
+    const bool crosses = (sine[found - 1U] < 0.0f) != (sine[found] < 0.0f) ||
+                         (sine[found] < 0.0f) != (sine[found + 1U] < 0.0f) || std::fabs(sine[found]) < 0.02f;
+    check(crosses && found >= 183U && found <= 243U && found >= 198U && found <= 202U,
+          "the nearest sign change within the window is chosen");
+    check(nearestZeroCrossing(sine, 213U, 3U) >= 210U && nearestZeroCrossing(sine, 213U, 3U) <= 216U,
+          "the result never leaves a small window");
+    const std::vector<float> dc(64, 0.7f);
+    check(nearestZeroCrossing(dc, 20U, 10U) == 20U, "no crossing leaves the edge where it is");
+    check(nearestZeroCrossing(sine, 0U, 5U) <= 5U && nearestZeroCrossing({}, 0U, 5U) == 0U, "edges of the buffer are safe");
 }
 
 void livePhaseCodec()
@@ -393,6 +437,7 @@ int main()
     livePhaseCodec();
     requests();
     arrangement();
+    zeroCrossCodecAndSearch();
     statuses();
     waveforms();
     previews();

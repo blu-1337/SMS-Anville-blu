@@ -211,6 +211,26 @@ void liveDragSurvivesReplies()
 
 }
 
+void zeroCrossFlagFollowsSnap()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    controller.acceptStatus(status(1U), now);
+    const auto assignWith = [&](const std::uint32_t pad) {
+        controller.beginSelection(100U);
+        controller.extendSelection(300U);
+        return controller.assignSelection(pad) ? host.requests().back() : MainSampleRequest{};
+    };
+    check(assignWith(5U).zeroCross, "SNAP on asks the worker for zero-crossing edges");
+    controller.setSnapBypass(true);
+    check(!assignWith(6U).zeroCross, "Alt/Shift bypass sends exact frames");
+    controller.setSnapBypass(false);
+    controller.toggleSnap();
+    check(!assignWith(6U).zeroCross, "SNAP off sends exact frames");
+}
+
 void assignConfirmDeleteAndPreview()
 {
     Host host;
@@ -968,6 +988,7 @@ int main()
     layoutRects();
     actionButtonSpacing();
     assignPicksFirstFreePad();
+    zeroCrossFlagFollowsSnap();
     autoChopPanel();
     std::cout << "Main Sample UI tests passed\n";
 }

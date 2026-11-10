@@ -39,6 +39,9 @@ void MainSampleController::close()
 void MainSampleController::send(MainSampleRequest request)
 {
     request.sequence = ++fSequence;
+    // Edges snap to a zero crossing on the worker when SNAP is on and Alt/Shift is not held.
+    request.zeroCross = (request.verb == MainSampleVerb::edit || request.verb == MainSampleVerb::assign) &&
+                        fSnap && !fSnapBypass;
     fHost.sendMainSampleState(plugin::kMainSampleRequestKey,
                               plugin::encodeMainSampleRequest(request));
 }

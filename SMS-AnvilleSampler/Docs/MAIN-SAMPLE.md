@@ -81,3 +81,9 @@ The header **SPEC** toggle (UI-local, default off) draws a dim log-frequency hea
 Press in the top third of any pad and drag onto another pad to swap them: sound, volume,
 pan, settings, colour, favourite star and slice link all move together; nothing shifts.
 Dragging from the lower two-thirds still sets volume and pan. Undo reverts the swap.
+
+## Zero-crossing snap
+
+With SNAP on, a new or adjusted slice edge moves to the nearest zero crossing (within about 3 ms) when you
+release, which avoids clicks. Holding Alt or Shift, or turning SNAP off, keeps the exact position. An edge snapped
+to another slice stays there.

@@ -1,5 +1,6 @@
 #include "PadColorState.hpp"
 #include "MainSampleWorkflows.hpp"
+#include "ZeroCrossing.hpp"
 
 #include "Analysis/SliceStrategies.hpp"
 #include "Analysis/TempoEstimate.hpp"
@@ -314,6 +315,35 @@ bool MainSampleWorkflows::sliceHasFavoritePad(const std::uint16_t sliceId) const
     return false;
 }
 
+std::uint32_t MainSampleWorkflows::zeroCrossFrameLocked(const std::uint32_t frame,
+    const std::span<const std::uint16_t> ignoreIds) const
+{
+    for (const auto& slice : session_.slices) {
+        if (std::find(ignoreIds.begin(), ignoreIds.end(), slice.id) != ignoreIds.end())
+            continue;
+        if (slice.start == frame || slice.end == frame)
+            return frame; // region snap already placed it
+    }
+    if (session_.sampleRate == 0U || frame > session_.frames)
+        return frame;
+    const auto radius = static_cast<std::uint32_t>(
+        session_.sampleRate * kZeroCrossMilliseconds / 1000.0);
+    const std::uint32_t low = frame > radius ? frame - radius : 0U;
+    const std::uint32_t high = std::min(session_.frames - 1U, frame + radius);
+    if (session_.frames == 0U || low > high)
+        return frame;
+    const std::uint32_t first = low > 0U ? low - 1U : low; // one sample earlier to see a crossing at `low`
+    PadData audio;
+    if (!sampler_.copySourceRange(session_.sourceId, first, high - first + 1U, audio) || audio.frames == 0U)
+        return frame;
+    std::vector<float> mono(audio.frames);
+    for (std::size_t index = 0; index < mono.size(); ++index)
+        mono[index] = 0.5f * (audio.stereo[index * 2U] + audio.stereo[index * 2U + 1U]);
+    const auto found = nearestZeroCrossing(mono, frame - first, radius);
+    const auto result = first + static_cast<std::uint32_t>(found);
+    return result >= low && result <= high ? result : frame;
+}
+
 void MainSampleWorkflows::edit(const MainSampleRequest& request)
 {
     const std::lock_guard lock(mutationMutex_);
@@ -328,7 +358,38 @@ void MainSampleWorkflows::edit(const MainSampleRequest& request)
             publishStatusLocked(request.sequence, MainSampleState::error, kFavoriteRefusal);
             return;
         }
-    if (!edited.editSlices(edits)) {
+    bool applied = false;
+    if (request.zeroCross) {
+        // Only edges the drag actually moved are snapped; the same frame snaps to the same place.
+        std::array<std::uint16_t, 2> editedIds{};
+        for (std::size_t index = 0; index < edits.size(); ++index)
+            editedIds[index] = edits[index].id;
+        std::array<MainSampleSlice, 2> snapped{};
+        std::array<std::uint32_t, 4> from{};
+        std::array<std::uint32_t, 4> to{};
+        std::size_t known = 0U;
+        const auto snapEdge = [&](const std::uint32_t frame) {
+            for (std::size_t i = 0; i < known; ++i)
+                if (from[i] == frame) return to[i];
+            const auto result = zeroCrossFrameLocked(frame, {editedIds.data(), edits.size()});
+            from[known] = frame;
+            to[known++] = result;
+            return result;
+        };
+        for (std::size_t index = 0; index < edits.size(); ++index) {
+            snapped[index] = edits[index];
+            const auto old = std::find_if(session_.slices.begin(), session_.slices.end(),
+                [&](const MainSampleSlice& slice) { return slice.id == edits[index].id; });
+            if (old == session_.slices.end())
+                continue;
+            if (edits[index].start != old->start) snapped[index].start = snapEdge(edits[index].start);
+            if (edits[index].end != old->end) snapped[index].end = snapEdge(edits[index].end);
+        }
+        applied = edited.editSlices({snapped.data(), edits.size()});
+        if (!applied)
+            edited = session_; // an invalid snapped result falls back to the exact edit
+    }
+    if (!applied && !edited.editSlices(edits)) {
         publishStatusLocked(request.sequence, MainSampleState::error, "Invalid slice edit");
         return;
     }
@@ -378,7 +439,17 @@ void MainSampleWorkflows::assign(const MainSampleRequest& request)
     }
     auto edited = session_;
     MainSampleSlice created;
-    if (!edited.addSlice(request.start, request.end, created)) {
+    std::uint32_t start = request.start;
+    std::uint32_t end = request.end;
+    if (request.zeroCross) {
+        const auto snappedStart = zeroCrossFrameLocked(start, {});
+        const auto snappedEnd = zeroCrossFrameLocked(end, {});
+        if (snappedStart < snappedEnd) {
+            start = snappedStart;
+            end = snappedEnd;
+        }
+    }
+    if (!edited.addSlice(start, end, created)) {
         publishStatusLocked(request.sequence, MainSampleState::error,
             edited.slices.size() >= kMainSampleMaxSlices ? "All 64 slices are in use"
                                                          : "Invalid slice range");

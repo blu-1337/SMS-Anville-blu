@@ -102,6 +102,15 @@ private:
     void assign(const MainSampleRequest& request);
     void remove(const MainSampleRequest& request);
     void arrange(const MainSampleRequest& request);
+    /** Zero-crossing snap window, in milliseconds either side of the edge. */
+    static constexpr double kZeroCrossMilliseconds = 3.0;
+    /**
+     * The edge frame moved to the nearest zero crossing of the mono sum within
+     * kZeroCrossMilliseconds; unchanged when an edge of another slice sits on it
+     * (the region snap wins) or no crossing is near. Caller holds the lock.
+     */
+    [[nodiscard]] std::uint32_t zeroCrossFrameLocked(std::uint32_t frame,
+                                                     std::span<const std::uint16_t> ignoreIds) const;
     void waveform(const MainSampleRequest& request);
     void spectrogram(const MainSampleRequest& request);
     void buildAnalysisLocked(const PadData& whole);

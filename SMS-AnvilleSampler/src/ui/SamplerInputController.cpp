@@ -616,12 +616,6 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
         fHost.repaintSamplerInput();
         return true; // typing owns the keyboard; digits arrive through character()
     }
-    if (key == InputKey::undo || key == InputKey::redo) {
-        // Consumed (even when nothing happens) so the host never also acts on Ctrl+Z.
-        if (press && !fMixer.entry().target().valid() && !fSession.chopEditor().active())
-            fSession.requestHistory(key == InputKey::undo);
-        return true;
-    }
     if (key == InputKey::space) {
         fHost.ignoreSamplerKeyRepeat(press);
         const bool blocked = fMixer.entry().target().valid() || fMenu.open() ||

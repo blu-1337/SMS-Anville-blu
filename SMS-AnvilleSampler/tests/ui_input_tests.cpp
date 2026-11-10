@@ -298,25 +298,18 @@ void undoRedoButtonsAndKeys()
     Fixture f;
     namespace L = midichopper::ui::layout;
     check(L::historyUndo.x + L::historyUndo.width <= L::historyRedo.x &&
-          L::historyRedo.x + L::historyRedo.width <= 1146.0f && L::historyUndo.x > 600.0f,
+          L::historyRedo.x + L::historyRedo.width + 60.0f <= 1146.0f && L::historyUndo.x > 600.0f,
           "undo/redo buttons fit between the logo and the PLAY indicator");
-    check(historyKeyFor('z', true, false) == InputKey::undo && historyKeyFor('Z', true, false) == InputKey::undo,
-          "Ctrl+Z is undo");
-    check(historyKeyFor('z', true, true) == InputKey::redo && historyKeyFor('y', true, false) == InputKey::redo,
-          "Ctrl+Shift+Z and Ctrl+Y are redo");
-    check(historyKeyFor('z', false, false) == InputKey::other && historyKeyFor('y', true, true) == InputKey::other,
-          "plain Z and Ctrl+Shift+Y are not history keys");
     check(!f.session.canUndo() && !f.session.canRedo(), "buttons start disabled");
-    check(f.input.keyboard(InputKey::undo, true) && f.input.keyboard(InputKey::redo, false),
-          "history keys are consumed even when empty");
     f.click(center(L::historyUndo));
     check(f.states.empty(), "disabled undo button sends nothing");
     f.session.acceptState("undo_status", "UD1;1;2;1;0102000000000000000000000000000000000000000000000000000000000000");
     check(f.session.canUndo() && f.session.canRedo() && f.session.state().padColors[3] == 2,
           "UD1 status enables the buttons and applies colours");
-    f.input.keyboard(InputKey::undo, true);
+    f.click(center(L::historyUndo));
     check(!f.states.empty() && f.states.back().first == "undo_request" && f.states.back().second == "undo",
-          "Ctrl+Z sends the undo request");
+          "UNDO button sends the undo request");
+    check(!f.input.keyboard(InputKey::other, true), "Ctrl+Z is no longer consumed by the plugin");
     f.click(center(L::historyRedo));
     check(f.states.back().second == "redo", "REDO button sends the redo request");
     f.session.acceptState("undo_status", "UD1;2;0;0;0000000000000000000000000000000000000000000000000000000000000000");

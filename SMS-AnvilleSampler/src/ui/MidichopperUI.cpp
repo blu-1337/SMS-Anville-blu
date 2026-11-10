@@ -303,10 +303,6 @@ protected:
     }
     bool onKeyboard(const KeyboardEvent& ev) override
     {
-        const auto history = historyKeyFor(ev.key, (ev.mod & DGL_NAMESPACE::kModifierControl) != 0U,
-                                           (ev.mod & DGL_NAMESPACE::kModifierShift) != 0U);
-        if (history != InputKey::other)
-            return fInput.keyboard(history, ev.press, false);
         const auto key = ev.key == ' ' ? InputKey::space
             : ev.key == DGL_NAMESPACE::kKeyEscape ? InputKey::escape
             : isMixerValueCommitKey(ev.key) ? InputKey::commit

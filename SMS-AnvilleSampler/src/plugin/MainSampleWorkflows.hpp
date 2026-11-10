@@ -95,6 +95,7 @@ private:
     void load(const MainSampleRequest& request);
     void clear(const MainSampleRequest& request);
     void edit(const MainSampleRequest& request);
+    [[nodiscard]] bool sliceHasFavoritePad(std::uint16_t sliceId) const;
     void assign(const MainSampleRequest& request);
     void remove(const MainSampleRequest& request);
     void arrange(const MainSampleRequest& request);

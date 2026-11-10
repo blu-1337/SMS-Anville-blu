@@ -252,7 +252,7 @@ protected:
             fMixer.entry().target(), fMixer.entry().text(),
             fSession.state().editorMode, fSession.chopEditor().active(), fSession.chopEditor().split(), fSession.state().editorAuditionMode,
             fSession.state().anyPlaybackActive, fSession.state().hasWaveform,
-            fSession.state().inputLevels, fSession.state().outputLevels, fSession.state().padState, fSession.state().padStatus, fSession.state().padColors,
+            fSession.state().inputLevels, fSession.state().outputLevels, fSession.state().padState, fSession.state().padStatus, fSession.state().padColors, fSession.state().padFavorites,
             editorSettings, fSession.state().mixerSettings, fSession.state().waveform, fSession.playbackIndicator().position(),
             std::span<const sms::audio::WaveformSummary>{
                 fSession.chopEditor().waveforms().data(), fSession.chopEditor().waveforms().size()},

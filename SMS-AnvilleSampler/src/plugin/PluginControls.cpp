@@ -235,7 +235,8 @@ void PluginControls::applyCommandTriggers(midichopper::SamplerEngine& sampler) n
     if (clearPads != 0U) {
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
             if ((clearPads & (std::uint64_t{1} << pad)) != 0U)
-                sampler.clearPad(pad);
+                if (!sampler.isFavorite(pad)) // favorites are never cleared
+                    sampler.clearPad(pad);
         }
     }
     const std::uint32_t captureTarget =

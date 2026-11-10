@@ -1,6 +1,7 @@
 #include "SamplerInputController.hpp"
 
 #include "MidichopperLayout.hpp"
+#include "PadStar.hpp"
 #include "../plugin/CaptureActionProtocol.hpp"
 
 #include <algorithm>
@@ -319,6 +320,18 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             return false;
         }
 
+        if (!s.editorMode && !s.armed && !chop.active() &&
+            !(s.mainSampleMode && fSession.mainSample().confirmPending())) {
+            const auto starGrid = s.mainSampleMode
+                ? fSession.padLayout().grid(uiLayout::mainSamplePads, 8.0f)
+                : fSession.padLayout().grid(uiLayout::mainPadBounds, 10.0f);
+            const int starLocal = fSession.localPadFromVisualIndex(starGrid.hit(position));
+            if (starLocal >= 0 && midichopper::ui::padStarRect(starGrid.cell(fSession.padLayout().visualIndex(starLocal))).contains(position)) {
+                toggleFavorite(fSession.globalPad(starLocal));
+                fHost.repaintSamplerInput();
+                return true;
+            }
+        }
         if (s.mainSampleMode) {
             auto& main = fSession.mainSample();
             if (isTarget(clicked, InteractiveType::mainSampleConfirm)) {
@@ -363,6 +376,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                     fSession.setLocalStatus("Pads already in order");
                 else if (clicked.index == 2) fSession.autoColorPads();
                 else if (clicked.index == 3) fSession.clearPadColors();
+                else if (clicked.index == 4) toggleFavorite(fSession.state().selectedPad);
                 fHost.repaintSamplerInput();
                 return true;
             }
@@ -774,6 +788,15 @@ bool SamplerInputController::pressMainSamplePad(const int localPad)
     fSession.pressPlaybackPad(localPad);
     fHost.repaintSamplerInput();
     return true;
+}
+
+void SamplerInputController::toggleFavorite(const int pad)
+{
+    if (pad < 0) {
+        fSession.setLocalStatus("Select a pad first");
+        return;
+    }
+    fSession.setPadFavorite(pad, !fSession.isFavoritePad(pad));
 }
 
 void SamplerInputController::assignSelectionToFreePad()

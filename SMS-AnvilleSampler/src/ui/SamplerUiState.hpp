@@ -59,6 +59,7 @@ struct SamplerUiState {
     std::array<char, kPadsPerBank> padState{};
     std::array<char, kPadsPerBank> padStatus{};
     std::array<int, kPadCount> padColors{};
+    std::array<bool, kPadCount> padFavorites{}; // protected from auto-chop and overwrite
     char status[160]{};
 };
 

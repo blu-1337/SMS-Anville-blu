@@ -545,6 +545,11 @@ bool SamplerEngine::storeSample(const std::uint32_t pad, const std::uint32_t fra
 
 void SamplerEngine::beginRecord(std::uint32_t pad) noexcept {
     if (pad >= kPadCount) return;
+    if (isFavorite(pad)) { // favorites are never overwritten by recording
+        activePad_ = -1;
+        sessionComplete_ = true;
+        return;
+    }
     storagePool_.serviceCapture(true);
     if (storagePool_.freeCaptureFrames() == 0U) {
         captureStorageExhausted_.store(true, std::memory_order_release);

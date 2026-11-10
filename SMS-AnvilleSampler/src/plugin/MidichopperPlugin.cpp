@@ -361,12 +361,17 @@ protected:
         }
         if (std::strcmp(key, kCaptureActionRequestKey) == 0 &&
             value != nullptr && std::strcmp(value, "reset") == 0) {
+            if (sampler_.favoriteMask() != 0U) {
+                publishUiState(kPadFileStatusKey, midichopper::plugin::kFavoriteRefusal);
+                return;
+            }
             undo_.record(UndoKind::action, UndoClock::now(), [&] {
                 padWorkflows_.reset();
                 // The initiating UI invalidates its snapshots/colors locally;
                 // per-slot replies would overflow the bounded UI message bus.
                 for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad)
                     padColors_[pad].store(0, std::memory_order_relaxed);
+                sampler_.setFavoriteMask(0U);
             });
             publishUiState(kPadFileStatusKey, "Pads cleared");
             return;
@@ -426,8 +431,12 @@ protected:
             if (std::strcmp(key, kPadColorStateKeys[pad].c_str()) != 0)
                 continue;
             undo_.record(UndoKind::colors, UndoClock::now(), [&] {
-                padColors_[pad].store(midichopper::plugin::decodePadColorIndex(
-                    value != nullptr ? value : "", 255), std::memory_order_relaxed);
+                const std::string_view text = value != nullptr ? value : "";
+                const int favorite = midichopper::plugin::decodePadFavorite(text)
+                    ? midichopper::plugin::kPadFavoriteBit : 0;
+                padColors_[pad].store(favorite | midichopper::plugin::decodePadColorIndex(
+                    text, 255), std::memory_order_relaxed);
+                sampler_.setFavoriteMask(midichopper::plugin::favoriteMaskOf(padColors_));
             });
             return;
         }

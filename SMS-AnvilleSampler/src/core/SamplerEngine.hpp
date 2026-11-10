@@ -198,6 +198,11 @@ public:
     [[nodiscard]] std::uint32_t captureTargetPad() const noexcept;
     /** Explicitly choose an idle armed capture destination in the active bank. */
     void selectCaptureTarget(std::uint32_t pad) noexcept;
+    /** Favorite pads are protected: recording skips them and workflows refuse to change them. */
+    void setFavoriteMask(std::uint64_t mask) noexcept { favoriteMask_.store(mask, std::memory_order_release); }
+    [[nodiscard]] std::uint64_t favoriteMask() const noexcept { return favoriteMask_.load(std::memory_order_acquire); }
+    [[nodiscard]] bool isFavorite(std::uint32_t pad) const noexcept
+    { return pad < 64U && ((favoriteMask() >> pad) & 1U) != 0U; }
     /** Copy a stable, already-published pad snapshot on the control/UI thread. */
     [[nodiscard]] bool exportPad(std::uint32_t pad, PadData& destination,
         sms::dsp::SamplePlaybackSettings* playback = nullptr,
@@ -553,6 +558,7 @@ private:
     std::vector<std::unique_ptr<PendingState>> pendingStateOwners_;
     std::atomic<bool> stateRestoreFailed_{false};
     std::atomic<bool> captureStorageExhausted_{false};
+    std::atomic<std::uint64_t> favoriteMask_{0U};
     mutable std::recursive_mutex storageControlMutex_;
     void* controlContext_ = nullptr;
     void (*controlDispatch_)(void*, void (*)(void*) noexcept, void*) = nullptr;

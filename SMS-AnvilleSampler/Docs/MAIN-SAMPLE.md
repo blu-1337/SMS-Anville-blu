@@ -5,6 +5,7 @@ Pads keep their own copy, so you can keep editing them after the Main Sample
 is replaced or cleared.
 
 Assigning: drag a selection and click a pad, or press the MIDI note of a pad. A
+FAVORITE (or the star in a pad's corner, here and in the main pads view) protects a pad: auto-chop skips it and cuts around its slice, and delete, clear, import, paste, record, assign and marker edits of its slice refuse with "Pad is a favorite - unfavorite to change". The flag is saved with the project and covered by undo.
 ASSIGN in the side panel puts the selection on the first free pad. A note on an empty pad assigns the selection and makes no sound; a note on a loaded
 pad opens the usual overwrite confirmation and the pad still plays (it previews
 what would be replaced). Dragging edges and selections snaps to other slice

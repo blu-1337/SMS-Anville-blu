@@ -1030,6 +1030,9 @@ int main()
           decodePadColorIndex("2x", 6) == 0 &&
           decodePadColorIndex("", 6) == 0,
           "unavailable or malformed pad colors fall back to no color");
+    check(decodePadColorIndex("260", 6) == 4 && decodePadFavorite("260") && !decodePadFavorite("4") &&
+          !decodePadFavorite("") && !decodePadFavorite("x") && decodePadColorIndex("512", 6) == 0 &&
+          decodePadColorIndex("257", 6) == 1, "favorite bit decodes; old values are not favorite");
     const WaveformDetailRequest detail{73U, 12U, 3U, 1000U, 1128U};
     WaveformDetailRequest decodedDetail;
     check(decodeWaveformDetailRequest(encodeWaveformDetailRequest(detail), decodedDetail) &&

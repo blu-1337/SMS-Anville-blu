@@ -67,6 +67,7 @@ private:
     void handlePadClipboardRequestImpl(std::string_view encoded);
     void handlePadFileRequestImpl(std::string_view encoded);
 
+    [[nodiscard]] bool anyFavorite(std::uint32_t firstPad, std::uint32_t count) const noexcept;
     SamplerEngine& sampler_;
     sms::audio::RealtimeCommandDispatcher& controlDispatcher_;
     PadWorkflowObserver& observer_;

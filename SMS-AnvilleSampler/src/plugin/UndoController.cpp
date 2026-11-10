@@ -1,5 +1,6 @@
 #include "UndoController.hpp"
 
+#include "PadColorState.hpp"
 #include "PadFingerprint.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
@@ -119,6 +120,7 @@ void UndoController::step(const bool undo)
     }
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad)
         colors_[pad].store(target->colors[pad], std::memory_order_relaxed);
+    sampler_.setFavoriteMask(favoriteMaskOf(colors_));
     lastKind_ = Kind::action;
     publishLocked();
 }
@@ -157,7 +159,11 @@ void UndoController::publishLocked()
     std::string text = "UD1;" + std::to_string(++sequence_) + ';' +
         std::to_string(history_.undoDepth()) + ';' + std::to_string(history_.redoDepth()) + ';';
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad)
-        text.push_back(static_cast<char>('0' + std::clamp(colors_[pad].load(std::memory_order_relaxed), 0, 9)));
+    {
+        const int value = colors_[pad].load(std::memory_order_relaxed);
+        const int index = std::clamp(value & 255, 0, 9);
+        text.push_back(static_cast<char>(((value & kPadFavoriteBit) != 0 ? 'a' : '0') + index));
+    }
     observer_.publishUiState(kUndoStatusKey, text.c_str());
 }
 

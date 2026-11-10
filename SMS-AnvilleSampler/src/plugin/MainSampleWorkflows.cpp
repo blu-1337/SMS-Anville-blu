@@ -1,3 +1,4 @@
+#include "PadColorState.hpp"
 #include "MainSampleWorkflows.hpp"
 
 #include "Analysis/SliceStrategies.hpp"
@@ -302,6 +303,17 @@ void MainSampleWorkflows::clear(const MainSampleRequest& request)
     publishStatusLocked(request.sequence, MainSampleState::ready);
 }
 
+bool MainSampleWorkflows::sliceHasFavoritePad(const std::uint16_t sliceId) const
+{
+    if (sampler_.favoriteMask() == 0U)
+        return false;
+    const auto pads = snapshotPads();
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad)
+        if (sampler_.isFavorite(pad) && pads.provenance[pad] == link(session_.sourceId, sliceId))
+            return true;
+    return false;
+}
+
 void MainSampleWorkflows::edit(const MainSampleRequest& request)
 {
     const std::lock_guard lock(mutationMutex_);
@@ -311,6 +323,11 @@ void MainSampleWorkflows::edit(const MainSampleRequest& request)
     }
     auto edited = session_;
     const std::span<const MainSampleSlice> edits{request.edits.data(), request.editCount};
+    for (std::size_t index = 0; index < edits.size(); ++index)
+        if (sliceHasFavoritePad(edits[index].id)) { // a favorite's own markers are locked
+            publishStatusLocked(request.sequence, MainSampleState::error, kFavoriteRefusal);
+            return;
+        }
     if (!edited.editSlices(edits)) {
         publishStatusLocked(request.sequence, MainSampleState::error, "Invalid slice edit");
         return;
@@ -337,6 +354,10 @@ void MainSampleWorkflows::assign(const MainSampleRequest& request)
     }
     const auto pad = request.pad;
     const auto bit = std::uint64_t{1} << pad;
+    if (sampler_.isFavorite(pad)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, kFavoriteRefusal);
+        return;
+    }
     EngineSettings settings;
     PadMetadata metadata;
     controlDispatcher_.invoke([&]() noexcept {
@@ -388,6 +409,10 @@ void MainSampleWorkflows::remove(const MainSampleRequest& request)
         publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
         return;
     }
+    if (sliceHasFavoritePad(request.sliceId)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, kFavoriteRefusal);
+        return;
+    }
     auto edited = session_;
     if (!edited.removeSlice(request.sliceId)) {
         publishStatusLocked(request.sequence, MainSampleState::error, "Slice not found");
@@ -422,10 +447,15 @@ void MainSampleWorkflows::arrange(const MainSampleRequest& request)
     std::vector<MainSampleLink> links;
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
         const auto provenance = pads.provenance[pad];
-        if (provenance != 0U && (provenance >> 16U) == session_.sourceId)
+        if (provenance != 0U && (provenance >> 16U) == session_.sourceId && !sampler_.isFavorite(pad))
             links.push_back({pad, static_cast<std::uint16_t>(provenance & kSliceMask)});
     }
     const auto moves = arrangeMoves(session_.slices, links);
+    for (const auto& move : moves)
+        if (sampler_.isFavorite(move.to)) { // never move a pad onto a favorite
+            publishStatusLocked(request.sequence, MainSampleState::error, kFavoriteRefusal);
+            return;
+        }
     if (moves.empty()) {
         publishStatusLocked(request.sequence, MainSampleState::ready, "Pads already in order");
         return;
@@ -729,14 +759,51 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
         regions = sms::analysis::randomSlices(context, want, beats, request.seed, request.snap);
         break;
     }
-    // Slices follow pad numbers across the visible sequence, skipping hidden slots.
-    const auto padFor = [&](const std::size_t index) noexcept {
-        return advanceVisiblePad(request.firstPad, static_cast<std::uint32_t>(index),
-                                 settings.padsPerBank, settings.midiBankMode);
-    };
-    std::size_t reachable = 0U;
-    while (reachable < regions.size() && padFor(reachable) < kPadCount)
-        ++reachable;
+    // Favorite pads keep their slices: new slices are cut around those regions.
+    std::vector<MainSampleSlice> fixedSlices;
+    {
+        const auto fixedPads = snapshotPads();
+        for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+            const auto provenance = fixedPads.provenance[pad];
+            if (!sampler_.isFavorite(pad) || provenance == 0U || (provenance >> 16U) != session_.sourceId)
+                continue;
+            if (const auto* slice = session_.find(static_cast<std::uint16_t>(provenance & kSliceMask)))
+                fixedSlices.push_back(*slice);
+        }
+    }
+    if (!fixedSlices.empty()) {
+        std::sort(fixedSlices.begin(), fixedSlices.end(),
+                  [](const auto& a, const auto& b) { return a.start < b.start; });
+        std::vector<sms::analysis::SliceRegion> trimmed;
+        for (const auto& region : regions) {
+            std::int64_t cursor = region.start;
+            const auto keep = [&](const std::int64_t from, const std::int64_t to) {
+                if (to - from >= minFrames)
+                    trimmed.push_back({from, to});
+            };
+            for (const auto& fixed : fixedSlices) {
+                if (static_cast<std::int64_t>(fixed.end) <= cursor || static_cast<std::int64_t>(fixed.start) >= region.end)
+                    continue;
+                if (static_cast<std::int64_t>(fixed.start) > cursor)
+                    keep(cursor, fixed.start);
+                cursor = std::max<std::int64_t>(cursor, fixed.end);
+            }
+            if (cursor < region.end)
+                keep(cursor, region.end);
+        }
+        regions = std::move(trimmed);
+    }
+    // Slices follow pad numbers across the visible sequence, skipping hidden slots and favorites.
+    std::vector<std::uint32_t> targetPads;
+    for (std::uint32_t step = 0; targetPads.size() < std::min(regions.size(), want); ++step) {
+        const auto pad = advanceVisiblePad(request.firstPad, step, settings.padsPerBank, settings.midiBankMode);
+        if (pad >= kPadCount)
+            break;
+        if (!sampler_.isFavorite(pad))
+            targetPads.push_back(pad);
+    }
+    const auto padFor = [&](const std::size_t index) noexcept { return targetPads[index]; };
+    const std::size_t reachable = targetPads.size();
     const auto targetCount = std::min<std::size_t>({regions.size(), want, reachable});
     regions.resize(targetCount);
     reply.found = static_cast<std::uint32_t>(targetCount);
@@ -774,7 +841,10 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
 
     // A fresh slice set replaces the old one; its ids are never reused.
     auto edited = session_;
-    edited.slices.clear();
+    std::erase_if(edited.slices, [&](const MainSampleSlice& slice) {
+        return std::none_of(fixedSlices.begin(), fixedSlices.end(),
+                            [&](const MainSampleSlice& fixed) { return fixed.id == slice.id; });
+    });
     std::vector<MainSampleSlice> created(targetCount);
     for (std::size_t index = 0; index < targetCount; ++index) {
         if (!edited.addSlice(static_cast<std::uint32_t>(regions[index].start),
@@ -806,7 +876,7 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
         const auto bit = std::uint64_t{1} << pad;
         if ((targets & bit) == 0U && pads.provenance[pad] != 0U &&
-            (pads.provenance[pad] >> 16U) == session_.sourceId &&
+            (pads.provenance[pad] >> 16U) == session_.sourceId && !sampler_.isFavorite(pad) &&
             sampler_.setPadProvenance(pad, 0U, sampler_.padAudioFingerprint(pad)))
             affected |= bit;
     }

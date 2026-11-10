@@ -1,3 +1,4 @@
+#include "PadStar.hpp"
 #include "ViewRenderers.hpp"
 #include "ProductControlsRenderer.hpp"
 #include "PadViewMapping.hpp"
@@ -86,6 +87,10 @@ void drawPadPanel(const ViewRenderContext& ctx)
                                     {occupied, playing, recording, selected, padHovered,
                                      ctx.state.pressedPad == localPad, true, tint});
         drawDropHighlight(ctx, cell, pad, 9.0f);
+        drawPadStar(ctx.canvas, cell,
+                    static_cast<std::size_t>(pad) < ctx.state.padFavorites.size() &&
+                        ctx.state.padFavorites[static_cast<std::size_t>(pad)],
+                    padHovered);
 
         char padNumber[12];
         std::snprintf(padNumber, sizeof(padNumber), sms::ui::dpf::themeFormat("%02d"),

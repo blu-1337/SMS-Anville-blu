@@ -84,6 +84,7 @@ private:
     [[nodiscard]] std::uint32_t snappedFrame(float x) const;
     void toggleMainSamplePreview();
     void assignSelectionToFreePad();
+    void toggleFavorite(int pad);
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;
     double fPanOriginStart = 0.0;

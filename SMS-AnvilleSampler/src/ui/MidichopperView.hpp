@@ -68,6 +68,7 @@ struct ViewState {
     std::span<const char> padState;
     std::span<const char> padActivity;
     std::span<const int> padColors;
+    std::span<const bool> padFavorites;
     const sms::dsp::SamplePlaybackSettings& editorSettings;
     const sms::dsp::SampleMixerSettings& mixerSettings;
     const sms::audio::WaveformSummary& waveform;

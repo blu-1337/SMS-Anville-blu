@@ -1,3 +1,4 @@
+#include "PadStar.hpp"
 #include "ViewRenderers.hpp"
 #include "PadViewMapping.hpp"
 #include "DPF/AnalogMaterials.hpp"
@@ -85,6 +86,12 @@ void drawColumns(const ViewRenderContext& ctx, const MainSampleController& main,
     ctx.canvas.strokeColor(color);
     ctx.canvas.strokeWidth(lineWidth);
     ctx.canvas.stroke();
+}
+
+bool isFavoritePad(const ViewRenderContext& ctx, const int pad) noexcept
+{
+    return pad >= 0 && static_cast<std::size_t>(pad) < ctx.state.padFavorites.size() &&
+           ctx.state.padFavorites[static_cast<std::size_t>(pad)];
 }
 
 const DGL_NAMESPACE::Color* padTint(const ViewRenderContext& ctx, const int pad) noexcept
@@ -367,6 +374,7 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
             ctx.canvas, cell,
             {occupied, playing, false, ctx.state.selectedPad == pad, padHovered,
              ctx.state.pressedPad == localPad, true, padTint(ctx, pad)});
+        drawPadStar(ctx.canvas, cell, isFavoritePad(ctx, pad), padHovered);
         ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
         ctx.canvas.fontSize(11.0f);
         ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
@@ -437,10 +445,10 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
             sms::ui::dpf::drawSegment(ctx.canvas, rect, label, false, colors.activityPlayback,
                                       hovered(ctx, InteractiveType::mainSampleAutoChop, index));
         };
-        static constexpr const char* kActionLabels[] = {"ASSIGN", "ARRANGE", "AUTO COLOR", "CLEAR COLORS"};
+        static constexpr const char* kActionLabels[] = {"ASSIGN", "ARRANGE", "AUTO COLOR", "CLEAR COLORS", "FAVORITE"};
         for (int index = 0; index < uiLayout::kMainSampleActionCount; ++index)
             sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleAction(index), kActionLabels[index],
-                                      false, colors.activityPlayback,
+                                      index == 4 && isFavoritePad(ctx, ctx.state.selectedPad), colors.activityPlayback,
                                       hovered(ctx, InteractiveType::mainSampleAction, index));
         drawButton(uiLayout::autoChopMode, main.autoChopModeName(), 0);
         drawButton(uiLayout::autoChopCountMinus, "-", 1);

@@ -1,3 +1,4 @@
+#include "PadColorState.hpp"
 #include "PadWorkflows.hpp"
 
 #include "ChopEditorProtocol.hpp"
@@ -47,6 +48,15 @@ namespace {
 }
 
 } // namespace
+
+bool PadWorkflows::anyFavorite(const std::uint32_t firstPad, const std::uint32_t count) const noexcept
+{
+    const auto mask = sampler_.favoriteMask();
+    for (std::uint32_t index = 0; index < count && firstPad + index < 64U; ++index)
+        if (((mask >> (firstPad + index)) & 1U) != 0U)
+            return true;
+    return false;
+}
 
 void PadWorkflows::reset()
 {
@@ -125,6 +135,12 @@ void PadWorkflows::handlePadStructureRequest(const std::string_view encoded)
             const std::string status = "PS1;G;" + std::to_string(request.targetPad) +
                 ";" + std::to_string(count);
             observer_.publishUiState(kPadStructureStatusKey, status.c_str());
+            return;
+        }
+        if ((request.action == PadStructureAction::collapse ||
+             request.action == PadStructureAction::prepareSplit) &&
+            anyFavorite(request.firstPad, request.padCount)) {
+            publishPadStructureError(0U, midichopper::plugin::kFavoriteRefusal);
             return;
         }
         if (request.action == PadStructureAction::collapse) {
@@ -303,6 +319,12 @@ void PadWorkflows::handleChopApplyRequestImpl(const std::string_view encoded)
         return;
     }
     const std::lock_guard lock(padMutationMutex_);
+    if (anyFavorite(request.firstPad, request.padCount)) {
+        const auto refused = midichopper::plugin::encodeChopStatus(request.sequence, false,
+                                                                   midichopper::plugin::kFavoriteRefusal);
+        observer_.publishUiState(kChopStatusKey, refused.c_str());
+        return;
+    }
     EngineSettings settings;
     controlDispatcher_.invoke([&]() noexcept { settings = sampler_.settings(); });
     if (request.padsPerBank != 0U) {
@@ -344,6 +366,11 @@ void PadWorkflows::handlePadClipboardRequestImpl(const std::string_view encoded)
     }
 
     const std::lock_guard lock(padMutationMutex_);
+    if (request.action != PadClipboardAction::copy && sampler_.isFavorite(request.pad)) {
+        publishFileStatus(midichopper::plugin::kFavoriteRefusal);
+        observer_.publishClipboardResult(midichopper::plugin::PadClipboardResultCode::failed);
+        return;
+    }
     const bool succeeded = request.action == PadClipboardAction::copy
         ? padClipboard_.copyFrom(sampler_, request.pad)
         : padClipboard_.pasteTo(sampler_, request.pad);
@@ -393,6 +420,11 @@ void PadWorkflows::handlePadFileRequestImpl(const std::string_view encoded)
     }
 
     const std::lock_guard lock(padMutationMutex_);
+    if (request.action == PadFileAction::import && sampler_.isFavorite(request.pad)) {
+        publishFileStatus(midichopper::plugin::kFavoriteRefusal);
+        observer_.publishFileResult(midichopper::plugin::PadFileResultCode::failed);
+        return;
+    }
     observer_.publishUiState(kPadFileBusyKey, "1");
     std::string status;
     auto result = midichopper::plugin::PadFileResultCode::failed;

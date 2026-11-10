@@ -299,9 +299,11 @@ inline constexpr sms::ui::Rect mainSampleClear{1112.0f, 462.0f, 104.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleStatus{994.0f, 506.0f, 222.0f, 40.0f};
 // Slice tools below the status text, two per row: 0 ASSIGN (selection to the first free pad),
 // 1 ARRANGE, 2 AUTO COLOR, 3 CLEAR COLORS. Clicking a pad also assigns.
-inline constexpr int kMainSampleActionCount = 4;
+inline constexpr int kMainSampleActionCount = 5; // 4: FAVORITE toggles the selected pad (full-width row)
 [[nodiscard]] constexpr sms::ui::Rect mainSampleAction(const int index) noexcept
 {
+    if (index == 4)
+        return {994.0f, 608.0f, 222.0f, 27.0f};
     return {994.0f + static_cast<float>(index % 2) * 114.0f, 550.0f + static_cast<float>(index / 2) * 29.0f,
             108.0f, 27.0f};
 }

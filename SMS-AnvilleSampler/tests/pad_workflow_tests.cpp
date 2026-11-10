@@ -1,3 +1,4 @@
+#include "../src/plugin/PadColorState.hpp"
 #include "PadWorkflows.hpp"
 #include "ChopEditorProtocol.hpp"
 #include "MainSampleWorkflows.hpp"
@@ -1314,6 +1315,74 @@ void undoRedoRestoresState()
     check(undo.undoDepth() == 0U, "no steps right after a host restore");
 }
 
+void favoriteGuards()
+{
+    MainSampleFixture fixture(12.0);
+    const auto path = writeSourceWav("sms-favorites.wav", 192000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    static_cast<void>(fixture.send(load, 2U));
+    AutoChopRequest equal;
+    equal.mode = AutoChopMode::equal;
+    equal.count = 4U;
+    check(autoChop(fixture, equal).state == AutoChopState::ok, "baseline chop");
+    const auto before = fixture.main.session();
+    const auto favoriteSlice = before.slices[1];
+    const auto favoriteTag = fixture.provenance(1U);
+    const auto favoriteGeneration = fixture.engine.padMetadata(1U).generation;
+    fixture.engine.setFavoriteMask(1ULL << 1U);
+
+    check(fixture.engine.isFavorite(1U) && !fixture.engine.isFavorite(0U), "favorite mask reads back");
+    // Auto-chop skips the favorite, keeps its slice fixed and cuts around it.
+    equal.count = 3U;
+    const auto status = autoChop(fixture, equal);
+    const auto after = fixture.main.session();
+    check(status.state == AutoChopState::ok && (status.mask & 2U) == 0U,
+          "auto-chop never targets a favorite pad");
+    check(fixture.provenance(1U) == favoriteTag &&
+          fixture.engine.padMetadata(1U).generation == favoriteGeneration &&
+          padHoldsSlice(fixture.engine, 1U, favoriteSlice.start, favoriteSlice.end),
+          "favorite pad keeps audio, tag and generation through auto-chop");
+    bool kept = false;
+    for (const auto& slice : after.slices) {
+        if (slice.id == favoriteSlice.id) {
+            kept = slice.start == favoriteSlice.start && slice.end == favoriteSlice.end;
+            continue;
+        }
+        check(slice.end <= favoriteSlice.start || slice.start >= favoriteSlice.end,
+              "new slices never overlap a favorite region");
+    }
+    check(kept, "the favorite slice stays fixed");
+
+    // Marker edit, delete and assign of a favorite are refused with the shared message.
+    auto request = mainRequest(MainSampleVerb::remove);
+    request.sliceId = favoriteSlice.id;
+    auto refused = fixture.send(request);
+    check(refused.state == MainSampleState::error && refused.text == midichopper::plugin::kFavoriteRefusal,
+          "deleting a favorite's slice is refused");
+    refused = fixture.send(assignRequest(1U, 10U, 20U));
+    check(refused.state == MainSampleState::error && refused.text == midichopper::plugin::kFavoriteRefusal,
+          "assign onto a favorite is refused");
+    refused = fixture.send(editRequest({favoriteSlice.id, favoriteSlice.start + 5U, favoriteSlice.end}));
+    check(refused.state == MainSampleState::error && refused.text == midichopper::plugin::kFavoriteRefusal &&
+          fixture.main.session().find(favoriteSlice.id)->start == favoriteSlice.start,
+          "marker edits of a favorite's slice are refused");
+
+    // Paste and WAV import onto a favorite are refused with the message.
+    fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::paste, 1U));
+    check(fixture.observer.latest(kPadFileStatusKey) == midichopper::plugin::kFavoriteRefusal &&
+          fixture.engine.padMetadata(1U).generation == favoriteGeneration, "paste onto a favorite is refused");
+    fixture.pads.handlePadFileRequest(encodePadFileRequest(PadFileAction::import, 1U, utf8(path)));
+    check(fixture.observer.latest(kPadFileStatusKey) == midichopper::plugin::kFavoriteRefusal &&
+          fixture.engine.padMetadata(1U).generation == favoriteGeneration, "import onto a favorite is refused");
+
+    // Unfavoriting makes the pad editable again.
+    fixture.engine.setFavoriteMask(0U);
+    check(fixture.send(assignRequest(1U, 10U, 20U)).state == MainSampleState::ready,
+          "an unfavorited pad can be assigned");
+    std::filesystem::remove(path);
+}
+
 int main()
 {
     clipboardSnapshotAndReplies();
@@ -1331,6 +1400,7 @@ int main()
     mainSampleAssignEditAndDelete();
     autoChopWorkflow();
     mainSampleArrange();
+    favoriteGuards();
     undoRedoRestoresState();
     std::cout << "Pad workflow tests passed\n";
 }

@@ -71,6 +71,9 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     [[nodiscard]] PadActionController &padActions() noexcept { return fPadActions; }
     /** Main Sample AUTO COLOR / CLEAR COLORS: slice zones and pad colours together. */
     void autoColorPads();
+    [[nodiscard]] bool isFavoritePad(int pad) const noexcept;
+    void setPadFavorite(int pad, bool favorite);
+    void sendPadColorValue(std::size_t index);
     void clearPadColors();
     [[nodiscard]] const PadActionController &padActions() const noexcept { return fPadActions; }
     [[nodiscard]] ChopEditorController &chopEditor() noexcept { return fChopEditor; }

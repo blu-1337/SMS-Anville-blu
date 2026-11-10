@@ -475,8 +475,10 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
         const char *digits = cursor;
         if (std::strlen(digits) >= fState.padColors.size()) {
             for (std::size_t pad = 0; pad < fState.padColors.size(); ++pad) {
-                const int digit = digits[pad] - '0';
+                const bool fav = digits[pad] >= 'a' && digits[pad] <= 'j';
+                const int digit = digits[pad] - (fav ? 'a' : '0');
                 fState.padColors[pad] = digit >= 0 && digit <= 9 ? digit : 0;
+                fState.padFavorites[pad] = fav;
             }
         }
         if (fState.editorMode)
@@ -724,6 +726,7 @@ void SamplerUiSession::clearAllPadContents()
     fState.padState.fill('0');
     fState.padStatus.fill('0');
     fState.padColors.fill(0);
+    fState.padFavorites.fill(false);
     fPadActions.clearClipboard();
     fHost.invalidateUiInteraction(UiInteractionInvalidation::clearPadsInputs);
     if (fCapabilities.stateTransport) {
@@ -1213,6 +1216,7 @@ bool SamplerUiSession::parsePadColorState(const char *const key, const char *con
             continue;
         fState.padColors[pad] =
             midichopper::plugin::decodePadColorIndex(value, fCapabilities.colorCount);
+        fState.padFavorites[pad] = midichopper::plugin::decodePadFavorite(value);
         return true;
     }
     return false;
@@ -1255,7 +1259,28 @@ void SamplerUiSession::setPadColor(const int pad, const int color)
 {
     const auto index = static_cast<std::size_t>(pad);
     fState.padColors[index] = color;
-    fHost.sendUiState(kPadColorStateKeys[index].c_str(), std::to_string(color).c_str());
+    sendPadColorValue(index);
+}
+
+void SamplerUiSession::sendPadColorValue(const std::size_t index)
+{
+    const int value = fState.padColors[index] | (fState.padFavorites[index] ? midichopper::plugin::kPadFavoriteBit : 0);
+    fHost.sendUiState(kPadColorStateKeys[index].c_str(), std::to_string(value).c_str());
+}
+
+bool SamplerUiSession::isFavoritePad(const int pad) const noexcept
+{
+    return pad >= 0 && pad < static_cast<int>(midichopper::kPadCount) &&
+           fState.padFavorites[static_cast<std::size_t>(pad)];
+}
+
+void SamplerUiSession::setPadFavorite(const int pad, const bool favorite)
+{
+    if (pad < 0 || pad >= static_cast<int>(midichopper::kPadCount) || isFavoritePad(pad) == favorite)
+        return;
+    fState.padFavorites[static_cast<std::size_t>(pad)] = favorite;
+    sendPadColorValue(static_cast<std::size_t>(pad));
+    fHost.repaintUi();
 }
 
 void SamplerUiSession::idle(const Time now, const float effectiveGlobalTune)

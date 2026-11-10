@@ -333,6 +333,22 @@ void visible_waveform_range() {
           "visible waveform rejects ranges past source audio");
 }
 
+void favorite_pad_is_not_recorded_over() {
+    midichopper::SamplerEngine e(1000.0, 1.0);
+    midichopper::EngineSettings s;
+    s.armed = true; s.monitorInput = false;
+    e.setSettings(s);
+    e.setFavoriteMask(1ULL);
+    check(e.isFavorite(0) && !e.isFavorite(1), "favorite mask reaches the engine");
+    float inL[] = {1, 2, 3}; float inR[] = {1, 2, 3}; float outL[3]{}; float outR[3]{};
+    midichopper::MidiEvent first{0, 90, 127, midichopper::MidiEventType::NoteOn};
+    e.process(inL, inR, outL, outR, 3, &first, 1);
+    e.finalizeRecording();
+    e.process(nullptr, nullptr, outL, outR, 0);
+    midichopper::PadData p0;
+    check(!e.exportPad(0, p0) || p0.frames == 0, "recording never lands on a favorite pad");
+}
+
 void sequential_boundaries_and_preroll() {
     midichopper::SamplerEngine e(1000.0, 1.0);
     midichopper::EngineSettings s;
@@ -3846,6 +3862,7 @@ int main() {
     color_effects();
     visible_waveform_range();
     sequential_boundaries_and_preroll();
+    favorite_pad_is_not_recorded_over();
     preroll_trim_metadata();
     rechop_and_raw_preview();
     rechop_preserves_source_markers();

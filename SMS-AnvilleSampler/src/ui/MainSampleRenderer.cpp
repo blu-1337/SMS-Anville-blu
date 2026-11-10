@@ -172,6 +172,23 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
     const float peak = overviewPeak(main.overview());
     const float scale = peak > 0.001f ? std::min(1.0f / peak, 8.0f) : 1.0f;
 
+    // SPEC: dim spectrogram behind everything, aligned by its own frame range so it
+    // follows zoom and pan while a fresh one is on the way.
+    if (main.spectrogramReady() && ctx.state.spectrogramImage != nullptr && ctx.state.spectrogramImage->isValid()) {
+        const auto& sg = main.spectrogram();
+        const float x0 = viewport.xForFrame(static_cast<double>(sg.start), bounds);
+        const float x1 = viewport.xForFrame(static_cast<double>(sg.end), bounds);
+        if (x1 - x0 >= 1.0f) {
+            const auto paint = ctx.canvas.imagePattern(x0, bounds.y, x1 - x0, bounds.height, 0.0f,
+                                                       *ctx.state.spectrogramImage, 1.0f);
+            ctx.canvas.beginPath();
+            ctx.canvas.rect(std::max(x0, bounds.x), bounds.y,
+                            std::min(x1, bounds.x + bounds.width) - std::max(x0, bounds.x), bounds.height);
+            ctx.canvas.fillPaint(paint);
+            ctx.canvas.fill();
+        }
+    }
+
     // Slice backgrounds in the colour of the linked pad.
     const auto& slices = main.displaySlices();
     const std::size_t markerCount = std::min(slices.size(), kMaxMarkers);
@@ -523,6 +540,7 @@ void drawMainSampleView(const ViewRenderContext& ctx)
         drawTransport(3, "+", false);
         drawTransport(5, "SNAP", main.snapEnabled());
         drawTransport(4, "FIT", main.viewport().zoomed());
+        drawTransport(6, "SPEC", main.spectrogramOn());
     }
 
     drawWaveformArea(ctx, main);

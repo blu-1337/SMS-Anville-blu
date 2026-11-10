@@ -348,6 +348,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 else if (clicked.index == 1) main.toggleLoop();
                 else if (clicked.index == 4) main.zoomFit(Clock::now());
                 else if (clicked.index == 5) main.toggleSnap();
+                else if (clicked.index == 6) main.toggleSpectrogram(Clock::now());
                 else if (clicked.index >= 2) {
                     const auto& waveform = uiLayout::mainSampleWaveform;
                     main.zoom(clicked.index == 3 ? 1.0f : -1.0f, waveform.x + waveform.width * 0.5f,

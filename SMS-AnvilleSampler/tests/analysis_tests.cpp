@@ -5,6 +5,7 @@
 #include "Analysis/SplitMix64.hpp"
 #include "Analysis/TempoEstimate.hpp"
 
+#include <cstdio>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -409,6 +410,47 @@ void spectralModeFindsSoftHatAfterThump()
     }
 }
 
+void spectrogramBinsFollowFrequency()
+{
+    for (const double rate : {44100.0, 48000.0}) {
+        for (const double hz : {100.0, 440.0, 1530.0, 5000.0}) {
+            std::vector<float> x(static_cast<std::size_t>(rate * 2.0) * 2);
+            for (std::size_t i = 0; i < x.size() / 2; ++i) {
+                const auto v = static_cast<float>(0.5 * std::sin(2.0 * std::numbers::pi * hz * static_cast<double>(i) / rate));
+                x[i * 2] = v;
+                x[i * 2 + 1] = v;
+            }
+            const auto a = analyzeOnsets(x, rate);
+            check(a.spectrogram.size() == a.novelty.size() * kSpectrogramBins, "one spectrogram row per hop");
+            std::vector<std::uint8_t> cols(8 * kSpectrogramBins);
+            check(spectrogramColumns(a, 0, a.sourceFrames, 8, cols), "spectrogram columns");
+            const std::size_t expected = spectrogramBinForHz(hz);
+            for (std::size_t c = 1; c + 1 < 8; ++c) {
+                std::size_t best = 0;
+                for (std::size_t b = 0; b < kSpectrogramBins; ++b) {
+                    if (cols[c * kSpectrogramBins + b] > cols[c * kSpectrogramBins + best]) {
+                        best = b;
+                    }
+                }
+                const std::size_t tol = expected < 14 ? 4 : 1; // log bins narrower than the FFT resolution smear at the bottom
+                check(best + tol >= expected && best <= expected + tol, "a sine lands in its expected log bin");
+                check(cols[c * kSpectrogramBins + best] > 200, "a -6 dBFS sine reads loud");
+                const std::size_t far = expected > 20 ? expected - 15 : expected + 15;
+                check(cols[c * kSpectrogramBins + far] < cols[c * kSpectrogramBins + best] / 2, "far bins stay quiet");
+            }
+        }
+    }
+    check(spectrogramBinForHz(10.0) == 0 && spectrogramBinForHz(30000.0) == kSpectrogramBins - 1, "bin clamps");
+    std::vector<std::uint8_t> out(kSpectrogramBins);
+    check(!spectrogramColumns(OnsetAnalysis{}, 0, 100, 1, out), "empty analysis has no spectrogram");
+    const std::vector<float> silence(static_cast<std::size_t>(44100.0 * 2.0) * 2, 0.0F);
+    const auto s = analyzeOnsets(silence, 44100.0);
+    std::vector<std::uint8_t> cols(4 * kSpectrogramBins);
+    check(spectrogramColumns(s, 0, s.sourceFrames, 4, cols), "silence has columns");
+    check(std::all_of(cols.begin(), cols.end(), [](const std::uint8_t v) { return v == 0; }), "silence is black");
+    check(!spectrogramColumns(s, 100, 100, 4, cols), "empty range");
+}
+
 void spectralModeSilenceAndSpeed()
 {
     const double rate = 48000.0;
@@ -507,5 +549,6 @@ int main()
     findSamplesAndRandom();
     spectralModeFindsSoftHatAfterThump();
     spectralModeSilenceAndSpeed();
+    spectrogramBinsFollowFrequency();
     return EXIT_SUCCESS;
 }

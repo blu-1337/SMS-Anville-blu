@@ -319,6 +319,57 @@ void arrangement()
           "unlinked pads stay out of the set and two pads can swap");
 }
 
+void spectrogramCodec()
+{
+    MainSampleSpectrogram s;
+    s.sequence = 77U;
+    s.start = 1000U;
+    s.end = 5000000U;
+    s.columns = static_cast<std::uint32_t>(kSpectrogramMaxColumns);
+    s.data.resize(s.columns * kSpectrogramBins);
+    for (std::size_t i = 0; i < s.data.size(); ++i)
+        s.data[i] = static_cast<std::uint8_t>(i * 37U + 11U);  // every byte value, any padding
+    const auto encoded = encodeMainSampleSpectrogram(s);
+    MainSampleSpectrogram d;
+    check(decodeMainSampleSpectrogram(encoded, d) && d.sequence == 77U && d.start == 1000U &&
+          d.end == 5000000U && d.columns == s.columns && d.data == s.data, "MG1 round-trip");
+    // Worst case: 120 columns, 10-digit numbers. The UI bus carries 8191 bytes per message.
+    s.sequence = 18446744073709551615ULL;
+    s.start = 4294967294U;
+    s.end = 4294967295U;
+    check(encodeMainSampleSpectrogram(s).size() < 8191U, "MG1 worst case fits the UI bus");
+    check(encodeMainSampleSpectrogram(s).size() < 7800U, "MG1 worst case keeps headroom");
+    for (std::size_t columns = 1; columns <= 3; ++columns) {  // Base64 padding for 1..3 byte tails
+        MainSampleSpectrogram t;
+        t.sequence = 1U; t.start = 0U; t.end = 10U; t.columns = static_cast<std::uint32_t>(columns);
+        t.data.assign(columns * kSpectrogramBins - 1U, 7U);
+        t.data.push_back(255U);
+        MainSampleSpectrogram r;
+        check(decodeMainSampleSpectrogram(encodeMainSampleSpectrogram(t), r) && r.data == t.data, "MG1 small round-trip");
+    }
+    for (const char* bad : {"", "MG1;", "MG2;1;0;10;1;AAAA", "MG1;1;10;10;1;AAAA", "MG1;1;0;10;0;AAAA",
+                            "MG1;1;0;10;121;AAAA", "MG1;1;0;10;1;AAA", "MG1;1;0;10;1;AA*A",
+                            "MG1;1;0;10;1;AAAA;x"}) {
+        MainSampleSpectrogram r;
+        check(!decodeMainSampleSpectrogram(bad, r), "MG1 malformed message is refused");
+    }
+    std::string wrongSize = encoded.substr(0U, encoded.size() - 4U);
+    MainSampleSpectrogram r;
+    check(!decodeMainSampleSpectrogram(wrongSize, r), "MG1 payload size must match columns x bins");
+    MainSampleRequest request;
+    request.sequence = 5U;
+    request.verb = MainSampleVerb::spectrogram;
+    request.start = 10U;
+    request.end = 900U;
+    request.tiles = 120U;
+    MainSampleRequest decoded;
+    check(decodeMainSampleRequest(encodeMainSampleRequest(request), decoded) &&
+          decoded.verb == MainSampleVerb::spectrogram && decoded.start == 10U && decoded.end == 900U &&
+          decoded.tiles == 120U, "MS1 G request round-trip");
+    check(!decodeMainSampleRequest("MS1;5;G;10;900;121", decoded) && !decodeMainSampleRequest("MS1;5;G;10;10;5", decoded) &&
+          !decodeMainSampleRequest("MS1;5;G;10;900;0", decoded), "bad G requests are refused");
+}
+
 int main()
 {
     requests();
@@ -329,6 +380,7 @@ int main()
     sessions();
     links();
     autoChop();
+    spectrogramCodec();
     std::cout << "main sample protocol tests passed\n";
     return 0;
 }

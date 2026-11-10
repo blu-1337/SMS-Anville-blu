@@ -773,7 +773,7 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         if (context.mainSampleHasSource && uiLayout::mainSampleClear.contains(point))
             return target(InteractiveType::mainSampleClear);
         if (context.mainSampleHasSource) {
-            for (int index = 0; index < 6; ++index) {
+            for (int index = 0; index < 7; ++index) {
                 if (uiLayout::mainSampleTransport[static_cast<std::size_t>(index)].contains(point))
                     return target(InteractiveType::mainSampleTransport, index);
             }

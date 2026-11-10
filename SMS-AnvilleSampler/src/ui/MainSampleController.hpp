@@ -50,6 +50,15 @@ public:
     // Replies and host notifications. Each returns true when the view changed.
     bool acceptStatus(std::string_view encoded, Time now = Clock::now());
     bool acceptWaveform(std::string_view encoded);
+    /** MG1 reply for the newest spectrogram request; kept with its own frame range. */
+    bool acceptSpectrogram(std::string_view encoded);
+    /** SPEC header toggle (UI-local, default off): shows a dim spectrogram behind the waveform. */
+    void toggleSpectrogram(Time now) noexcept;
+    [[nodiscard]] bool spectrogramOn() const noexcept { return fSpectrogramOn; }
+    [[nodiscard]] bool spectrogramReady() const noexcept { return fSpectrogramOn && fSpectrogram.ready; }
+    [[nodiscard]] const plugin::MainSampleSpectrogram& spectrogram() const noexcept { return fSpectrogram.data; }
+    /** Changes whenever new spectrogram pixels arrive (the renderer re-uploads its texture). */
+    [[nodiscard]] std::uint32_t spectrogramVersion() const noexcept { return fSpectrogramVersion; }
     bool acceptPreviewPosition(float value) noexcept;
     /** Host playback position (pad+1+fraction, 0 = idle): shows MIDI/pad playback of a linked slice. */
     bool acceptPadPosition(float value) noexcept;
@@ -232,6 +241,7 @@ private:
     void sourceChanged();
     void rebuildDisplaySlices();
     bool scheduleDetail(bool changed, Time now) noexcept;
+    void spectrogramDirty(Time deadline) noexcept;
     [[nodiscard]] std::uint32_t clampFrame(std::uint32_t frame) const noexcept;
 
     MainSampleHost& fHost;
@@ -274,6 +284,17 @@ private:
     bool fDetailDirty = false;
     Time fDetailDeadline{};
     Time fOverviewDeadline{};
+    struct SpectrogramView {
+        bool ready = false;
+        plugin::MainSampleSpectrogram data{};
+    };
+    SpectrogramView fSpectrogram{};
+    bool fSpectrogramOn = false;
+    bool fSpectrogramDirty = false;
+    std::uint64_t fSpectrogramSequence = 0U;
+    std::uint32_t fSpectrogramTries = 0U;
+    std::uint32_t fSpectrogramVersion = 0U;
+    Time fSpectrogramDeadline{};
     plugin::AutoChopMode fAutoMode = plugin::AutoChopMode::transient;
     std::uint32_t fAutoCount = 16U;
     std::uint32_t fAutoFirstPad = 0U;

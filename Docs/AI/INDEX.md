@@ -13,13 +13,13 @@ Read [AGENTS.md](../../AGENTS.md), then the relevant row.
 | Startup preferences | [Preferences](LAYOUT-PREFERENCE.md) | Host precedence |
 | Effects | [Mixing contract](MIXING.md) | [DSP](../../Common-Src/DSP/ColorEffects.hpp) |
 | Resampling | [Contract](RESAMPLING.md), [Benchmarks](../../SMS-AnvilleSampler/Docs/RESAMPLING-BENCHMARKS.md) | DSP |
-| Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md), [Auto-chop](AUTO-CHOP.md) | [Common-Src](../../Common-Src/) |
+| Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md), [Auto-chop](AUTO-CHOP.md), [Spectrogram](SPECTROGRAM.md) | [Common-Src](../../Common-Src/) |
 | Shared UI | [Common-UI map](../../Common-UI/README.md) | [Common-UI](../../Common-UI/) |
 | Product direction | [Vision](../../SMS-AnvilleSampler/Docs/VISION.md) | Intended scope |
 | Pad context menu and actions | [Context-menu design](PAD-CONTEXT-MENU.md) | Action contract |
 | Cut Point Editor | [Cut Point Editor](CHOP-EDITOR.md) | Three-pad cuts, preview, limitations |
 | Pad storage and transfer concurrency | [Storage handoff](PAD-STORAGE.md), [Main sample](MAIN-SAMPLE.md), [workflows](MAIN-SAMPLE-WORKFLOWS.md), [preview](MAIN-SAMPLE-PREVIEW.md), [UI](MAIN-SAMPLE-UI.md), [guide](../../SMS-AnvilleSampler/Docs/MAIN-SAMPLE.md) | [Engine](../../SMS-AnvilleSampler/src/core/SamplerEngine.hpp) |
-| Pad WAV import/export, file drop | [WAV I/O design](PAD-WAV-IO.md), [File drop](FILE-DROP.md) | Formats, real-time boundary, dialogs, drop effects |
+| Pad WAV import/export, file drop | [WAV I/O design](PAD-WAV-IO.md), [File drop](FILE-DROP.md) | Formats, real-time boundary, dialogs |
 | MIDI control | [Host integration](MIDI-CONTROL.md) | Automation, metadata |
 | DPF host integration | [DPF VST3 constraints](DPF-VST3-CONSTRAINTS.md) | Offline mode, state, ports |
 | Skins and artwork | [Skin guide](../../SMS-AnvilleSampler/Docs/SKINS.md), [Authoring](SKINS.md), [Additional skins](../../SMS-AnvilleSampler/additional-skins/README.md) | [Catalog](../../Common-UI/SkinCatalog.hpp), [Theme adapter](../../Common-UI/DPF/SkinTheme.hpp) |

@@ -31,6 +31,14 @@ struct Onset {
 // its own, so a quiet high band counts as much as a loud low band.
 inline constexpr std::size_t kSpectralBands = 5;
 
+// Low-resolution log-frequency spectrogram kept with the analysis (one row of
+// kSpectrogramBins bytes per hop): bin b spans 30 Hz * (10000/30)^(b/48) upward,
+// level 0..255 maps -84..0 dBFS (a full-scale sine reads about 255).
+inline constexpr std::size_t kSpectrogramBins = 48;
+inline constexpr double kSpectrogramLowHz = 30.0;
+inline constexpr double kSpectrogramHighHz = 10000.0;
+[[nodiscard]] std::size_t spectrogramBinForHz(double hz) noexcept;
+
 struct OnsetAnalysis {
     double sourceRate = 0.0;
     std::int64_t sourceFrames = 0;
@@ -44,7 +52,15 @@ struct OnsetAnalysis {
     // (sorted by frame, strength relative to the band's own median).
     std::vector<std::array<float, kSpectralBands>> bandNovelty;
     std::vector<Onset> spectralCandidates;
+    std::vector<std::uint8_t> spectrogram;      // hops x kSpectrogramBins, row per hop
 };
+
+// Resamples the cached spectrogram to `columns` columns over [start, end) source
+// frames (max over the hops of each column, so transients stay visible). Writes
+// columns x kSpectrogramBins bytes, column-major. Returns false for an empty
+// analysis or range.
+[[nodiscard]] bool spectrogramColumns(const OnsetAnalysis& analysis, std::int64_t start, std::int64_t end,
+                                      std::size_t columns, std::span<std::uint8_t> out);
 
 // Interleaved stereo float. Checks `cancel` every 1024 hops; a cancelled
 // analysis has `cancelled` set and must not be cached.

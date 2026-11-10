@@ -70,3 +70,7 @@ Auto chop cuts the main sample into pads in one step (issue #54). Pick a mode, a
 
 A pad linked to a slice also moves the playhead through that slice when it is played from MIDI or a pad click (most recent voice).
 Drag a slice's number badge to move the whole region (length kept, clamped to the source, snaps with SNAP on); release sends one edit that re-cuts its linked pads and is one undo step.
+
+## SPEC spectrogram
+
+The header **SPEC** toggle (UI-local, default off) draws a dim log-frequency heatmap (dark to amber, low frequencies at the bottom) behind the waveform. It follows zoom and pan; the old picture stays until the debounced new one arrives.

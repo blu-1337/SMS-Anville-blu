@@ -250,6 +250,7 @@ void MainSampleWorkflows::handleRequestImpl(const MainSampleRequest& request)
     case MainSampleVerb::assign: assign(request); return;
     case MainSampleVerb::remove: remove(request); return;
     case MainSampleVerb::waveform: waveform(request); return;
+    case MainSampleVerb::spectrogram: spectrogram(request); return;
     case MainSampleVerb::arrange: arrange(request); return;
     }
 }
@@ -455,6 +456,45 @@ void MainSampleWorkflows::arrange(const MainSampleRequest& request)
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
 }
 
+void MainSampleWorkflows::buildAnalysisLocked(const PadData& whole)
+{
+    analysisCache_ = {};
+    analysisCache_.analysis = sms::analysis::analyzeOnsets(
+        whole.stereo, static_cast<double>(session_.sampleRate), {}, nullptr);
+    const auto tempo = sms::analysis::estimateTempo(analysisCache_.analysis.novelty,
+                                                    analysisCache_.analysis.hopSeconds);
+    analysisCache_.bpm = tempo.bpm;
+    analysisCache_.sourceId = session_.sourceId;
+    ++analysisRuns_;
+}
+
+void MainSampleWorkflows::spectrogram(const MainSampleRequest& request)
+{
+    // Reuses the cached onset analysis (same FFT frames); built here on first use.
+    static_assert(kSpectrogramBins == sms::analysis::kSpectrogramBins);
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty() || request.start >= request.end || request.end > session_.frames)
+        return; // stale; the view retries against its next status
+    if (analysisCache_.sourceId != session_.sourceId) {
+        PadData whole;
+        std::uint64_t id = 0U;
+        if (!sampler_.exportSource(whole, &id) || id != session_.sourceId)
+            return;
+        buildAnalysisLocked(whole);
+    }
+    MainSampleSpectrogram reply;
+    reply.sequence = request.sequence;
+    reply.start = request.start;
+    reply.end = request.end;
+    reply.columns = request.tiles;
+    reply.data.resize(static_cast<std::size_t>(request.tiles) * kSpectrogramBins);
+    if (!sms::analysis::spectrogramColumns(analysisCache_.analysis, request.start, request.end,
+                                           request.tiles, reply.data))
+        return;
+    const auto encoded = encodeMainSampleSpectrogram(reply);
+    observer_.publishUiState(kMainSampleSpectrogramKey, encoded.c_str());
+}
+
 void MainSampleWorkflows::waveform(const MainSampleRequest& request)
 {
     // No mutation mutex: the engine pins the source, so a long scan never
@@ -643,14 +683,7 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
             fail("Main sample storage is unavailable");
             return;
         }
-        analysisCache_ = {};
-        analysisCache_.analysis = sms::analysis::analyzeOnsets(
-            whole.stereo, static_cast<double>(session_.sampleRate), {}, nullptr);
-        const auto tempo = sms::analysis::estimateTempo(analysisCache_.analysis.novelty,
-                                                        analysisCache_.analysis.hopSeconds);
-        analysisCache_.bpm = tempo.bpm;
-        analysisCache_.sourceId = session_.sourceId;
-        ++analysisRuns_;
+        buildAnalysisLocked(whole);
     }
     const double host = hostBpm_ != nullptr ? hostBpm_->load(std::memory_order_relaxed) : 0.0;
     const double requested = static_cast<double>(request.bpmCenti) / 100.0;

@@ -301,6 +301,7 @@ protected:
             std::strcmp(key, kMainPreviewRequestKey) == 0 ||
             std::strcmp(key, kMainSampleStatusKey) == 0 ||
             std::strcmp(key, kMainSampleWaveformKey) == 0 ||
+            std::strcmp(key, kMainSampleSpectrogramKey) == 0 ||
             std::strcmp(key, kAutoChopRequestKey) == 0 ||
             std::strcmp(key, kAutoChopStatusKey) == 0 ||
             std::strcmp(key, kUndoRequestKey) == 0 ||
@@ -566,7 +567,8 @@ protected:
             return;
         // main_preview_request is queued by controls_.queueStateCommand above.
         if (std::strcmp(key, kMainSampleStatusKey) == 0 ||
-            std::strcmp(key, kMainSampleWaveformKey) == 0)
+            std::strcmp(key, kMainSampleWaveformKey) == 0 ||
+            std::strcmp(key, kMainSampleSpectrogramKey) == 0)
             return;
     }
 

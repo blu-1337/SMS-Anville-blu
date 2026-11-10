@@ -493,6 +493,8 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
     }
     if (std::strcmp(key, kMainSampleWaveformKey) == 0)
         return fMainSample.acceptWaveform(value);
+    if (std::strcmp(key, kMainSampleSpectrogramKey) == 0)
+        return fMainSample.acceptSpectrogram(value);
     if (std::strcmp(key, kAutoChopStatusKey) == 0)
         return fMainSample.acceptAutoChopStatus(value);
     if (std::strcmp(key, "pad_mask") == 0) {

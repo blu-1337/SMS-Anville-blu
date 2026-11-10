@@ -84,6 +84,49 @@ std::int64_t refine(const std::span<const float> stereo, const std::int64_t fram
 }
 } // namespace
 
+std::size_t spectrogramBinForHz(const double hz) noexcept
+{
+    if (!(hz > kSpectrogramLowHz)) {
+        return 0;
+    }
+    const double b = static_cast<double>(kSpectrogramBins) * std::log(hz / kSpectrogramLowHz) /
+                     std::log(kSpectrogramHighHz / kSpectrogramLowHz);
+    return std::min<std::size_t>(kSpectrogramBins - 1, static_cast<std::size_t>(b));
+}
+
+bool spectrogramColumns(const OnsetAnalysis& a, const std::int64_t start, const std::int64_t end,
+                        const std::size_t columns, const std::span<std::uint8_t> out)
+{
+    const std::size_t hops = a.spectrogram.size() / kSpectrogramBins;
+    if (hops == 0 || columns == 0 || end <= start || out.size() < columns * kSpectrogramBins ||
+        !(a.hopSeconds > 0.0) || !(a.sourceRate > 0.0)) {
+        return false;
+    }
+    const double hopFrames = a.hopSeconds * a.sourceRate;
+    // Hop n is centred half a window after its start; the offset is a fraction of a hop.
+    const double centreOffset = 2.0;  // window/hop = 4 for the defaults, centre = 2 hops
+    for (std::size_t c = 0; c < columns; ++c) {
+        const double f0 = static_cast<double>(start) +
+                          static_cast<double>(end - start) * static_cast<double>(c) / static_cast<double>(columns);
+        const double f1 = static_cast<double>(start) +
+                          static_cast<double>(end - start) * static_cast<double>(c + 1) / static_cast<double>(columns);
+        const auto h0 = static_cast<std::int64_t>(std::floor(f0 / hopFrames - centreOffset + 0.5));
+        auto h1 = static_cast<std::int64_t>(std::floor(f1 / hopFrames - centreOffset - 0.5));
+        const std::int64_t last = static_cast<std::int64_t>(hops) - 1;
+        std::int64_t lo = std::clamp<std::int64_t>(h0, 0, last);
+        h1 = std::clamp<std::int64_t>(std::max(h1, lo), 0, last);
+        lo = std::min(lo, h1);
+        for (std::size_t b = 0; b < kSpectrogramBins; ++b) {
+            std::uint8_t v = 0;
+            for (std::int64_t h = lo; h <= h1; ++h) {
+                v = std::max(v, a.spectrogram[static_cast<std::size_t>(h) * kSpectrogramBins + b]);
+            }
+            out[c * kSpectrogramBins + b] = v;
+        }
+    }
+    return true;
+}
+
 OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, const double rate,
                             const OnsetSettings& settings, const std::atomic<bool>* const cancel)
 {
@@ -150,6 +193,18 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
         bandOf[k] = static_cast<std::uint8_t>(b);
         ++bandBins[b];
     }
+    // Log bin -> FFT bin range (widened by one bin each side so narrow low bins still read).
+    std::array<std::size_t, kSpectrogramBins> specLo{};
+    std::array<std::size_t, kSpectrogramBins> specHi{};
+    for (std::size_t b = 0; b < kSpectrogramBins; ++b) {
+        const double ratio = kSpectrogramHighHz / kSpectrogramLowHz;
+        const double lo = kSpectrogramLowHz * std::pow(ratio, static_cast<double>(b) / kSpectrogramBins);
+        const double hi = kSpectrogramLowHz * std::pow(ratio, static_cast<double>(b + 1) / kSpectrogramBins);
+        const double scaleK = static_cast<double>(window) / analysisRate;
+        specLo[b] = std::min(binCount - 1, static_cast<std::size_t>(std::floor(lo * scaleK)));
+        specHi[b] = std::min(binCount - 1, std::max(specLo[b] + 1, static_cast<std::size_t>(std::ceil(hi * scaleK))));
+    }
+    out.spectrogram.assign(hops * kSpectrogramBins, 0);
     out.rms.resize(hops);
     out.bands.resize(hops);
     for (std::size_t n = 0; n < hops; ++n) {
@@ -184,6 +239,15 @@ OnsetAnalysis analyzeOnsets(const std::span<const float> interleavedStereo, cons
             (k < lowEnd ? low : (k < midEnd ? mid : high)) += m * m;
         }
         flux[n] = sum;
+        for (std::size_t b = 0; b < kSpectrogramBins; ++b) {
+            float peak = 0.0F;
+            for (std::size_t k = specLo[b]; k <= specHi[b]; ++k) {
+                peak = std::max(peak, mags[k]);
+            }
+            const float db = 20.0F * std::log10(std::max(peak * scale, 1e-6F));
+            out.spectrogram[n * kSpectrogramBins + b] =
+                static_cast<std::uint8_t>(std::clamp((db + 84.0F) * (255.0F / 84.0F), 0.0F, 255.0F));
+        }
         out.bands[n] = {std::sqrt(low), std::sqrt(mid), std::sqrt(high)};
     }
 

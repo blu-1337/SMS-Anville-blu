@@ -14,6 +14,7 @@
 #include "SkinCatalog.hpp"
 #include "SamplerInputController.hpp"
 #include "FileDropController.hpp"
+#include "SpectrogramPixels.hpp"
 #include "FileDropTarget.hpp"
 #include "MidichopperView.hpp"
 #include "BrowserLauncher.hpp"
@@ -231,6 +232,7 @@ protected:
             "", false, false, sms::ui::ContextMenuItemKind::separator};
         skinMenuItems[static_cast<std::size_t>(skinRows + 1)] = {"<Get More>"};
         const auto editorSettings = fSession.displayEditorSettings();
+        updateSpectrogramImage();
         const midichopper::ui::ViewState view{
             fSession.state().armed, fSession.state().captureMode, fSession.state().fixedLength, fSession.state().playbackMode, fSession.state().monitor,
             fSession.state().startPad, fSession.state().preRoll, fSession.state().baseNote, fSession.state().midiBankMode,
@@ -274,6 +276,7 @@ protected:
             fFileDrop.highlightedPad() ? static_cast<int>(*fFileDrop.highlightedPad()) : -1,
             fSession.state().mainSampleMode, &fSession.mainSample(),
             fSession.canUndo(), fSession.canRedo(), fSession.dropdown(),
+            fSpectrogramImage ? &*fSpectrogramImage : nullptr,
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();
@@ -466,6 +469,29 @@ private:
     sms::ui::dpf::Theme fTheme;
     std::optional<sms::ui::Skin> fPendingSkin;
     std::optional<DGL_NAMESPACE::NanoImage> fLogo, fLogoGlow, fBackground;
+    std::optional<DGL_NAMESPACE::NanoImage> fSpectrogramImage;
+    std::uint32_t fSpectrogramUploaded = 0U;
+    std::vector<std::uint8_t> fSpectrogramPixels; // reused; reallocated only when the size changes
+
+    // Rebuilds the SPEC texture only when new spectrogram data arrived (never per frame).
+    void updateSpectrogramImage()
+    {
+        const auto& main = fSession.mainSample();
+        if (!main.spectrogramReady()) {
+            fSpectrogramImage.reset();
+            fSpectrogramUploaded = 0U;
+            return;
+        }
+        if (fSpectrogramImage && fSpectrogramUploaded == main.spectrogramVersion())
+            return;
+        const auto& data = main.spectrogram();
+        constexpr std::size_t bins = midichopper::plugin::kSpectrogramBins;
+        fSpectrogramPixels.resize(static_cast<std::size_t>(data.columns) * bins * 4U);
+        sms::ui::spectrogramPixels(data.data, data.columns, bins, fSpectrogramPixels);
+        fSpectrogramImage.emplace(createImageFromRGBA(data.columns, static_cast<uint>(bins),
+                                                      fSpectrogramPixels.data(), 0));
+        fSpectrogramUploaded = main.spectrogramVersion();
+    }
     std::chrono::steady_clock::time_point fLogoGlowEpoch{}, fNextLogoGlowRepaint{};
     bool fSkinImagesLoaded = false;
     SamplerUiSession fSession;

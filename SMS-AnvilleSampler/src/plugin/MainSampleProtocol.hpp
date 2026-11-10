@@ -21,6 +21,9 @@ namespace midichopper::plugin {
 
 inline constexpr std::size_t kMainSampleMaxSlices = 64U;
 inline constexpr std::size_t kMainSampleMaxTiles = 4U;
+// MG1 spectrogram: columns x bins bytes, Base64 on the UI bus (8191 B per message).
+inline constexpr std::size_t kSpectrogramBins = 48U;
+inline constexpr std::size_t kSpectrogramMaxColumns = 120U;
 inline constexpr std::size_t kMainSampleNameBytes = 128U;
 inline constexpr std::size_t kMainSampleTextBytes = 512U;
 inline constexpr std::size_t kMainSamplePathBytes = 4096U;
@@ -170,7 +173,7 @@ private:
 } // namespace main_sample_detail
 
 enum class MainSampleVerb : std::uint8_t {
-    load, clear, query, edit, assign, remove, waveform, arrange };
+    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram };
 
 /** One pad whose audio and settings move to another pad. */
 struct ArrangeMove {
@@ -230,7 +233,7 @@ struct MainSampleRequest {
     std::uint32_t end = 0U;
     bool confirm = false;                   // assign
     std::uint16_t sliceId = 0U;             // remove
-    std::uint32_t tiles = 0U;               // waveform
+    std::uint32_t tiles = 0U;               // waveform; spectrogram: columns
 };
 
 [[nodiscard]] inline std::string encodeMainSampleRequest(const MainSampleRequest& request)
@@ -248,6 +251,9 @@ struct MainSampleRequest {
                ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0");
     case MainSampleVerb::arrange: return encoded + "R";
     case MainSampleVerb::remove: return encoded + "D;" + std::to_string(request.sliceId);
+    case MainSampleVerb::spectrogram:
+        return encoded + "G;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
+               ";" + std::to_string(request.tiles);
     case MainSampleVerb::waveform:
         return encoded + "W;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
                ";" + std::to_string(request.tiles);
@@ -310,6 +316,13 @@ struct MainSampleRequest {
         if (!fields.number(decoded.sliceId) || !fields.finished() || decoded.sliceId == 0U)
             return false;
         decoded.verb = MainSampleVerb::remove;
+        break;
+    case 'G':
+        if (!fields.number(decoded.start) || !fields.number(decoded.end) ||
+            !fields.number(decoded.tiles) || !fields.finished() || decoded.start >= decoded.end ||
+            decoded.tiles == 0U || decoded.tiles > kSpectrogramMaxColumns)
+            return false;
+        decoded.verb = MainSampleVerb::spectrogram;
         break;
     case 'W':
         if (!fields.number(decoded.start) || !fields.number(decoded.end) ||
@@ -468,6 +481,99 @@ struct MainSampleWaveform {
             rest = rest.substr(next + 1U);
     }
     waveform = decoded;
+    return true;
+}
+
+/** MG1: a column-major (column, bin) 8-bit spectrogram of [start, end), bin 0 = lowest frequency. */
+struct MainSampleSpectrogram {
+    std::uint64_t sequence = 0U;
+    std::uint32_t start = 0U;
+    std::uint32_t end = 0U;
+    std::uint32_t columns = 0U;
+    std::vector<std::uint8_t> data; // columns * kSpectrogramBins
+};
+
+namespace main_sample_detail {
+inline constexpr std::string_view kBase64 =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+inline void appendBase64(std::string& out, const std::vector<std::uint8_t>& data)
+{
+    std::size_t i = 0;
+    for (; i + 2U < data.size(); i += 3U) {
+        const std::uint32_t v = (std::uint32_t{data[i]} << 16U) | (std::uint32_t{data[i + 1U]} << 8U) | data[i + 2U];
+        out += kBase64[(v >> 18U) & 63U];
+        out += kBase64[(v >> 12U) & 63U];
+        out += kBase64[(v >> 6U) & 63U];
+        out += kBase64[v & 63U];
+    }
+    if (i + 1U == data.size()) {
+        const std::uint32_t v = std::uint32_t{data[i]} << 16U;
+        out += kBase64[(v >> 18U) & 63U];
+        out += kBase64[(v >> 12U) & 63U];
+        out += "==";
+    } else if (i + 2U == data.size()) {
+        const std::uint32_t v = (std::uint32_t{data[i]} << 16U) | (std::uint32_t{data[i + 1U]} << 8U);
+        out += kBase64[(v >> 18U) & 63U];
+        out += kBase64[(v >> 12U) & 63U];
+        out += kBase64[(v >> 6U) & 63U];
+        out += '=';
+    }
+}
+[[nodiscard]] inline bool decodeBase64(const std::string_view text, std::vector<std::uint8_t>& out)
+{
+    out.clear();
+    if (text.size() % 4U != 0U)
+        return false;
+    for (std::size_t i = 0; i < text.size(); i += 4U) {
+        std::uint32_t v = 0;
+        int pad = 0;
+        for (std::size_t j = 0; j < 4U; ++j) {
+            const char c = text[i + j];
+            std::uint32_t digit = 0;
+            if (c == '=' && i + 4U == text.size() && j >= 2U) {
+                ++pad;
+            } else if (pad != 0 || kBase64.find(c) == std::string_view::npos) {
+                return false;
+            } else {
+                digit = static_cast<std::uint32_t>(kBase64.find(c));
+            }
+            v = (v << 6U) | digit;
+        }
+        out.push_back(static_cast<std::uint8_t>(v >> 16U));
+        if (pad < 2)
+            out.push_back(static_cast<std::uint8_t>(v >> 8U));
+        if (pad < 1)
+            out.push_back(static_cast<std::uint8_t>(v));
+    }
+    return true;
+}
+} // namespace main_sample_detail
+
+[[nodiscard]] inline std::string encodeMainSampleSpectrogram(const MainSampleSpectrogram& s)
+{
+    std::string encoded = "MG1;" + std::to_string(s.sequence) + ";" + std::to_string(s.start) + ";" +
+                          std::to_string(s.end) + ";" + std::to_string(s.columns) + ";";
+    main_sample_detail::appendBase64(encoded, s.data);
+    return encoded;
+}
+
+[[nodiscard]] inline bool decodeMainSampleSpectrogram(const std::string_view encoded,
+                                                      MainSampleSpectrogram& spectrogram)
+{
+    using main_sample_detail::Fields;
+    if (!encoded.starts_with("MG1;"))
+        return false;
+    Fields fields(encoded.substr(4U));
+    MainSampleSpectrogram decoded;
+    std::string_view payload;
+    if (!fields.number(decoded.sequence) || !fields.number(decoded.start) ||
+        !fields.number(decoded.end) || !fields.number(decoded.columns) || !fields.next(payload) ||
+        !fields.finished() || decoded.start >= decoded.end || decoded.columns == 0U ||
+        decoded.columns > kSpectrogramMaxColumns ||
+        !main_sample_detail::decodeBase64(payload, decoded.data) ||
+        decoded.data.size() != decoded.columns * kSpectrogramBins)
+        return false;
+    spectrogram = std::move(decoded);
     return true;
 }
 

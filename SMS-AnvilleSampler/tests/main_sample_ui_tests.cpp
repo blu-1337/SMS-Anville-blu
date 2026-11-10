@@ -565,6 +565,8 @@ void snapToSliceBoundaries()
     using namespace layout;
     check(mainSampleTransport[5].x >= mainSampleTransport[4].x + mainSampleTransport[4].width &&
           mainSampleTransport[5].x + mainSampleTransport[5].width < historyUndo.x, "SNAP sits after FIT, clear of UNDO");
+    check(mainSampleTransport[6].x >= mainSampleTransport[5].x + mainSampleTransport[5].width &&
+          mainSampleTransport[6].x + mainSampleTransport[6].width < historyUndo.x, "SPEC sits after SNAP, clear of UNDO");
 }
 
 void snapBypassWhileHeld()
@@ -829,8 +831,64 @@ void selectedSliceKeepsEditPriority()
     check(controller.beginEdgeDrag(402U, 10U), "without selection the nearest marker works");
 }
 
+void spectrogramToggleAndRequests()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    controller.open();
+    check(controller.acceptStatus(status(controller.lastSentSequence()), now), "source arrives");
+    check(!controller.spectrogramOn() && !controller.spectrogramReady(), "SPEC defaults to off");
+    const auto spectrogramRequests = [&host] {
+        std::vector<MainSampleRequest> r;
+        for (const auto& q : host.requests())
+            if (q.verb == MainSampleVerb::spectrogram) r.push_back(q);
+        return r;
+    };
+    controller.idle(now + 1s);
+    check(spectrogramRequests().empty(), "nothing is requested while SPEC is off");
+    controller.toggleSpectrogram(now + 1s);
+    check(controller.spectrogramOn(), "toggle turns SPEC on");
+    controller.idle(now + 1s + 5ms);
+    const auto first = spectrogramRequests();
+    check(first.size() == 1U && first[0].start == 0U && first[0].end == 1000U &&
+          first[0].tiles == plugin::kSpectrogramMaxColumns, "SPEC asks for the whole view");
+    controller.idle(now + 1s + 50ms);
+    check(spectrogramRequests().size() == 1U, "no repeat before the retry");
+    controller.idle(now + 1s + 300ms);
+    const auto retry = spectrogramRequests();
+    check(retry.size() == 2U && retry[1].sequence > first[0].sequence, "an unanswered request is retried");
+
+    plugin::MainSampleSpectrogram reply;
+    reply.sequence = first[0].sequence;
+    reply.start = 0U; reply.end = 1000U; reply.columns = 2U;
+    reply.data.assign(2U * plugin::kSpectrogramBins, 9U);
+    check(!controller.acceptSpectrogram(plugin::encodeMainSampleSpectrogram(reply)), "a superseded reply is ignored");
+    reply.sequence = retry[1].sequence;
+    check(controller.acceptSpectrogram(plugin::encodeMainSampleSpectrogram(reply)) &&
+          controller.spectrogramReady(), "the current reply is kept");
+    const auto version = controller.spectrogramVersion();
+    controller.idle(now + 3s);
+    check(spectrogramRequests().size() == 2U, "a fresh spectrogram is not requested again");
+
+    const sms::ui::Rect bounds = layout::mainSampleWaveform;
+    check(controller.zoom(4.0f, bounds.x + bounds.width * 0.5f, bounds, now + 3s), "zoom");
+    controller.idle(now + 3s + 20ms);
+    check(spectrogramRequests().size() == 2U, "zoom is debounced");
+    controller.idle(now + 3s + 200ms);
+    const auto zoomed = spectrogramRequests();
+    check(zoomed.size() == 3U && zoomed[2].start == controller.viewport().start &&
+          zoomed[2].end == controller.viewport().end, "SPEC follows the zoomed range");
+    check(controller.spectrogramReady() && controller.spectrogramVersion() == version,
+          "the old picture stays until the new one lands");
+    controller.toggleSpectrogram(now + 4s);
+    check(!controller.spectrogramOn() && !controller.spectrogramReady(), "toggle off hides it");
+}
+
 int main()
 {
+    spectrogramToggleAndRequests();
     queriesAndStaleReplies();
     waveformRequests();
     markerDragSendsOneEdit();

@@ -99,6 +99,8 @@ private:
     void remove(const MainSampleRequest& request);
     void arrange(const MainSampleRequest& request);
     void waveform(const MainSampleRequest& request);
+    void spectrogram(const MainSampleRequest& request);
+    void buildAnalysisLocked(const PadData& whole);
     void autoChop(const AutoChopRequest& request);
     void publishAutoChop(const AutoChopStatus& status);
 

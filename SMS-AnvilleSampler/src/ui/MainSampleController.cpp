@@ -15,6 +15,8 @@ using plugin::MainSampleVerb;
 
 constexpr auto kRetry = std::chrono::milliseconds(250);
 constexpr auto kDebounce = std::chrono::milliseconds(50);
+constexpr auto kSpectrogramDebounce = std::chrono::milliseconds(120);
+constexpr std::uint32_t kSpectrogramMaxTries = 4U;
 } // namespace
 
 void MainSampleController::open()
@@ -127,6 +129,10 @@ void MainSampleController::sourceChanged()
     fViewport.reset(fStatus.frames);
     fOverview = {};
     fDetail = {};
+    fSpectrogram = {};
+    fSpectrogramSequence = 0U;
+    ++fSpectrogramVersion;
+    spectrogramDirty(Clock::now());
     fOverviewSequence = 0U;
     fDetailSequence = 0U;
     fDetailDirty = false;
@@ -147,6 +153,42 @@ bool MainSampleController::acceptWaveform(const std::string_view encoded)
     } else {
         return false;
     }
+    fHost.repaintMainSample();
+    return true;
+}
+
+void MainSampleController::spectrogramDirty(const Time deadline) noexcept
+{
+    fSpectrogramDirty = fSpectrogramOn;
+    fSpectrogramTries = 0U;
+    fSpectrogramDeadline = deadline;
+}
+
+void MainSampleController::toggleSpectrogram(const Time now) noexcept
+{
+    fSpectrogramOn = !fSpectrogramOn;
+    if (fSpectrogramOn)
+        spectrogramDirty(now);
+    else
+        fSpectrogramDirty = false;
+    fHost.repaintMainSample();
+}
+
+bool MainSampleController::acceptSpectrogram(const std::string_view encoded)
+{
+    plugin::MainSampleSpectrogram reply;
+    if (!plugin::decodeMainSampleSpectrogram(encoded, reply) || !hasSource() || !fSpectrogramOn ||
+        reply.sequence != fSpectrogramSequence || reply.end > fStatus.frames)
+        return false;
+    // A reply for a range the view already left is still drawn (aligned by its own
+    // range) until the next request lands.
+    const bool current = reply.start == static_cast<std::uint32_t>(fViewport.start) &&
+                         reply.end == static_cast<std::uint32_t>(fViewport.end);
+    fSpectrogram.data = std::move(reply);
+    fSpectrogram.ready = true;
+    ++fSpectrogramVersion;
+    if (current)
+        fSpectrogramDirty = false;
     fHost.repaintMainSample();
     return true;
 }
@@ -222,6 +264,22 @@ void MainSampleController::idle(const Time now)
         return;
     if (!fOverview.ready && (fOverviewSequence == 0U || now >= fOverviewDeadline))
         sendWaveform(0U, fStatus.frames, fOverviewSequence, fOverviewDeadline, now);
+    if (fSpectrogramOn && fSpectrogramDirty && now >= fSpectrogramDeadline &&
+        fSpectrogramTries < kSpectrogramMaxTries) {
+        const auto start = static_cast<std::uint32_t>(fViewport.start);
+        const auto end = static_cast<std::uint32_t>(std::min<std::uint64_t>(fViewport.end, fStatus.frames));
+        if (end > start) {
+            MainSampleRequest request;
+            request.verb = MainSampleVerb::spectrogram;
+            request.start = start;
+            request.end = end;
+            request.tiles = static_cast<std::uint32_t>(plugin::kSpectrogramMaxColumns);
+            send(request);
+            fSpectrogramSequence = fSequence;
+            ++fSpectrogramTries;
+            fSpectrogramDeadline = now + kRetry;
+        }
+    }
     if (fDetailDirty && fViewport.zoomed() && now >= fDetailDeadline)
         sendWaveform(static_cast<std::uint32_t>(fViewport.start),
                      static_cast<std::uint32_t>(fViewport.end), fDetailSequence,
@@ -233,6 +291,7 @@ void MainSampleController::missedReplies()
     if (!fOverview.ready)
         fOverviewSequence = 0U;
     fDetailDirty = fViewport.zoomed() && !fDetail.ready;
+    spectrogramDirty(Clock::now());
     query();
 }
 
@@ -725,6 +784,7 @@ bool MainSampleController::scheduleDetail(const bool changed, const Time now) no
         fDetail.ready = false;
         fDetailDirty = fViewport.zoomed();
         fDetailDeadline = now + kDebounce;
+        spectrogramDirty(now + kSpectrogramDebounce);
         fHost.repaintMainSample();
     }
     return changed;

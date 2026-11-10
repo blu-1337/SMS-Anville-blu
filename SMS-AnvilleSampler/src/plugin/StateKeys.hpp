@@ -62,5 +62,7 @@ inline constexpr const char* kAutoChopStatusKey = "auto_chop_status";
 // Undo/redo: request "undo"|"redo" to the worker; UD1 status (depths, colours) to the UI.
 inline constexpr const char* kUndoRequestKey = "undo_request";
 inline constexpr const char* kUndoStatusKey = "undo_status";
+// Main Sample spectrogram background (MG1), worker to UI.
+inline constexpr const char* kMainSampleSpectrogramKey = "main_sample_spectrogram";
 
 } // namespace midichopper::plugin

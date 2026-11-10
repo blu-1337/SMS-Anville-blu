@@ -683,6 +683,21 @@ void layoutRects()
     }
 }
 
+void actionButtonSpacing()
+{
+    using namespace layout;
+    for (int first = 0; first < kMainSampleActionCount; ++first)
+        for (int second = first + 1; second < kMainSampleActionCount; ++second) {
+            const auto a = mainSampleAction(first);
+            const auto b = mainSampleAction(second);
+            const float gapX = std::max(a.x, b.x) - std::min(a.x + a.width, b.x + b.width);
+            const float gapY = std::max(a.y, b.y) - std::min(a.y + a.height, b.y + b.height);
+            check(std::max(gapX, gapY) >= 8.0f, "action buttons keep at least 8 px between them");
+        }
+    check(mainSampleAction(4).y + mainSampleAction(4).height + 8.0f <= mainSampleBank(0).y,
+          "FAVORITE leaves room above the bank row");
+}
+
 void assignPicksFirstFreePad()
 {
     check(MainSampleController::firstFreePad("11.0", 4) == 2, "'.' counts as free, in pad order");
@@ -951,6 +966,7 @@ int main()
     snapToSliceBoundaries();
     snapBypassWhileHeld();
     layoutRects();
+    actionButtonSpacing();
     assignPicksFirstFreePad();
     autoChopPanel();
     std::cout << "Main Sample UI tests passed\n";

@@ -287,10 +287,10 @@ inline constexpr float sliceBadgeWideWidth = 14.0f; // two-digit numbers
 inline constexpr float sliceBadgeHeight = 9.0f;
 inline constexpr sms::ui::Rect mainSampleOverview{46.0f, 374.0f, 890.0f, 20.0f};
 inline constexpr sms::ui::Rect mainSamplePads{46.0f, 402.0f, 890.0f, 264.0f};
-// A-D bank row at the foot of the side panel, below the slice tools (they end at y 626).
+// A-D bank row at the foot of the side panel, below the slice tools (they end at y 650).
 [[nodiscard]] constexpr sms::ui::Rect mainSampleBank(const int index) noexcept
 {
-    return {994.0f + static_cast<float>(index) * 57.0f, 642.0f, 51.0f, 28.0f};
+    return {994.0f + static_cast<float>(index) * 57.0f, 660.0f, 51.0f, 28.0f};
 }
 inline constexpr sms::ui::Rect mainSampleClose{994.0f, 112.0f, 222.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleInfo{994.0f, 392.0f, 222.0f, 60.0f};
@@ -303,9 +303,10 @@ inline constexpr int kMainSampleActionCount = 5; // 4: FAVORITE toggles the sele
 [[nodiscard]] constexpr sms::ui::Rect mainSampleAction(const int index) noexcept
 {
     if (index == 4)
-        return {994.0f, 608.0f, 222.0f, 27.0f};
-    return {994.0f + static_cast<float>(index % 2) * 114.0f, 550.0f + static_cast<float>(index / 2) * 29.0f,
-            108.0f, 27.0f};
+        return {994.0f, 624.0f, 222.0f, 26.0f};
+    // 10 px between rows, 8 px between columns.
+    return {994.0f + static_cast<float>(index % 2) * 114.0f, 552.0f + static_cast<float>(index / 2) * 36.0f,
+            106.0f, 26.0f};
 }
 inline constexpr sms::ui::Rect mainSampleModal{300.0f, 270.0f, 380.0f, 150.0f};
 inline constexpr sms::ui::Rect mainSampleConfirm{330.0f, 366.0f, 150.0f, 34.0f};

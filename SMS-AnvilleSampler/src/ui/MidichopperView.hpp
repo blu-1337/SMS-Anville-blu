@@ -112,6 +112,9 @@ struct ViewState {
     int quickEditAxis = 0;      // 1 = volume, 2 = pan
     float quickEditVolume = 1.0f;
     float quickEditPan = 0.0f;
+    float quickEditX = 0.0f;    // pointer while swapping pads (axis 3)
+    float quickEditY = 0.0f;
+    int swapTargetPad = -1;     // global pad highlighted as the swap target, or -1
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

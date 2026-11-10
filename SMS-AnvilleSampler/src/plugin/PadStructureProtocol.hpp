@@ -17,6 +17,7 @@ enum class PadStructureAction : std::uint8_t {
     cancelSplit,
     querySplit,
     queryCollapse,
+    swap, // PS1;W;a;b: exchange two whole pads (firstPad <-> targetPad)
 };
 
 struct PadStructureRequest {
@@ -54,6 +55,8 @@ template <class Integer>
         return std::string(request.action == PadStructureAction::collapse ? "PS1;C;" : "PS1;G;") +
             std::to_string(request.firstPad) + ";" +
             std::to_string(request.padCount) + ";" + std::to_string(request.targetPad);
+    case PadStructureAction::swap:
+        return "PS1;W;" + std::to_string(request.firstPad) + ";" + std::to_string(request.targetPad);
     case PadStructureAction::querySplit:
     case PadStructureAction::prepareSplit:
         return std::string(request.action == PadStructureAction::querySplit ? "PS1;Q;" : "PS1;P;") +
@@ -103,6 +106,15 @@ template <class Integer>
         decoded.action = action == 'G' ? PadStructureAction::queryCollapse : action == 'C'
             ? PadStructureAction::collapse : (action == 'Q'
                 ? PadStructureAction::querySplit : PadStructureAction::prepareSplit);
+    } else if (action == 'W') {
+        if (!token(second) || !rest.empty() ||
+            !parsePadStructureInteger(first, decoded.firstPad) ||
+            !parsePadStructureInteger(second, decoded.targetPad) ||
+            decoded.firstPad >= kPadCount || decoded.targetPad >= kPadCount ||
+            decoded.firstPad == decoded.targetPad)
+            return false;
+        decoded.padCount = 2U;
+        decoded.action = PadStructureAction::swap;
     } else if (action == 'A') {
         if (!token(second) || !rest.empty() ||
             !parsePadStructureInteger(first, decoded.planId) || decoded.planId == 0U ||

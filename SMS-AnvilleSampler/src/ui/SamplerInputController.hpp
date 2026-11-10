@@ -55,6 +55,9 @@ public:
     [[nodiscard]] int quickEditAxis() const noexcept { return static_cast<int>(fQuickEdit.axis()); }
     [[nodiscard]] float quickEditVolume() const noexcept { return fQuickEdit.volume(); }
     [[nodiscard]] float quickEditPan() const noexcept { return fQuickEdit.pan(); }
+    [[nodiscard]] sms::ui::Point quickEditPoint() const noexcept { return fQuickEdit.point(); }
+    /** Global pad under a swap drag (never the source), or -1. */
+    [[nodiscard]] int swapTargetPad() const noexcept { return fQuickEdit.swapping() ? fSwapTarget : -1; }
 
 private:
     using EditTarget = sms::ui::waveform::EditTarget;
@@ -74,6 +77,7 @@ private:
     sms::ui::HoverState fHover;
     SpaceKeyTracker fSpaceKey;
     PadQuickEdit fQuickEdit;
+    int fSwapTarget = -1;
     bool fPadContextPointerCaptured = false;
     bool fResetPointerCaptured = false;
     bool fPlayButtonPressCaptured = false;

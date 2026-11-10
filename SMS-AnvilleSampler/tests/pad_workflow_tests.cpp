@@ -1360,6 +1360,77 @@ void undoGestureCoalescesLiveUpdates()
     check(padHoldsSlice(fixture.engine, 2U, 100U, 300U), "undo returns to the range before the drag");
 }
 
+void padSwap()
+{
+    PadStructureRequest roundTrip;
+    check(decodePadStructureRequest("PS1;W;2;5", roundTrip) && roundTrip.action == PadStructureAction::swap &&
+          roundTrip.firstPad == 2U && roundTrip.targetPad == 5U &&
+          encodePadStructureRequest(roundTrip) == "PS1;W;2;5", "swap request round-trips");
+    for (const char* bad : {"PS1;W;2;2", "PS1;W;2", "PS1;W;2;999", "PS1;W;2;5;1", "PS1;W;x;5"})
+        check(!decodePadStructureRequest(bad, roundTrip), "malformed swap request is refused");
+
+    MainSampleFixture fixture;
+    std::array<std::atomic<int>, kPadCount> colors{};
+    colors[2] = 3;
+    colors[5] = 7 | 0x100; // any colour plus a flag bit that must travel with the pad
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> hooked;
+    fixture.pads.setSwapHook([&](const std::uint32_t a, const std::uint32_t b) {
+        hooked.emplace_back(a, b);
+        const int first = colors[a];
+        colors[a] = colors[b].load();
+        colors[b] = first;
+    });
+    const auto path = writeSourceWav("sms-swap-source.wav", 1000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    fixture.send(assignRequest(2U, 100U, 300U));
+    fixture.send(assignRequest(5U, 400U, 500U));
+    auto mixer = fixture.engine.padMixerSettings(2U);
+    mixer.gainDecibels = -6.0f;
+    mixer.pan = -0.5f;
+    fixture.engine.setPadMixerSettings(2U, mixer);
+    const auto tag2 = fixture.provenance(2U);
+    const auto tag5 = fixture.provenance(5U);
+    check(tag2 != 0U && tag5 != 0U && tag2 != tag5, "two linked pads before the swap");
+
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    const auto depth = undo.undoDepth();
+    undo.record(UndoController::Kind::action, now, [&] {
+        fixture.pads.handlePadStructureRequest("PS1;W;2;5");
+    });
+    check(fixture.observer.latest(kPadStructureStatusKey) == "PS1;O;0;W", "swap reports success");
+    check(padHoldsSlice(fixture.engine, 5U, 100U, 300U) && padHoldsSlice(fixture.engine, 2U, 400U, 500U),
+          "audio moves with the pad (swap, no shifting)");
+    check(fixture.provenance(2U) == tag5 && fixture.provenance(5U) == tag2, "slice link and provenance swap");
+    check(gainOf(fixture.engine, 5U) == -6.0f && fixture.engine.padMixerSettings(5U).pan == -0.5f &&
+          gainOf(fixture.engine, 2U) == 0.0f, "volume and pan travel with the pad");
+    check(hooked.size() == 1U && colors[2] == (7 | 0x100) && colors[5] == 3, "colour and favourite flag swap");
+    check(undo.undoDepth() == depth + 1U, "one undo step");
+    undo.undo();
+    check(padHoldsSlice(fixture.engine, 2U, 100U, 300U) && padHoldsSlice(fixture.engine, 5U, 400U, 500U) &&
+          fixture.provenance(2U) == tag2 && gainOf(fixture.engine, 2U) == -6.0f, "undo restores both pads");
+
+    // A pad may be swapped with an empty pad (the content simply moves).
+    fixture.pads.handlePadStructureRequest("PS1;W;2;9");
+    check(padHoldsSlice(fixture.engine, 9U, 100U, 300U) && !fixture.engine.padMetadata(2U).occupied &&
+          fixture.provenance(2U) == 0U && fixture.provenance(9U) == tag2, "swap with an empty pad moves the pad");
+
+    // Refusals change nothing.
+    const auto before = fixture.provenance(9U);
+    const auto messages = hooked.size();
+    fixture.pads.handlePadStructureRequest("PS1;W;9;9");
+    check(fixture.observer.latest(kPadStructureStatusKey).starts_with("PS1;E;") &&
+          hooked.size() == messages && fixture.provenance(9U) == before, "same-pad swap is refused");
+    auto armed = fixture.engine.settings();
+    armed.armed = true;
+    fixture.engine.setSettings(armed);
+    fixture.pads.handlePadStructureRequest("PS1;W;9;5");
+    check(fixture.observer.latest(kPadStructureStatusKey).starts_with("PS1;E;") &&
+          hooked.size() == messages && fixture.provenance(9U) == before, "armed swap is refused");
+}
+
 void favoriteGuards()
 {
     MainSampleFixture fixture(12.0);
@@ -1448,5 +1519,6 @@ int main()
     favoriteGuards();
     undoRedoRestoresState();
     undoGestureCoalescesLiveUpdates();
+    padSwap();
     std::cout << "Pad workflow tests passed\n";
 }

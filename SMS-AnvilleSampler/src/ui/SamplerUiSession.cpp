@@ -868,6 +868,16 @@ void SamplerUiSession::sendPadReset(const int pad)
                       midichopper::plugin::encodePadQuickEdit(edit).c_str());
 }
 
+void SamplerUiSession::sendPadSwap(const int firstPad, const int secondPad)
+{
+    constexpr int count = static_cast<int>(midichopper::kPadCount);
+    if (!fCapabilities.stateTransport || firstPad < 0 || firstPad >= count || secondPad < 0 ||
+        secondPad >= count || firstPad == secondPad)
+        return;
+    fHost.sendUiState(kPadStructureRequestKey,
+        ("PS1;W;" + std::to_string(firstPad) + ";" + std::to_string(secondPad)).c_str());
+}
+
 void SamplerUiSession::releasePlaybackPad()
 {
     const int midiNote = fPadPress.release();

@@ -13,8 +13,38 @@ namespace midichopper::ui::rendering {
 
 // Drag feedback on a pad: volume lowers the solid fill from the top down; pan paints a red
 // gradient on the chosen side (stronger red to the left, darker red to the right).
+inline void drawSwapTarget(const ViewRenderContext& ctx, const sms::ui::Rect& cell)
+{
+    auto& canvas = ctx.canvas;
+    const sms::ui::dpf::ScopedCanvasState state(canvas);
+    canvas.beginPath();
+    canvas.roundedRect(cell.x + 1.5f, cell.y + 1.5f, cell.width - 3.0f, cell.height - 3.0f, 9.0f);
+    canvas.fillColor(DGL_NAMESPACE::Color(1.0f, 1.0f, 1.0f, 0.14f));
+    canvas.fill();
+    canvas.strokeColor(DGL_NAMESPACE::Color(1.0f, 0.85f, 0.25f, 0.95f));
+    canvas.strokeWidth(3.0f);
+    canvas.stroke();
+}
+
+// Translucent copy of the dragged pad that follows the pointer.
+inline void drawSwapGhost(const ViewRenderContext& ctx, const sms::ui::Rect& source)
+{
+    auto& canvas = ctx.canvas;
+    const sms::ui::dpf::ScopedCanvasState state(canvas);
+    const float w = source.width * 0.8f;
+    const float h = source.height * 0.8f;
+    canvas.beginPath();
+    canvas.roundedRect(ctx.state.quickEditX - w * 0.5f, ctx.state.quickEditY - h * 0.5f, w, h, 9.0f);
+    canvas.fillColor(DGL_NAMESPACE::Color(0.9f, 0.9f, 0.95f, 0.35f));
+    canvas.fill();
+    canvas.strokeColor(DGL_NAMESPACE::Color(1.0f, 1.0f, 1.0f, 0.8f));
+    canvas.strokeWidth(2.0f);
+    canvas.stroke();
+}
+
 inline void drawQuickEdit(const ViewRenderContext& ctx, const sms::ui::Rect& cell)
 {
+    if (ctx.state.quickEditAxis == 3) return; // swap drags draw the ghost and target instead
     using DGL_NAMESPACE::Color;
     auto& canvas = ctx.canvas;
     const sms::ui::dpf::ScopedCanvasState state(canvas);

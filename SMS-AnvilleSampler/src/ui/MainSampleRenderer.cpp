@@ -363,6 +363,8 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
     const sms::ui::BankedPadLayout pads(ctx.state.layout);
     const auto& colors = sms::ui::dpf::theme();
     const auto grid = pads.grid(uiLayout::mainSamplePads, 8.0f);
+    sms::ui::Rect swapSource{};
+    bool swapping = false;
     for (int localPad = 0; localPad < pads.visiblePadCount(); ++localPad) {
         const int pad = globalPad(ctx, localPad);
         const auto cell = grid.cell(pads.visualIndex(localPad));
@@ -375,8 +377,12 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
             ctx.canvas, cell,
             {occupied, playing, false, ctx.state.selectedPad == pad, padHovered,
              ctx.state.pressedPad == localPad, true, padTint(ctx, pad)});
-        if (ctx.state.quickEditPad == pad && ctx.state.quickEditAxis != 0)
+        if (ctx.state.swapTargetPad == pad)
+            drawSwapTarget(ctx, cell);
+        if (ctx.state.quickEditPad == pad && ctx.state.quickEditAxis != 0) {
             drawQuickEdit(ctx, cell);
+            if (ctx.state.quickEditAxis == 3) { swapSource = cell; swapping = true; }
+        }
         drawPadStar(ctx.canvas, cell, isFavoritePad(ctx, pad), padHovered);
         ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
         ctx.canvas.fontSize(11.0f);
@@ -396,6 +402,7 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
             text(ctx, cell.x + cell.width * 0.5f, cell.y + cell.height * 0.54f, number, nullptr);
         }
     }
+    if (swapping) drawSwapGhost(ctx, swapSource);
 }
 
 void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& main)

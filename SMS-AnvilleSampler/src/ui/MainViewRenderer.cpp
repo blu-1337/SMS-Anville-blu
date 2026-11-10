@@ -72,6 +72,8 @@ void drawPadPanel(const ViewRenderContext& ctx)
         ctx.state.currentPad >= 0 ? colors.activityCapture : colors.activityPlayback);
 
     const auto grid = mainGrid(ctx);
+    sms::ui::Rect swapSource{};
+    bool swapping = false;
     for (int localPad = 0; localPad < pads.visiblePadCount(); ++localPad) {
         const int pad = globalPad(ctx, localPad);
         const auto cell = grid.cell(pads.visualIndex(localPad));
@@ -90,8 +92,12 @@ void drawPadPanel(const ViewRenderContext& ctx)
                                     {occupied, playing, recording, selected, padHovered,
                                      ctx.state.pressedPad == localPad, true, tint});
         drawDropHighlight(ctx, cell, pad, 9.0f);
-        if (ctx.state.quickEditPad == pad)
+        if (ctx.state.swapTargetPad == pad)
+            drawSwapTarget(ctx, cell);
+        if (ctx.state.quickEditPad == pad) {
             drawQuickEdit(ctx, cell);
+            if (ctx.state.quickEditAxis == 3) { swapSource = cell; swapping = true; }
+        }
         drawPadStar(ctx.canvas, cell,
                     static_cast<std::size_t>(pad) < ctx.state.padFavorites.size() &&
                         ctx.state.padFavorites[static_cast<std::size_t>(pad)],
@@ -122,6 +128,7 @@ void drawPadPanel(const ViewRenderContext& ctx)
              recording ? "RECORDING" : (playing ? "PLAYING" : (occupied ? "READY" : "EMPTY")),
              nullptr);
     }
+    if (swapping) drawSwapGhost(ctx, swapSource);
 }
 
 void drawControlPanel(const ViewRenderContext& ctx)

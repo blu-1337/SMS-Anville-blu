@@ -7,6 +7,8 @@
 #include "SamplerEngine.hpp"
 #include "StateKeys.hpp"
 
+#include <array>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -37,6 +39,8 @@ public:
     [[nodiscard]] std::mutex& mutationMutex() const noexcept { return padMutationMutex_; }
     void reset();
     void handlePadStructureRequest(std::string_view encoded);
+    /** Called under the pad mutation lock after a swap committed (colours and favourite flags live outside). */
+    void setSwapHook(std::function<void(std::uint32_t, std::uint32_t)> hook) { swapHook_ = std::move(hook); }
     void handleChopApplyRequest(std::string_view encoded);
     void handlePadClipboardRequest(std::string_view encoded);
     void handlePadFileRequest(std::string_view encoded);
@@ -61,6 +65,9 @@ private:
     void publishPadSettings(std::uint32_t firstPad, std::uint32_t padCount,
                             std::uint8_t padsPerBank, MidiBankMode mode);
     void publishPadStructureError(std::uint64_t planId, const char* message);
+    /** Exchange two whole pads; caller holds the mutation lock. False (nothing changed) when refused. */
+    [[nodiscard]] bool swapPadsLocked(std::uint32_t a, std::uint32_t b);
+    std::function<void(std::uint32_t, std::uint32_t)> swapHook_;
     void publishFileStatus(const std::string& status)
     { observer_.publishUiState(kPadFileStatusKey, status.c_str()); }
     void handleChopApplyRequestImpl(std::string_view encoded);

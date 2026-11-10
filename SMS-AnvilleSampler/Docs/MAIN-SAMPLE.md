@@ -75,3 +75,9 @@ Drag a slice's number badge to move the whole region (length kept, clamped to th
 ## SPEC spectrogram
 
 The header **SPEC** toggle (UI-local, default off) draws a dim log-frequency heatmap (dark to amber, low frequencies at the bottom) behind the waveform. It follows zoom and pan; the old picture stays until the debounced new one arrives.
+
+## Swap pads
+
+Press in the top third of any pad and drag onto another pad to swap them: sound, volume,
+pan, settings, colour, favourite star and slice link all move together; nothing shifts.
+Dragging from the lower two-thirds still sets volume and pan. Undo reverts the swap.

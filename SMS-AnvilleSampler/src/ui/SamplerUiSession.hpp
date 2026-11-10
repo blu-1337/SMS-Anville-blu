@@ -133,6 +133,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void sendPadQuickEdit(int pad, PadQuickAxis axis, float volume, float pan, char phase = 'S');
     /** Ctrl+click: volume 0 dB and pan centre as one undo step. */
     void sendPadReset(int pad);
+    void sendPadSwap(int firstPad, int secondPad);
     void captureSpace();
     void captureAction(const char *action);
     void stopEditorAudition();

@@ -564,6 +564,11 @@ bool PadActionController::acceptState(const PadActionContext& context,
                 fChopEditor.cancelPlan(plan.planId);
                 fHost.setPadActionStatus("Split cancelled because pad context changed");
             }
+        } else if (std::strcmp(value, "PS1;O;0;W") == 0) {
+            fStructureBusy = false;
+            fHost.setPadActionStatus("Pads swapped");
+            if (context.editorMode)
+                fHost.refreshPadWaveform();
         } else if (std::strcmp(value, "PS1;O;0;C") == 0) {
             fStructureBusy = false;
             fHost.setPadActionStatus("Pad gap collapsed");

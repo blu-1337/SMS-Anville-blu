@@ -469,7 +469,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 // A press that turns into a drag edits volume (vertical) or pan (horizontal).
                 const auto grid = fSession.padLayout().grid(uiLayout::mainPadBounds, 10.0f);
                 fQuickEdit.begin(fSession.globalPad(clicked.index),
-                                 grid.cell(fSession.padLayout().visualIndex(clicked.index)), position);
+                                 grid.cell(fSession.padLayout().visualIndex(clicked.index)), position, true);
             }
             fHost.repaintSamplerInput();
             return true;
@@ -544,6 +544,9 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return true;
     }
     if (fQuickEdit.pending()) {
+        if (fQuickEdit.swapping() && fSwapTarget >= 0 && fSwapTarget != fQuickEdit.pad())
+            fSession.sendPadSwap(fQuickEdit.pad(), fSwapTarget);
+        fSwapTarget = -1;
         if (const char phase = fQuickEdit.finish(); phase != 0)
             fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan(), phase);
         fQuickEdit.cancel();
@@ -573,7 +576,13 @@ bool SamplerInputController::motion(const sms::ui::Point position)
     if (fMainSliderDrag >= 0) { updateMainSliderDrag(position.x); return true; }
     if (fQuickEdit.pending()) {
         if (fQuickEdit.update(position)) {
-            if (const char phase = fQuickEdit.due(Clock::now()); phase != 0)
+            if (fQuickEdit.swapping()) {
+                const auto over = targetAt(position);
+                const bool isPad = isTarget(over, InteractiveType::pad) ||
+                                   isTarget(over, InteractiveType::mainSamplePad);
+                const int target = isPad ? fSession.globalPad(over.index) : -1;
+                fSwapTarget = target == fQuickEdit.pad() ? -1 : target;
+            } else if (const char phase = fQuickEdit.due(Clock::now()); phase != 0)
                 fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan(), phase);
             fHost.repaintSamplerInput();
         }
@@ -827,7 +836,7 @@ bool SamplerInputController::pressMainSamplePad(const int localPad, const sms::u
     fSession.pressPlaybackPad(localPad);
     // A press that turns into a drag edits volume (vertical) or pan (horizontal), as in the main view.
     const auto grid = fSession.padLayout().grid(uiLayout::mainSamplePads, 8.0f);
-    fQuickEdit.begin(pad, grid.cell(fSession.padLayout().visualIndex(localPad)), position);
+    fQuickEdit.begin(pad, grid.cell(fSession.padLayout().visualIndex(localPad)), position, true);
     fHost.repaintSamplerInput();
     return true;
 }

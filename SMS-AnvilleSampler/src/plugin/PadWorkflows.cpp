@@ -88,6 +88,51 @@ void PadWorkflows::publishPadSettings(const std::uint32_t firstPad,
     }
 }
 
+bool PadWorkflows::swapPadsLocked(const std::uint32_t a, const std::uint32_t b)
+{
+    if (a >= kPadCount || b >= kPadCount || a == b) {
+        publishPadStructureError(0U, "Invalid pad swap");
+        return false;
+    }
+    bool busy = false;
+    controlDispatcher_.invoke([&]() noexcept {
+        busy = sampler_.settings().armed || sampler_.padMetadata(a).recording ||
+               sampler_.padMetadata(b).recording;
+    });
+    if (busy) {
+        publishPadStructureError(0U, "Stop Arm before swapping pads");
+        return false;
+    }
+    std::array<std::uint64_t, kPadCount> provenance{};
+    std::array<std::uint64_t, kPadCount> generations{};
+    sampler_.padProvenance(provenance, generations);
+    midichopper::PadData audioA, audioB;
+    sms::dsp::SamplePlaybackSettings playbackA, playbackB;
+    sms::dsp::SampleMixerSettings mixerA, mixerB;
+    if (!sampler_.exportPad(a, audioA, &playbackA, &mixerA) ||
+        !sampler_.exportPad(b, audioB, &playbackB, &mixerB)) {
+        publishPadStructureError(0U, "Could not read the pads");
+        return false;
+    }
+    // A pad takes the other pad's audio, settings and main-sample link; nothing shifts.
+    const std::array<PadImport, 2> imports{{
+        {a, audioB.frames != 0U ? &audioB : nullptr, playbackB, mixerB, provenance[b], generations[a]},
+        {b, audioA.frames != 0U ? &audioA : nullptr, playbackA, mixerA, provenance[a], generations[b]}}};
+    if (!sampler_.importPads(imports)) {
+        publishPadStructureError(0U, "Could not swap these pads");
+        return false;
+    }
+    if (swapHook_)
+        swapHook_(a, b);
+    for (const auto pad : {a, b}) {
+        observer_.publishUiState(kPadEditStateKeys[pad].c_str(),
+            midichopper::plugin::encodePlaybackSettings(sampler_.padPlaybackSettings(pad)).c_str());
+        observer_.publishUiState(kPadMixerStateKeys[pad].c_str(),
+            midichopper::plugin::encodeMixerSettings(sampler_.padMixerSettings(pad)).c_str());
+    }
+    return true;
+}
+
 void PadWorkflows::publishPadStructureError(const std::uint64_t planId,
                               const char* const message)
 {
@@ -112,6 +157,15 @@ void PadWorkflows::handlePadStructureRequest(const std::string_view encoded)
         if (request.action == PadStructureAction::cancelSplit) {
             if (pendingSplitPlan_.active && pendingSplitPlan_.id == request.planId)
                 pendingSplitPlan_ = {};
+            return;
+        }
+        if (request.action == PadStructureAction::swap) {
+            pendingSplitPlan_ = {};
+            if (!swapPadsLocked(request.firstPad, request.targetPad))
+                return; // the refusal was published
+            committed = true;
+            mutationLock.unlock();
+            observer_.publishUiState(kPadStructureStatusKey, "PS1;O;0;W");
             return;
         }
         if (request.action == PadStructureAction::querySplit) {

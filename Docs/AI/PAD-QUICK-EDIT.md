@@ -20,3 +20,10 @@ that could overwrite other knobs.
 
 The Main Sample view uses the same gestures; there a click still assigns a pending
 selection, selects the linked slice and plays the pad. `renderers`: `PadQuickEditRenderer.hpp`.
+
+**Pad swap.** A press in the upper third of a pad (`padSwapZone`) turns a drag past the
+threshold into a swap (`PadQuickAxis::swap`, no volume/pan sent). The UI shows a ghost and
+highlights the pad under the pointer; release over another pad sends `PS1;W;a;b`.
+`PadWorkflows::swapPadsLocked` exchanges both pads through one atomic `importPads`
+(audio, playback and mixer settings, provenance), refuses while armed or recording, and calls
+a hook that swaps colour and favourite flag. One undo step; the lower two-thirds keep the gestures.

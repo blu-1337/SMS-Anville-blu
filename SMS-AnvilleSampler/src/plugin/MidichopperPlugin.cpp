@@ -96,6 +96,17 @@ public:
           mainSampleWorkflows_(sampler_, controlDispatcher_, *this, padWorkflows_.mutationMutex())
     {
         mainSampleWorkflows_.setHostBpm(&hostBpm_);
+        padWorkflows_.setSwapHook([this](const std::uint32_t first, const std::uint32_t second) {
+            // Colour and favourite flag travel with the pad contents.
+            const int firstValue = padColors_[first].load(std::memory_order_relaxed);
+            padColors_[first].store(padColors_[second].load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+            padColors_[second].store(firstValue, std::memory_order_relaxed);
+            sampler_.setFavoriteMask(midichopper::plugin::favoriteMaskOf(padColors_));
+            for (const std::uint32_t pad : {first, second})
+                publishUiState(kPadColorStateKeys[pad].c_str(), std::to_string(
+                    padColors_[pad].load(std::memory_order_relaxed)).c_str());
+        });
         sampler_.setControlDispatcher(&controlDispatcher_,
             &sms::audio::RealtimeCommandDispatcher::dispatchFromEngine);
     }

@@ -94,3 +94,5 @@ The plugin has 16 auxiliary stereo outputs after the main pair. In the Sample Ed
 output, not on Main. Main keeps its level control and monitoring. In FL Studio, open the plugin
 wrapper's Processing tab and route each output to a mixer track. If the host leaves an output
 disabled, that pad is silent.
+
+Max Voices defaults to 16 in new instances. Saved projects restore the value they stored.

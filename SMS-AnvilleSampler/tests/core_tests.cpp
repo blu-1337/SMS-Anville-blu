@@ -80,7 +80,7 @@ void retained_storage_reserve_and_bounded_reclamation() {
 void newSessionDefaults()
 {
     namespace ranges = midichopper::plugin::parameterRanges;
-    check(ranges::maxVoices.defaultValue == 1.0f &&
+    check(ranges::maxVoices.defaultValue == 16.0f && ranges::maxVoices.maximum == 16.0f &&
           ranges::inputMonitor.defaultValue == 2.0f &&
           ranges::monitorGainDb.defaultValue == 0.0f &&
           ranges::filterSlope.defaultValue == 0.0f,

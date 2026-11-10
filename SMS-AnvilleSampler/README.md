@@ -237,7 +237,7 @@ Right-click for **Split Sample**; following samples shift right without being ov
 
 - Monitor cycles Off, On, and Auto (on when ARMed).
 
-- Max Voices limits simultaneous pads, stealing the oldest at capacity;
+- Max Voices (16) limits pads, stealing the oldest;
 one gives monophonic playback.
 
 - **Hold** loops Start/End while its MIDI note or mouse press is held. Release

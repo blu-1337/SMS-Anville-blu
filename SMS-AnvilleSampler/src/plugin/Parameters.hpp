@@ -80,7 +80,7 @@ inline constexpr ParameterRange baseMidiNote{
 inline constexpr ParameterRange outputGainDb{0.0f, -24.0f, 12.0f};
 inline constexpr ParameterRange monitorGainDb = outputGainDb;
 inline constexpr ParameterRange maxVoices{
-    1.0f, 1.0f, static_cast<float>(kPadsPerBank)};
+    static_cast<float>(kPadsPerBank), 1.0f, static_cast<float>(kPadsPerBank)}; // new instances: 16 voices
 inline constexpr ParameterRange activeBank{1.0f, 1.0f, static_cast<float>(kBankCount)};
 inline constexpr ParameterRange padLayout{
     0.0f, 0.0f, static_cast<float>(kPadLayoutCount - 1U)};

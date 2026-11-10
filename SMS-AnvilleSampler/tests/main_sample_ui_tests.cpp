@@ -451,8 +451,8 @@ void perBankMidiHintOnlyWhenPerBank()
     context.perBankMidi = true;
     check(isTarget(interactiveTargetAt(inside, context), InteractiveType::midiBankHint),
           "per-bank MIDI shows a clickable hint");
-    check(midiBankHint.x > mainBank(3).x + mainBank(3).width && midiBankHint.x + midiBankHint.width <= 936.0f,
-          "the hint sits right of the bank buttons, inside the panel");
+    check(midiBankHint.y >= mainBank(3).y + mainBank(3).height && midiBankHint.x + midiBankHint.width <= 936.0f,
+          "the hint sits under the bank buttons, inside the panel");
     context.armed = true;
     check(!isTarget(interactiveTargetAt(inside, context), InteractiveType::midiBankHint),
           "no hint while armed");

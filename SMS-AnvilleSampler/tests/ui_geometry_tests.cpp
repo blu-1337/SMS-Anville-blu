@@ -136,6 +136,26 @@ void wideCanvasGeometry()
           inside(layout::mainPanel, layout::chopPadButton(2)) &&
           inside(layout::mainPanel, layout::editorSlider(3)),
           "expanded main-view controls remain inside the panel");
+    {
+        // Main pads header: waveform left of the bank switcher, nothing overlaps (layout is in
+        // logical units, so this holds at every window scale).
+        const auto apart = [](const sms::ui::Rect l, const sms::ui::Rect r) {
+            return l.x + l.width <= r.x || r.x + r.width <= l.x ||
+                   l.y + l.height <= r.y || r.y + r.height <= l.y;
+        };
+        const auto& wf = layout::overviewWaveform;
+        check(inside(layout::mainPanel, wf) && wf.y + wf.height <= layout::mainPadBounds.y &&
+              wf.height >= 60.0f && wf.y < layout::mainBank(0).y + 8.0f, "main waveform is tall, in the panel header");
+        for (int b = 0; b < 4; ++b) {
+            check(inside(layout::mainPanel, layout::mainBank(b)) && apart(wf, layout::mainBank(b)) &&
+                  wf.x + wf.width <= layout::mainBank(b).x && apart(layout::mainBank(b), layout::midiBankHint) &&
+                  apart(layout::mainBank(b), layout::mainPadBounds), "bank switcher sits right of the waveform");
+            for (int c = b + 1; c < 4; ++c)
+                check(apart(layout::mainBank(b), layout::mainBank(c)), "bank buttons do not overlap");
+        }
+        check(apart(wf, layout::midiBankHint) && apart(layout::midiBankHint, layout::mainPadBounds) &&
+              inside(layout::mainPanel, layout::midiBankHint), "MIDI hint clear of waveform and pads");
+    }
     check(inside(layout::sidePanel, layout::editorPadBounds) &&
           inside(layout::sidePanel, layout::monitor) &&
           inside(layout::sidePanel, layout::chopNext),

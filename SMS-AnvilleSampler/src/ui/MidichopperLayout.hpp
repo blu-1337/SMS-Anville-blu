@@ -112,7 +112,7 @@ inline constexpr int skinMenuMaximumChoices = 18;
 
 inline constexpr sms::ui::Rect footer{24.0f, 706.0f, 1216.0f, 32.0f};
 inline constexpr sms::ui::Rect mainPadBounds{46.0f, 196.0f, 890.0f, 470.0f};
-inline constexpr sms::ui::Rect overviewWaveform{46.0f, 176.0f, 890.0f, 10.0f};
+inline constexpr sms::ui::Rect overviewWaveform{46.0f, 104.0f, 584.0f, 82.0f};
 inline constexpr sms::ui::Rect editorWaveform{74.0f, 158.0f, 862.0f, 208.0f};
 inline constexpr sms::ui::Rect editorZoom{46.0f, 158.0f, 16.0f, 208.0f};
 inline constexpr sms::ui::Rect editorScroll{74.0f, 378.0f, 862.0f, 12.0f};
@@ -212,12 +212,12 @@ inline constexpr sms::ui::Rect clearAction{1146.0f, 610.0f, 70.0f, 34.0f};
 
 [[nodiscard]] constexpr sms::ui::Rect mainBank(const int index) noexcept
 {
-    return {80.0f + static_cast<float>(index) * 56.0f, 140.0f, 50.0f, 28.0f};
+    return {690.0f + static_cast<float>(index) * 56.0f, 104.0f, 50.0f, 28.0f};
 }
 
 // Shown only while MIDI is set to "selected bank": notes past that bank's pads play nothing.
 // Clicking it switches to All Banks (one continuous note range across banks A-D).
-inline constexpr sms::ui::Rect midiBankHint{310.0f, 140.0f, 560.0f, 28.0f};
+inline constexpr sms::ui::Rect midiBankHint{650.0f, 140.0f, 286.0f, 28.0f};
 
 [[nodiscard]] constexpr sms::ui::Rect editorBank(const int index) noexcept
 {

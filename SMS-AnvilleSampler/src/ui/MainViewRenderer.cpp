@@ -31,14 +31,15 @@ void drawPadPanel(const ViewRenderContext& ctx)
     ctx.canvas.fontSize(13.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
     ctx.canvas.fillColor(colors.contentSecondary);
-    text(ctx, 46.0f, 120.0f, ctx.state.armed ? "DESTINATION PADS" : "PAD BANK", nullptr);
-    ctx.canvas.fontSize(11.0f);
-    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-    text(ctx, 936.0f, 120.0f, ctx.state.armed ? "CLICK A PAD TO SET START" : "CLICK TO PLAY",
-         nullptr);
+    text(ctx, 650.0f, 174.0f, ctx.state.armed ? "DESTINATION PADS" : "PAD BANK", nullptr);
+    if (ctx.state.armed) {
+        ctx.canvas.fontSize(11.0f);
+        ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
+        text(ctx, 936.0f, 146.0f, "CLICK A PAD TO SET START", nullptr);
+    }
     ctx.canvas.fontSize(10.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
-    text(ctx, 46.0f, 154.0f, "BANK", nullptr);
+    text(ctx, 650.0f, 118.0f, "BANK", nullptr);
     for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
         char label[4];
         std::snprintf(label, sizeof(label), sms::ui::dpf::themeFormat("%c"), 'A' + bank);
@@ -62,7 +63,7 @@ void drawPadPanel(const ViewRenderContext& ctx)
         ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
         ctx.canvas.fillColor(colors.contentPrimary);
         text(ctx, rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f,
-             "MIDI PLAYS THIS BANK ONLY - CLICK TO PLAY ALL BANKS A-D CONTINUOUSLY", nullptr);
+             "MIDI: THIS BANK ONLY - CLICK FOR A-D", nullptr);
     }
     sms::ui::dpf::drawWaveform(
         ctx.canvas, uiLayout::overviewWaveform, ctx.state.waveform, ctx.state.hasWaveform,

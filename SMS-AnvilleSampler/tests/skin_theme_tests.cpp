@@ -323,8 +323,36 @@ void placeholderCatalog()
 }
 } // namespace
 
+void waveformColumnsAreContinuous()
+{
+    using namespace sms::ui::dpf;
+    sms::audio::WaveformSummary summary;
+    for (std::size_t bin = 0; bin < sms::audio::kWaveformBins; ++bin) {
+        summary.maximum[bin] = bin % 2U == 0U ? 0.9f : 0.1f;
+        summary.minimum[bin] = -summary.maximum[bin];
+    }
+    for (const float width : {862.0f, 584.0f, 890.0f, 3.0f}) {
+        const int columns = waveformColumnCount(width);
+        check(static_cast<float>(columns) >= width && static_cast<float>(columns) < width + 1.0f,
+              "one column per pixel covers the rect width with no gaps");
+        const float step = width / static_cast<float>(columns);
+        check(step <= 1.0f, "adjacent columns are at most one pixel apart");
+        float widest = 0.0f;
+        for (int column = 1; column < columns; ++column) {
+            const auto a = interpolatedWaveformColumn(summary, column - 1, columns);
+            const auto b = interpolatedWaveformColumn(summary, column, columns);
+            widest = std::max(widest, std::abs(b.maximum - a.maximum));
+            check(a.minimum <= a.maximum && b.minimum <= b.maximum, "column min never exceeds max");
+        }
+        check(widest <= 0.8f / (static_cast<float>(columns) / sms::audio::kWaveformBins) + 0.001f,
+              "interpolation changes smoothly between bins");
+    }
+    check(waveformColumnCount(0.2f) == 1 && waveformColumnCount(100000.0f) == 2048, "column count is bounded");
+}
+
 int main()
 {
+    waveformColumnsAreContinuous();
     envelopeHandleColors();
     colorsAndPadIndices();
     safeMetrics();

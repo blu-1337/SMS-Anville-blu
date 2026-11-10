@@ -4,11 +4,37 @@
 #include "WaveformEditor.hpp"
 #include "WaveformViewport.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
 
 namespace sms::ui::dpf {
+
+struct WaveformColumn {
+    float minimum = 0.0f;
+    float maximum = 0.0f;
+};
+
+/** One drawn column per pixel (at least one), bounded so a path stays small. */
+[[nodiscard]] inline int waveformColumnCount(const float width) noexcept
+{
+    return std::clamp(static_cast<int>(std::ceil(width)), 1, 2048);
+}
+
+/** Min/max of display column `column` of `columns`, linearly interpolated between bin centres. */
+[[nodiscard]] inline WaveformColumn interpolatedWaveformColumn(const audio::WaveformSummary& summary,
+                                                               const int column, const int columns) noexcept
+{
+    constexpr float kBins = static_cast<float>(audio::kWaveformBins);
+    const float position = std::clamp((static_cast<float>(column) + 0.5f) / static_cast<float>(columns) * kBins - 0.5f,
+                                      0.0f, kBins - 1.0f);
+    const auto low = static_cast<std::size_t>(position);
+    const auto high = std::min(low + 1U, audio::kWaveformBins - 1U);
+    const float t = position - static_cast<float>(low);
+    return {summary.minimum[low] + (summary.minimum[high] - summary.minimum[low]) * t,
+            summary.maximum[low] + (summary.maximum[high] - summary.maximum[low]) * t};
+}
 
 inline void drawWaveform(DGL_NAMESPACE::NanoVG& canvas, const ui::Rect bounds,
                          const audio::WaveformSummary& summary, const bool hasWaveform,
@@ -28,18 +54,33 @@ inline void drawWaveform(DGL_NAMESPACE::NanoVG& canvas, const ui::Rect bounds,
     if (!hasWaveform)
         return;
     const float scale = waveform::displayScale(summary);
-    for (std::size_t index = 0; index < audio::kWaveformBins; ++index) {
-        const float x = bounds.x + bounds.width * (static_cast<float>(index) + 0.5f) /
-                                      static_cast<float>(audio::kWaveformBins);
-        canvas.beginPath();
-        canvas.moveTo(x, bounds.y + bounds.height *
-            (0.5f - summary.maximum[index] * scale * 0.43f));
-        canvas.lineTo(x, bounds.y + bounds.height *
-            (0.5f - summary.minimum[index] * scale * 0.43f));
-        canvas.strokeColor(signal);
-        canvas.strokeWidth(1.2f);
-        canvas.stroke();
+    const int columns = waveformColumnCount(bounds.width);
+    const float mid = bounds.y + bounds.height * 0.5f;
+    const float half = bounds.height * 0.43f * scale;
+    const float step = bounds.width / static_cast<float>(columns);
+    // One continuous filled area: upper edge left to right, lower edge back. Bins are
+    // linearly interpolated per pixel column so a 128-bin summary never shows as gapped bars.
+    canvas.beginPath();
+    for (int column = 0; column < columns; ++column) {
+        const auto sample = interpolatedWaveformColumn(summary, column, columns);
+        const float x = bounds.x + (static_cast<float>(column) + 0.5f) * step;
+        const float top = std::min(mid - sample.maximum * half, mid - 0.5f);
+        if (column == 0)
+            canvas.moveTo(x, top);
+        else
+            canvas.lineTo(x, top);
     }
+    for (int column = columns - 1; column >= 0; --column) {
+        const auto sample = interpolatedWaveformColumn(summary, column, columns);
+        const float x = bounds.x + (static_cast<float>(column) + 0.5f) * step;
+        canvas.lineTo(x, std::max(mid - sample.minimum * half, mid + 0.5f));
+    }
+    canvas.closePath();
+    canvas.fillColor(signal.withAlpha(0.85f));
+    canvas.fill();
+    canvas.strokeColor(signal);
+    canvas.strokeWidth(1.0f);
+    canvas.stroke();
 }
 
 inline void drawCutHandle(DGL_NAMESPACE::NanoVG& canvas, const float x, const float y,

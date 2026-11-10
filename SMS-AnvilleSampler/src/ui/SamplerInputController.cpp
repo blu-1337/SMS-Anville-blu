@@ -330,11 +330,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 return true;
             }
             if (isTarget(clicked, InteractiveType::mainSampleAction)) {
-                if (clicked.index == 0) assignSelectionToFreePad();
-                else if (clicked.index == 1 && !main.arrange())
+                if (clicked.index == 0 && !main.arrange())
                     fSession.setLocalStatus("Pads already in order");
-                else if (clicked.index == 2) fSession.autoColorPads();
-                else if (clicked.index == 3) fSession.clearPadColors();
+                else if (clicked.index == 1) fSession.autoColorPads();
+                else if (clicked.index == 2) fSession.clearPadColors();
                 fHost.repaintSamplerInput();
                 return true;
             }
@@ -732,24 +731,6 @@ bool SamplerInputController::pressMainSamplePad(const int localPad)
     fSession.pressPlaybackPad(localPad);
     fHost.repaintSamplerInput();
     return true;
-}
-
-void SamplerInputController::assignSelectionToFreePad()
-{
-    auto& main = fSession.mainSample();
-    if (!main.hasSelection()) {
-        fSession.setLocalStatus("Select an area first");
-        return;
-    }
-    const auto& padState = fSession.state().padState;
-    const int local = MainSampleController::firstFreePad(
-        std::string_view(padState.data(), padState.size()), fSession.visiblePadCount());
-    if (local < 0) {
-        fSession.setLocalStatus("No free pad in this bank");
-        return;
-    }
-    main.assignSelection(static_cast<std::uint32_t>(fSession.globalPad(local)));
-    main.clearSelection();
 }
 
 void SamplerInputController::toggleMainSamplePreview()

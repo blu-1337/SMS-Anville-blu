@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <type_traits>
 
 namespace sms::ui::dpf {
 
@@ -34,6 +35,40 @@ struct WaveformColumn {
     const float t = position - static_cast<float>(low);
     return {summary.minimum[low] + (summary.minimum[high] - summary.minimum[low]) * t,
             summary.maximum[low] + (summary.maximum[high] - summary.maximum[low]) * t};
+}
+
+/** Filled closed min/max area over columns [first,last]; `gain` (callable or nullptr) scales each column. */
+template <typename Gain>
+inline void fillWaveformArea(DGL_NAMESPACE::NanoVG& canvas, const float left, const float mid,
+                             const float half, const float step,
+                             const audio::WaveformSummary& summary, const int columns,
+                             const int first, const int last,
+                             const DGL_NAMESPACE::Color& colour, const Gain& gain)
+{
+    const auto gainOf = [&](const int column) {
+        if constexpr (std::is_null_pointer_v<Gain>)
+            return 1.0f;
+        else
+            return gain(column);
+    };
+    canvas.beginPath();
+    for (int column = first; column <= last; ++column) {
+        const auto sample = interpolatedWaveformColumn(summary, column, columns);
+        const float x = left + (static_cast<float>(column) + 0.5f) * step;
+        const float top = std::min(mid - sample.maximum * half * gainOf(column), mid - 0.5f);
+        if (column == first)
+            canvas.moveTo(x, top);
+        else
+            canvas.lineTo(x, top);
+    }
+    for (int column = last; column >= first; --column) {
+        const auto sample = interpolatedWaveformColumn(summary, column, columns);
+        const float x = left + (static_cast<float>(column) + 0.5f) * step;
+        canvas.lineTo(x, std::max(mid - sample.minimum * half * gainOf(column), mid + 0.5f));
+    }
+    canvas.closePath();
+    canvas.fillColor(colour);
+    canvas.fill();
 }
 
 inline void drawWaveform(DGL_NAMESPACE::NanoVG& canvas, const ui::Rect bounds,
@@ -151,38 +186,33 @@ inline void drawWaveformEditor(DGL_NAMESPACE::NanoVG& canvas, const ui::Rect bou
 
     if (hasWaveform) {
         const float scale = waveform::displayScale(visible);
-        for (std::size_t bin = 0; bin < audio::kWaveformBins; ++bin) {
-            const float normalized = (static_cast<float>(bin) + 0.5f) /
-                                     static_cast<float>(audio::kWaveformBins);
-            const float x = bounds.x + normalized * bounds.width;
-            canvas.beginPath();
-            canvas.moveTo(x, bounds.y + bounds.height *
-                (0.5f - visible.maximum[bin] * scale * 0.44f));
-            canvas.lineTo(x, bounds.y + bounds.height *
-                (0.5f - visible.minimum[bin] * scale * 0.44f));
-            canvas.strokeColor(colors.contentSecondary.withAlpha(0.24f));
-            canvas.strokeWidth(1.4f);
-            canvas.stroke();
-        }
-        for (std::size_t bin = 0; bin < audio::kWaveformBins; ++bin) {
-            const float displayed = (static_cast<float>(bin) + 0.5f) /
-                                    static_cast<float>(audio::kWaveformBins);
-            const float normalized = viewport.zoomed() ? static_cast<float>(
+        const int columns = waveformColumnCount(bounds.width);
+        const float mid = bounds.y + bounds.height * 0.5f;
+        const float half = bounds.height * 0.44f * scale;
+        const float step = bounds.width / static_cast<float>(columns);
+        const auto normalizedAt = [&](const int column) {
+            const double displayed = (static_cast<double>(column) + 0.5) / columns;
+            return viewport.zoomed() ? static_cast<float>(
                 (viewport.start + displayed * (viewport.end - viewport.start)) / viewport.total)
-                : displayed;
+                : static_cast<float>(displayed);
+        };
+        // Faint full-length area, then the active region (with envelope gain) on top.
+        fillWaveformArea(canvas, bounds.x, mid, half, step, visible, columns, 0, columns - 1,
+                         colors.contentSecondary.withAlpha(0.24f), nullptr);
+        int first = columns;
+        int last = -1;
+        for (int column = 0; column < columns; ++column) {
+            const float normalized = normalizedAt(column);
             if (normalized < settings.start || normalized > settings.end)
                 continue;
-            const float gain = waveform::envelopeGain(normalized, summary, settings);
-            const float x = bounds.x + displayed * bounds.width;
-            canvas.beginPath();
-            canvas.moveTo(x, bounds.y + bounds.height *
-                (0.5f - visible.maximum[bin] * scale * gain * 0.44f));
-            canvas.lineTo(x, bounds.y + bounds.height *
-                (0.5f - visible.minimum[bin] * scale * gain * 0.44f));
-            canvas.strokeColor(colors.activityPlayback);
-            canvas.strokeWidth(2.3f);
-            canvas.stroke();
+            first = std::min(first, column);
+            last = column;
         }
+        if (last >= first)
+            fillWaveformArea(canvas, bounds.x, mid, half, step, visible, columns, first, last,
+                             colors.activityPlayback, [&](const int column) {
+                                 return waveform::envelopeGain(normalizedAt(column), summary, settings);
+                             });
         char scaleLabel[32];
         if (scale > 1.05f)
             std::snprintf(scaleLabel, sizeof(scaleLabel), sms::ui::dpf::themeFormat("AMPLITUDE  x%.1f"), scale);

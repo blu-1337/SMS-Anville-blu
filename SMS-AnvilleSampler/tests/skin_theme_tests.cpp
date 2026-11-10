@@ -331,7 +331,7 @@ void waveformColumnsAreContinuous()
         summary.maximum[bin] = bin % 2U == 0U ? 0.9f : 0.1f;
         summary.minimum[bin] = -summary.maximum[bin];
     }
-    for (const float width : {862.0f, 584.0f, 890.0f, 3.0f}) {
+    for (const float width : {862.0f, 584.0f, 890.0f, 3.0f, 1100.0f}) {
         const int columns = waveformColumnCount(width);
         check(static_cast<float>(columns) >= width && static_cast<float>(columns) < width + 1.0f,
               "one column per pixel covers the rect width with no gaps");

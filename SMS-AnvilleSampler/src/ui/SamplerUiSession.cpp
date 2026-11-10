@@ -112,6 +112,7 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
         const bool loop = fEditorAuditionPad == pad && pad >= 0 ? fEditorAuditionLoop
                                                                 : fState.playbackMode >= 0.5f;
         fPlaybackIndicator.acceptHostPosition(value, now, loop);
+        static_cast<void>(fMainSample.acceptPadPosition(value));
         if (fState.editorMode)
             fHost.repaintUi();
         return;

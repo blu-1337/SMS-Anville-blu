@@ -290,9 +290,7 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         }
     }
 
-    if (main.previewPosition() > 0.0f && main.status().frames != 0U) {
-        const double frame = std::clamp(static_cast<double>(main.previewPosition() - 1.0f), 0.0, 1.0) *
-                             main.status().frames;
+    if (const double frame = main.playheadFrame(); frame >= 0.0) {
         if (frame >= viewport.start && frame <= viewport.end) {
             const float x = viewport.xForFrame(frame, bounds);
             ctx.canvas.beginPath();
@@ -334,9 +332,8 @@ void drawOverview(const ViewRenderContext& ctx, const MainSampleController& main
         ctx.canvas.strokeWidth(hovered(ctx, InteractiveType::mainSampleOverview) ? 2.0f : 1.2f);
         ctx.canvas.stroke();
     }
-    if (main.previewPosition() > 0.0f) {
-        const float x = bounds.x + bounds.width *
-            std::clamp(main.previewPosition() - 1.0f, 0.0f, 1.0f);
+    if (const double frame = main.playheadFrame(); frame >= 0.0) {
+        const float x = bounds.x + bounds.width * static_cast<float>(frame / frames);
         ctx.canvas.beginPath();
         ctx.canvas.moveTo(x, bounds.y);
         ctx.canvas.lineTo(x, bounds.y + bounds.height);

@@ -319,6 +319,19 @@ void sessionRouting()
           session.mainSample().hasSource(), "main_sample_status reaches the controller");
     session.acceptParameter(kParameterMainSamplePreviewPosition, 1.25f);
     check(session.mainSample().previewPosition() == 1.25f, "the preview position is routed");
+    session.acceptParameter(kParameterMainSamplePreviewPosition, 0.0f);
+    check(session.mainSample().playheadFrame() < 0.0, "no playhead while idle");
+    session.acceptParameter(kParameterPlaybackPosition, 4.5f); // pad 3 (slice 2: 400..1000) half way
+    check(std::abs(session.mainSample().playheadFrame() - 700.0) < 0.5,
+          "a MIDI-played linked pad moves the playhead through its slice");
+    session.acceptParameter(kParameterPlaybackPosition, 1.5f); // pad 0 is not linked
+    check(session.mainSample().playheadFrame() < 0.0, "an unlinked pad shows no playhead");
+    session.acceptParameter(kParameterPlaybackPosition, 4.25f);
+    session.acceptParameter(kParameterMainSamplePreviewPosition, 1.1f);
+    check(std::abs(session.mainSample().playheadFrame() - 100.0) < 0.5, "the preview wins over a pad voice");
+    session.acceptParameter(kParameterMainSamplePreviewPosition, 0.0f);
+    session.acceptParameter(kParameterPlaybackPosition, 0.0f);
+    check(session.mainSample().playheadFrame() < 0.0, "the playhead clears when the voice ends");
     session.closeMainSample();
     check(!session.state().mainSampleMode && !session.mainSample().isOpen(),
           "closing leaves the view");

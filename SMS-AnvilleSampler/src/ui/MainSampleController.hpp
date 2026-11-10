@@ -51,6 +51,10 @@ public:
     bool acceptStatus(std::string_view encoded, Time now = Clock::now());
     bool acceptWaveform(std::string_view encoded);
     bool acceptPreviewPosition(float value) noexcept;
+    /** Host playback position (pad+1+fraction, 0 = idle): shows MIDI/pad playback of a linked slice. */
+    bool acceptPadPosition(float value) noexcept;
+    /** Source frame of the playhead to draw (preview first, else a linked pad voice), or -1. */
+    [[nodiscard]] double playheadFrame() const noexcept;
     void padsChanged(Time now) noexcept;
     void idle(Time now);
     void missedReplies();
@@ -225,6 +229,7 @@ private:
     std::uint32_t fPlayStart = 0U;
     std::uint32_t fPlayEnd = 0U;
     float fPreviewPosition = 0.0f;
+    float fPadPosition = 0.0f;
     bool fSnap = true;
     std::uint32_t fSelectionAnchor = 0U;
     std::uint32_t fSelectionStart = 0U;

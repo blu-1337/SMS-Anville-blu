@@ -67,3 +67,5 @@ Auto chop cuts the main sample into pads in one step (issue #54). Pick a mode, a
 - Beat and Random use the tempo you enter, or the host tempo when it is 0. Without either you get "No tempo".
 - Pads are filled from the first pad upward. If a pad already holds other audio you are asked to confirm; pads that already belong to this main sample are replaced without asking.
 - Analysis runs once per loaded sample and is not saved with the project.
+
+A pad linked to a slice also moves the playhead through that slice when it is played from MIDI or a pad click (most recent voice).

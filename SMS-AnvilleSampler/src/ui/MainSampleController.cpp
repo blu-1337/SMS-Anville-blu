@@ -161,6 +161,35 @@ bool MainSampleController::acceptPreviewPosition(const float value) noexcept
     return true;
 }
 
+bool MainSampleController::acceptPadPosition(const float value) noexcept
+{
+    const float clean = std::isfinite(value) && value > 0.0f ? value : 0.0f;
+    if (clean == fPadPosition)
+        return false;
+    fPadPosition = clean;
+    if (fOpen)
+        fHost.repaintMainSample();
+    return true;
+}
+
+double MainSampleController::playheadFrame() const noexcept
+{
+    const double frames = static_cast<double>(fStatus.frames);
+    if (frames <= 0.0)
+        return -1.0;
+    if (fPreviewPosition > 0.0f)
+        return std::clamp(static_cast<double>(fPreviewPosition - 1.0f), 0.0, 1.0) * frames;
+    if (fPadPosition <= 0.0f)
+        return -1.0;
+    const int pad = static_cast<int>(std::floor(fPadPosition)) - 1;
+    const int slice = sliceForPad(static_cast<std::uint32_t>(pad));
+    if (slice < 0)
+        return -1.0;
+    const auto& s = fStatus.slices[static_cast<std::size_t>(slice)];
+    const double fraction = std::clamp(static_cast<double>(fPadPosition - std::floor(fPadPosition)), 0.0, 1.0);
+    return std::min(frames, static_cast<double>(s.start) + fraction * (static_cast<double>(s.end) - s.start));
+}
+
 void MainSampleController::padsChanged(const Time now) noexcept
 {
     // A pad edit the view did not request may unlink or (on restore) link pads.

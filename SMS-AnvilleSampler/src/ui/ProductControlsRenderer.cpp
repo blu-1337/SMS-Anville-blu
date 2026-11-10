@@ -5,6 +5,7 @@
 #include "DPF/LevelMeter.hpp"
 #include "Parameters.hpp"
 
+#include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -158,7 +159,11 @@ void drawMixerKnob(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
     ctx.canvas.fillColor(colors.contentPrimary);
     text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + 56.0f, entry, nullptr);
-    const float normalized = bipolarKnobPosition(value, minimum, maximum);
+    float normalized = bipolarKnobPosition(value, minimum, maximum);
+    // LOWPASS sweeps right to left: 100% (lowest cutoff) sits at the left end, so both
+    // filter knobs read as a cutoff that rises from left to right. Stored values are unchanged.
+    if (std::strcmp(label, "LOWPASS") == 0)
+        normalized = 1.0f - normalized;
     sms::ui::dpf::drawKnob(ctx.canvas, bounds.x + bounds.width * 0.5f, bounds.y + 31.0f, 16.0f,
                            normalized, colors.controlAccent, hovered(ctx, type, index));
 }

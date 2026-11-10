@@ -217,6 +217,26 @@ void knobAndWheelGestures()
     f.mixer.wheel(f.context, target(InteractiveType::mixerKnob, 0), 1.0f, KnobAdjustment::normal);
     check(near(f.context.mixer.gainDecibels, 0.5f) && f.host.effects.size() == 1U &&
           f.host.effects[0].kind == "pad", "pad wheel updates mixer through the session");
+    // LOWPASS is drawn mirrored (100% at the left), so wheel and drag run opposite to HIGHPASS.
+    f.context.mixer.lowpass = 0.5f;
+    f.context.mixer.highpass = 0.5f;
+    f.mixer.wheel(f.context, target(InteractiveType::mixerKnob, 3), 1.0f, KnobAdjustment::normal);
+    f.mixer.wheel(f.context, target(InteractiveType::mixerKnob, 4), 1.0f, KnobAdjustment::normal);
+    check(f.context.mixer.lowpass < 0.5f && f.context.mixer.highpass > 0.5f,
+          "lowpass wheel is mirrored against highpass");
+    f.context.mixer.lowpass = 0.5f;
+    f.context.mixer.highpass = 0.5f;
+    f.context.view = MixerValueEntryView::sampleEditor;
+    f.mixer.sampleMixerPress(f.context, target(InteractiveType::mixerKnob, 3),
+                            {100.0f, 100.0f}, KnobAdjustment::normal);
+    f.mixer.motion(f.context, {100.0f, 80.0f});
+    const float lowpassUp = f.context.mixer.lowpass;
+    f.mixer.releaseKnob(f.context);
+    f.mixer.sampleMixerPress(f.context, target(InteractiveType::mixerKnob, 4),
+                            {100.0f, 100.0f}, KnobAdjustment::normal);
+    f.mixer.motion(f.context, {100.0f, 80.0f});
+    check(lowpassUp < 0.5f && f.context.mixer.highpass > 0.5f, "lowpass drag is mirrored against highpass");
+    f.mixer.releaseKnob(f.context);
     f.context.view = MixerValueEntryView::sampleEditor;
     f.mixer.sampleMixerPress(f.context, target(InteractiveType::mixerKnob, 1),
                             {100.0f, 100.0f}, KnobAdjustment::fine);

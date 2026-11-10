@@ -60,7 +60,7 @@ range. See [numeric entry and keyboard navigation](../README.md#general-controls
 Levels are host parameters saved with projects.
 
 **Lowpass** removes treble as you raise it from 0% to 100%. **Highpass** removes
-bass. At 0%, each filter is off. Both add resonance as you turn them farther
+bass. At 0%, each filter is off. The Lowpass knob is drawn right to left (100% at the left) so both cutoffs rise left to right; its drag and wheel are mirrored, saved values are unchanged. Both add resonance as you turn them farther
 from off. **Slope** selects 6, 12, or 24 dB per octave; click or drag its
 slider, or use the wheel. A steeper slope removes unwanted frequencies faster.
 

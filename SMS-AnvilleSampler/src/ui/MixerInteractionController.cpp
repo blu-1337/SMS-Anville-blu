@@ -275,8 +275,10 @@ void MixerInteractionController::updateGlobalDrag(const sms::ui::Point position)
     default:
         return;
     }
+    // LOWPASS is drawn mirrored (100% at the left), so its drag and wheel run the other way.
+    const float dragY = parameter == kParameterGlobalLowpass ? 2.0f * fGlobalStartY - y : y;
     fHost.setMixerParameter(parameter, midichopper::ui::globalKnobDraggedValue(
-        parameter, startValue, fGlobalStartY, y, steppedIncrement,
+        parameter, startValue, fGlobalStartY, dragY, steppedIncrement,
         fGlobalAdjustment, settings(parameter)));
 }
 
@@ -326,8 +328,9 @@ void MixerInteractionController::updateSampleDrag(const MixerInteractionContext&
     default:
         return;
     }
+    const float dragY = fSampleDrag == 3 ? 2.0f * fSampleStartY - y : y; // mirrored LOWPASS
     const float adjusted = midichopper::ui::knobDraggedValue(
-        startValue, fSampleStartY, y, minimum, maximum,
+        startValue, fSampleStartY, dragY, minimum, maximum,
         steppedIncrement, fSampleAdjustment);
     switch (fSampleDrag) {
     case 0:
@@ -755,7 +758,7 @@ bool MixerInteractionController::wheel(const MixerInteractionContext& context,
             break;
         case 3:
             mixer.lowpass = midichopper::ui::knobWheelAdjustedValue(
-                mixer.lowpass, delta, 0.025f, 0.1f, 0.0f, 1.0f,
+                mixer.lowpass, -delta, 0.025f, 0.1f, 0.0f, 1.0f,
                 adjustment);
             break;
         case 4:
@@ -787,7 +790,8 @@ bool MixerInteractionController::wheel(const MixerInteractionContext& context,
             constexpr std::array<float, 5> increments{0.5f, 0.05f, 0.25f, 0.025f, 0.025f};
             setWheelValue(parameter,
                 midichopper::ui::globalKnobWheelAdjustedValue(parameter,
-                    values[static_cast<std::size_t>(hovered.index)], delta,
+                    values[static_cast<std::size_t>(hovered.index)],
+                    parameter == kParameterGlobalLowpass ? -delta : delta,
                     increments[static_cast<std::size_t>(hovered.index)],
                     adjustment, settings(parameter)));
             return true;

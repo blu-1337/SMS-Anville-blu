@@ -242,7 +242,7 @@ private:
     Time fDetailDeadline{};
     Time fOverviewDeadline{};
     plugin::AutoChopMode fAutoMode = plugin::AutoChopMode::transient;
-    std::uint32_t fAutoCount = 8U;
+    std::uint32_t fAutoCount = 16U;
     std::uint32_t fAutoFirstPad = 0U;
     std::uint64_t fAutoSequence = 0U;
     bool fAutoConfirm = false;

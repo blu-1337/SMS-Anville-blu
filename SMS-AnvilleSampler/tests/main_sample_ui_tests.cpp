@@ -455,7 +455,7 @@ void autoChopPanel()
     AutoChopRequest request;
     check(host.sent.size() == 1U && host.sent[0].first == kAutoChopRequestKey &&
           decodeAutoChopRequest(host.sent[0].second, request) &&
-          request.mode == AutoChopMode::findSamples && request.count == 5U &&
+          request.mode == AutoChopMode::findSamples && request.count == 13U &&
           request.firstPad == 4U && !request.confirm, "request carries the panel settings");
     AutoChopStatus reply;
     reply.sequence = request.sequence + 5U;

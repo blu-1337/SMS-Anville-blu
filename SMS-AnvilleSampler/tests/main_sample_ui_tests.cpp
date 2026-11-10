@@ -407,10 +407,14 @@ void layoutRects()
     };
     for (int bank = 0; bank < 4; ++bank) {
         const auto rect = mainSampleBank(bank);
-        check(rect.y >= mainSamplePads.y + mainSamplePads.height && rect.y + rect.height <= 706.0f,
-              "bank buttons sit under the pad grid and above the footer");
-        check(rect.x >= mainSamplePads.x && rect.x + rect.width <= mainSamplePads.x + mainSamplePads.width,
-              "bank buttons stay under the grid width");
+        check(rect.x >= sidePanel.x && rect.y >= sidePanel.y &&
+              rect.x + rect.width <= sidePanel.x + sidePanel.width &&
+              rect.y + rect.height <= sidePanel.y + sidePanel.height, "bank buttons stay in the side panel");
+        for (int action = 0; action < kMainSampleActionCount; ++action)
+            check(disjoint(rect, mainSampleAction(action)), "bank buttons clear the slice tools");
+        for (const auto& other : {autoChopMode, autoChopCountMinus, autoChopCountPlus, autoChopCountField,
+                                  autoChopPadMinus, autoChopPadPlus, autoChopApply, autoChopMessage})
+            check(disjoint(rect, other), "bank buttons clear the auto-chop panel");
         for (const auto& other : mainSampleRects)
             check(disjoint(rect, other), "bank buttons overlap no Main Sample rect");
         for (int second = bank + 1; second < 4; ++second)

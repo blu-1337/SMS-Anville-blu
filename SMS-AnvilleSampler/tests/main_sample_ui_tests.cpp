@@ -327,6 +327,21 @@ void sessionRouting()
           "without state transport the view stays closed and silent");
 }
 
+void editorHeaderChipsFit()
+{
+    using namespace layout;
+    // Heading text starts at x 46 and, at 13 pt in the widest skin font, stays under x 440.
+    const std::array<sms::ui::Rect, 2> chips{padChoke, padOutput};
+    for (const auto& chip : chips) {
+        check(chip.x >= 440.0f && chip.x + chip.width <= closeEditor.x - 8.0f,
+              "chips sit right of the heading and left of CLOSE");
+        check(chip.y >= 108.0f && chip.y + chip.height <= 152.0f, "chips stay on the heading line");
+        check(chip.width >= 110.0f && chip.height >= 26.0f, "chips stay legible");
+    }
+    check(padChoke.x + padChoke.width < padOutput.x, "CHOKE and OUT chips do not overlap");
+    check(padLoop.y > padChoke.y + padChoke.height, "LOOP toggle is clear of the chips");
+}
+
 void layoutRects()
 {
     using namespace layout;
@@ -556,6 +571,7 @@ int main()
     zoomHelpers();
     padChangesRequery();
     sessionRouting();
+    editorHeaderChipsFit();
     layoutRects();
     assignPicksFirstFreePad();
     autoChopPanel();

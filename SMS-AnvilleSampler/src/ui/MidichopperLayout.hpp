@@ -166,10 +166,11 @@ inline constexpr float globalMixerLabelY = 386.0f;
 inline constexpr sms::ui::Rect padMixerSeparator{354.0f, 586.0f, 1.0f, 77.0f};
 inline constexpr sms::ui::Rect padGlobalMixerSeparator{854.0f, 586.0f, 1.0f, 77.0f};
 inline constexpr sms::ui::Rect padGlobalMixer{879.0f, 604.0f, 42.0f, 34.0f};
-inline constexpr sms::ui::Rect padOutput{926.0f, 520.0f, 62.0f, 34.0f};
+// CHOKE and OUT chips on the Sample Editor heading line, left of CLOSE (x 994).
+inline constexpr sms::ui::Rect padOutput{850.0f, 112.0f, 124.0f, 28.0f};
 // HOLD-mode loop toggle between the OUT and CHOKE selectors.
 inline constexpr sms::ui::Rect padLoop{926.0f, 562.0f, 62.0f, 34.0f};
-inline constexpr sms::ui::Rect padChoke{926.0f, 604.0f, 62.0f, 34.0f};
+inline constexpr sms::ui::Rect padChoke{712.0f, 112.0f, 124.0f, 28.0f};
 inline constexpr sms::ui::Rect padDirection{64.0f, 604.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect globalDirection{1007.0f, 428.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect finalizeAction{994.0f, 610.0f, 70.0f, 34.0f};

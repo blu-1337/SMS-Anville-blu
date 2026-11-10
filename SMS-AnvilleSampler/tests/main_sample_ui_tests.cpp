@@ -342,6 +342,48 @@ void editorHeaderChipsFit()
     check(padLoop.y > padChoke.y + padChoke.height, "LOOP toggle is clear of the chips");
 }
 
+void countFieldEntry()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto t0 = MainSampleController::Clock::now();
+    controller.clickCountField(t0);
+    check(!controller.countEditing(), "a single click does not start typing");
+    controller.clickCountField(t0 + std::chrono::milliseconds(900));
+    check(!controller.countEditing(), "slow clicks are not a double-click");
+    controller.clickCountField(t0 + std::chrono::milliseconds(1100));
+    check(controller.countEditing(), "double-click starts typing");
+    check(!controller.countCharacter('x') && controller.countCharacter('1') && controller.countCharacter('6'),
+          "only digits are accepted");
+    controller.countCharacter('9');
+    controller.commitCount();
+    check(!controller.countEditing() && controller.autoChopCount() == 16U, "Enter applies the count (two digits max)");
+    controller.clickCountField(t0 + std::chrono::milliseconds(2000));
+    controller.clickCountField(t0 + std::chrono::milliseconds(2100));
+    controller.countCharacter('9'); controller.countCharacter('9');
+    controller.commitCount();
+    check(controller.autoChopCount() == 64U, "large counts clamp to the maximum");
+    controller.clickCountField(t0 + std::chrono::milliseconds(3000));
+    controller.clickCountField(t0 + std::chrono::milliseconds(3100));
+    controller.countCharacter('0');
+    controller.commitCount();
+    check(controller.autoChopCount() == 1U, "zero clamps to 1");
+    controller.clickCountField(t0 + std::chrono::milliseconds(4000));
+    controller.clickCountField(t0 + std::chrono::milliseconds(4100));
+    controller.countCharacter('7'); controller.countBackspace();
+    controller.commitCount();
+    check(controller.autoChopCount() == 1U, "empty entry keeps the count");
+    controller.clickCountField(t0 + std::chrono::milliseconds(5000));
+    controller.clickCountField(t0 + std::chrono::milliseconds(5100));
+    controller.countCharacter('5'); controller.cancelCount();
+    check(!controller.countEditing() && controller.autoChopCount() == 1U, "Escape cancels");
+    controller.adjustAutoChopCount(1);
+    check(controller.autoChopCount() == 2U, "plus still works");
+    const auto field = layout::autoChopCountField;
+    check(field.x >= layout::autoChopCountMinus.x + layout::autoChopCountMinus.width &&
+          field.x + field.width <= layout::autoChopCountPlus.x, "count field sits between - and +");
+}
+
 void layoutRects()
 {
     using namespace layout;
@@ -572,6 +614,7 @@ int main()
     padChangesRequery();
     sessionRouting();
     editorHeaderChipsFit();
+    countFieldEntry();
     layoutRects();
     assignPicksFirstFreePad();
     autoChopPanel();

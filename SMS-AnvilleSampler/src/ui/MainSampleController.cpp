@@ -652,6 +652,55 @@ void MainSampleController::adjustAutoChopCount(const int delta) noexcept
     fHost.repaintMainSample();
 }
 
+void MainSampleController::clickCountField(const Time now) noexcept
+{
+    if (!fCountEditing && fCountClick != Time{} && now - fCountClick <= std::chrono::milliseconds(400)) {
+        fCountEditing = true;
+        fCountText.clear();
+        fCountClick = Time{};
+    } else {
+        fCountClick = now;
+    }
+    fHost.repaintMainSample();
+}
+
+bool MainSampleController::countCharacter(const std::uint32_t codepoint) noexcept
+{
+    if (!fCountEditing || codepoint < '0' || codepoint > '9')
+        return false;
+    if (fCountText.size() < 2U)
+        fCountText.push_back(static_cast<char>(codepoint));
+    fHost.repaintMainSample();
+    return true;
+}
+
+void MainSampleController::countBackspace() noexcept
+{
+    if (!fCountText.empty())
+        fCountText.pop_back();
+    fHost.repaintMainSample();
+}
+
+void MainSampleController::commitCount() noexcept
+{
+    if (!fCountEditing)
+        return;
+    if (!fCountText.empty()) {
+        const int value = (fCountText.size() == 2U ? (fCountText[0] - '0') * 10 : 0) +
+                          (fCountText.back() - '0');
+        fAutoCount = static_cast<std::uint32_t>(
+            std::clamp(value, 1, static_cast<int>(plugin::kAutoChopMaxCount)));
+    }
+    cancelCount();
+}
+
+void MainSampleController::cancelCount() noexcept
+{
+    fCountEditing = false;
+    fCountText.clear();
+    fHost.repaintMainSample();
+}
+
 void MainSampleController::adjustAutoChopFirstPad(const int delta) noexcept
 {
     const int value = static_cast<int>(fAutoFirstPad) + delta;

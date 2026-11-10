@@ -741,8 +741,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             }
             const sms::ui::Rect autoChopRects[] = {
                 uiLayout::autoChopMode, uiLayout::autoChopCountMinus, uiLayout::autoChopCountPlus,
-                uiLayout::autoChopPadMinus, uiLayout::autoChopPadPlus, uiLayout::autoChopApply};
-            for (int index = 0; index < 6; ++index) {
+                uiLayout::autoChopPadMinus, uiLayout::autoChopPadPlus, uiLayout::autoChopApply, uiLayout::autoChopCountField};
+            for (int index = 0; index < 7; ++index) {
                 if (autoChopRects[index].contains(point))
                     return target(InteractiveType::mainSampleAutoChop, index);
             }

@@ -296,6 +296,9 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fHost.repaintSamplerInput();
                 return true;
             }
+            if (main.countEditing() &&
+                !(isTarget(clicked, InteractiveType::mainSampleAutoChop) && clicked.index == 6))
+                main.commitCount();
             if (main.confirmPending()) return true;
             if (isTarget(clicked, InteractiveType::mainSampleClose)) { fSession.closeMainSample(); return true; }
             if (isTarget(clicked, InteractiveType::mainSampleAutoChop)) {
@@ -305,6 +308,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 case 2: main.adjustAutoChopCount(1); break;
                 case 3: main.adjustAutoChopFirstPad(-1); break;
                 case 4: main.adjustAutoChopFirstPad(1); break;
+                case 6: main.clickCountField(Clock::now()); break;
                 default: main.autoChop(); break;
                 }
                 return true;
@@ -588,6 +592,14 @@ bool SamplerInputController::scroll(const sms::ui::Point position, const float d
 
 bool SamplerInputController::keyboard(const InputKey key, const bool press, const bool backward)
 {
+    if (fSession.state().mainSampleMode && fSession.mainSample().countEditing()) {
+        auto& main = fSession.mainSample();
+        if (press && key == InputKey::commit) main.commitCount();
+        else if (press && key == InputKey::escape) main.cancelCount();
+        else if (press && (key == InputKey::backspace || key == InputKey::deleteText)) main.countBackspace();
+        fHost.repaintSamplerInput();
+        return true; // typing owns the keyboard; digits arrive through character()
+    }
     if (key == InputKey::space) {
         fHost.ignoreSamplerKeyRepeat(press);
         const bool blocked = fMixer.entry().target().valid() || fMenu.open() ||
@@ -641,6 +653,10 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
 
 bool SamplerInputController::character(const std::uint32_t codepoint)
 {
+    if (fSession.state().mainSampleMode && fSession.mainSample().countCharacter(codepoint)) {
+        fHost.repaintSamplerInput();
+        return true;
+    }
     return codepoint == ' ' || fMixer.character(codepoint);
 }
 

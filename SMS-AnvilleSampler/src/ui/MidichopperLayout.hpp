@@ -280,6 +280,8 @@ inline constexpr std::array<sms::ui::Rect, 5> mainSampleTransport{{
 // Auto chop panel in the free column right of the waveform.
 inline constexpr sms::ui::Rect autoChopMode{994.0f, 166.0f, 222.0f, 28.0f};
 inline constexpr sms::ui::Rect autoChopCountMinus{994.0f, 202.0f, 44.0f, 28.0f};
+// Double-click the count between - and + to type it.
+inline constexpr sms::ui::Rect autoChopCountField{1042.0f, 202.0f, 126.0f, 28.0f};
 inline constexpr sms::ui::Rect autoChopCountPlus{1172.0f, 202.0f, 44.0f, 28.0f};
 inline constexpr sms::ui::Rect autoChopPadMinus{994.0f, 238.0f, 44.0f, 28.0f};
 inline constexpr sms::ui::Rect autoChopPadPlus{1172.0f, 238.0f, 44.0f, 28.0f};

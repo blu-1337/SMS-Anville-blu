@@ -446,7 +446,10 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
         drawButton(uiLayout::autoChopApply, "AUTO CHOP", 5);
         ctx.canvas.fontSize(10.0f);
         ctx.canvas.fillColor(colors.contentSecondary);
-        std::snprintf(line, sizeof(line), "COUNT %u", static_cast<unsigned>(main.autoChopCount()));
+        if (main.countEditing())
+            std::snprintf(line, sizeof(line), "COUNT %s_", main.countText().c_str());
+        else
+            std::snprintf(line, sizeof(line), "COUNT %u", static_cast<unsigned>(main.autoChopCount()));
         text(ctx, uiLayout::autoChopCountMinus.x + 54.0f, uiLayout::autoChopCountMinus.y + 8.0f, line, nullptr);
         std::snprintf(line, sizeof(line), "FIRST PAD %u", static_cast<unsigned>(main.autoChopFirstPad() + 1U));
         text(ctx, uiLayout::autoChopPadMinus.x + 54.0f, uiLayout::autoChopPadMinus.y + 8.0f, line, nullptr);

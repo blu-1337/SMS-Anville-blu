@@ -98,6 +98,16 @@ public:
     void cycleAutoChopMode() noexcept;
     void adjustAutoChopCount(int delta) noexcept;
     void adjustAutoChopFirstPad(int delta) noexcept;
+    /** Click on the count field; the second click within 400 ms starts typing the count. */
+    void clickCountField(Time now) noexcept;
+    [[nodiscard]] bool countEditing() const noexcept { return fCountEditing; }
+    [[nodiscard]] const std::string& countText() const noexcept { return fCountText; }
+    /** Digits only, at most two; false for anything else. */
+    bool countCharacter(std::uint32_t codepoint) noexcept;
+    void countBackspace() noexcept;
+    /** Enter: applies the typed number clamped to 1..max (empty text keeps the old count). */
+    void commitCount() noexcept;
+    void cancelCount() noexcept;
     bool autoChop(bool confirm = false);
     bool acceptAutoChopStatus(std::string_view encoded);
     [[nodiscard]] plugin::AutoChopMode autoChopMode() const noexcept { return fAutoMode; }
@@ -211,6 +221,9 @@ private:
     std::uint32_t fSelectionEnd = 0U;
     std::uint16_t fSelectedSlice = 0U;
     std::size_t fColorPress = 0U;
+    bool fCountEditing = false;
+    std::string fCountText;
+    Time fCountClick{};
     bool fNeutralZones = false;
     std::vector<plugin::ArrangeMove> fArrangeMoves;   // sent, awaiting the reply
     std::uint64_t fArrangeSequence = 0U;

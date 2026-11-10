@@ -11,7 +11,8 @@ from MIDI. For the plugin's controls, see the [general walkthrough](../README.md
 3. If the default 4×4 layout doesn't match your controller, choose an alternative
    under **☰ → Pad Layout**. **Bank Mode → SELECTED · SHARED** uses the same
    notes for all four banks; select the bank you want to play in the plugin.
-   **ALL BANKS · UNIQUE** gives each bank its own note range.
+   **ALL BANKS · CONTINUOUS** (the default) lays banks A–D out as one unbroken
+   keyboard range: bank B starts on the note after bank A's last pad, then C, then D.
 
 You can also choose a skin under **☰ → Skin**. 😉
 

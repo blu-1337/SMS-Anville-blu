@@ -196,7 +196,7 @@ void drawMenuOverlay(const ViewRenderContext& ctx)
         const sms::ui::ContextMenuItemView items[] = {
             {"SELECTED  ·  SHARED", true, false, sms::ui::ContextMenuItemKind::action,
              ctx.state.midiBankMode == 0},
-            {"ALL BANKS  ·  UNIQUE", true, false, sms::ui::ContextMenuItemKind::action,
+            {"ALL BANKS  ·  CONTINUOUS", true, false, sms::ui::ContextMenuItemKind::action,
              ctx.state.midiBankMode == 1},
         };
         sms::ui::dpf::drawContextMenu(

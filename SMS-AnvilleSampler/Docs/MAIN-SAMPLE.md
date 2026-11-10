@@ -4,6 +4,14 @@ Load one long sample, mark slices on its waveform, and assign slices to pads.
 Pads keep their own copy, so you can keep editing them after the Main Sample
 is replaced or cleared.
 
+Assigning: drag a selection and click a pad, or press the MIDI note of a pad. A
+note on an empty pad assigns the selection and makes no sound; a note on a loaded
+pad opens the usual overwrite confirmation and the pad still plays (it previews
+what would be replaced). Dragging edges and selections snaps to other slice
+boundaries within 8 screen pixels; the SNAP button next to FIT turns that off
+(UI-local, on by default). Wheel-click and drag pans a zoomed waveform; right-drag
+inside a selection moves its nearer edge.
+
 ## Open and close
 
 Press **SAMPLE** beside **EDITOR** on the main view, or choose **Main

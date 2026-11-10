@@ -1417,7 +1417,23 @@ void hold_note_ownership()
     check(!engine.anyPlaybackActive(), "replacement Hold releases with its new note");
 }
 
+void all_banks_are_one_continuous_range() {
+    using namespace midichopper;
+    for (std::uint32_t layout = 0; layout < kPadLayoutCount; ++layout) {
+        const auto perBank = padsPerBankForLayout(layout);
+        for (std::uint32_t pad = 0; pad < perBank * kBankCount; ++pad) {
+            const auto note = midiNoteForPad(pad, kDefaultBaseMidiNote, MidiBankMode::AllBanks);
+            check(note == kDefaultBaseMidiNote + pad && padForMidiNote(note, kDefaultBaseMidiNote, 0U, perBank,
+                      MidiBankMode::AllBanks) == pad, "every visible pad has its own consecutive note, any bank");
+        }
+    }
+    const auto lastOfA = midiNoteForPad(kPadsPerBank - 1U, kDefaultBaseMidiNote, MidiBankMode::AllBanks);
+    check(midiNoteForPad(kPadsPerBank, kDefaultBaseMidiNote, MidiBankMode::AllBanks) == lastOfA + 1U,
+          "bank B continues right after bank A (16-pad layout)");
+}
+
 void all_bank_midi_mapping() {
+    all_banks_are_one_continuous_range();
     midichopper::SamplerEngine defaultEngine(1000.0, 1.0);
     check(midichopper::kDefaultMidiBankMode == midichopper::MidiBankMode::AllBanks &&
           defaultEngine.settings().midiBankMode == midichopper::MidiBankMode::AllBanks,

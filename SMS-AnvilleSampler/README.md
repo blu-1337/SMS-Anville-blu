@@ -57,8 +57,8 @@ Host-specific setup: [REAPER guide](Docs/REAPER.md).
    For capture, also route stereo audio to its input/sidechain.
 
 2. **Match your controller.** Choose **☰ → Pad Layout**. **Bank Mode → SELECTED ·
-   SHARED** reuses the same notes for whichever bank you select; **ALL BANKS ·
-   UNIQUE** gives each bank its own range.
+   SHARED** reuses the same notes for each bank; **ALL BANKS ·
+   CONTINUOUS** (default) plays banks A–D as one note range.
 
 3. **Load or capture samples.** Right-click a pad for **Import WAV...**;
    [storage is capped at 96 kHz](Docs/WAV-FILES.md#stored-sample-rates). For live chopping, check the input meter,

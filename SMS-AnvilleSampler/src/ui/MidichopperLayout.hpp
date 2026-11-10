@@ -214,6 +214,10 @@ inline constexpr sms::ui::Rect clearAction{1146.0f, 610.0f, 70.0f, 34.0f};
     return {80.0f + static_cast<float>(index) * 56.0f, 140.0f, 50.0f, 28.0f};
 }
 
+// Shown only while MIDI is set to "selected bank": notes past that bank's pads play nothing.
+// Clicking it switches to All Banks (one continuous note range across banks A-D).
+inline constexpr sms::ui::Rect midiBankHint{310.0f, 140.0f, 560.0f, 28.0f};
+
 [[nodiscard]] constexpr sms::ui::Rect editorBank(const int index) noexcept
 {
     return {994.0f + static_cast<float>(index) * 57.0f, 166.0f, 51.0f, 26.0f};

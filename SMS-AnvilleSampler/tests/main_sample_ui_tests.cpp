@@ -431,6 +431,23 @@ void regionDragMovesWholeSlice()
     controller.cancelDrag();
 }
 
+void perBankMidiHintOnlyWhenPerBank()
+{
+    using namespace layout;
+    InteractionContext context;
+    const sms::ui::Point inside{midiBankHint.x + 20.0f, midiBankHint.y + 10.0f};
+    check(!isTarget(interactiveTargetAt(inside, context), InteractiveType::midiBankHint),
+          "no hint while MIDI already spans all banks");
+    context.perBankMidi = true;
+    check(isTarget(interactiveTargetAt(inside, context), InteractiveType::midiBankHint),
+          "per-bank MIDI shows a clickable hint");
+    check(midiBankHint.x > mainBank(3).x + mainBank(3).width && midiBankHint.x + midiBankHint.width <= 936.0f,
+          "the hint sits right of the bank buttons, inside the panel");
+    context.armed = true;
+    check(!isTarget(interactiveTargetAt(inside, context), InteractiveType::midiBankHint),
+          "no hint while armed");
+}
+
 void editorHeaderChipsFit()
 {
     using namespace layout;
@@ -791,6 +808,7 @@ int main()
     editorHeaderChipsFit();
     sliceBadgesAreSmallAndComplete();
     regionDragMovesWholeSlice();
+    perBankMidiHintOnlyWhenPerBank();
     countFieldEntry();
     snapToSliceBoundaries();
     layoutRects();

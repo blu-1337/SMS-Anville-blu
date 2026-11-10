@@ -1455,7 +1455,52 @@ void all_banks_are_one_continuous_range() {
           "bank B continues right after bank A (16-pad layout)");
 }
 
+// The reported scenario: a 16-pad bank on base note C (36) plays C..D#, and the next key (E, 52)
+// was silent. That is exactly per-bank ("selected") MIDI mode: notes past the bank's pads map to
+// nothing. In continuous mode E continues into bank B, then C and D, for every layout.
+void keys_after_bank_a_continue_into_next_banks() {
+    using namespace midichopper;
+    const std::uint8_t base = kDefaultBaseMidiNote;
+    check(padForMidiNote(51, base, 0U, 16U, MidiBankMode::SelectedBank) == 15U &&
+              padForMidiNote(52, base, 0U, 16U, MidiBankMode::SelectedBank) == kPadCount,
+          "per-bank mode: the key after bank A's last pad (E) is unmapped - the reported silence");
+    for (std::uint32_t layout = 0; layout < kPadLayoutCount; ++layout) {
+        const std::uint8_t perBank = padsPerBankForLayout(layout);
+        SamplerEngine e(1000.0, 1.0);
+        auto settings = e.settings();
+        settings.monitorInput = false;
+        settings.padsPerBank = perBank;
+        settings.midiBankMode = MidiBankMode::AllBanks;
+        settings.playbackMode = PlaybackMode::OneShot;
+        e.setSettings(settings);
+        PadData pad;
+        pad.sampleRate = 1000.0;
+        pad.frames = 400;
+        pad.stereo.assign(800U, 0.5f);
+        pad.peak = pad.rms = 0.5f;
+        // Every visible pad, in visible order, bank by bank (hidden slots stay empty).
+        for (std::uint32_t index = 0; index < perBank * kBankCount; ++index)
+            check(e.importPad(padForVisibleIndex(index, perBank, MidiBankMode::AllBanks), pad), "import visible pad");
+        float left[2]{};
+        float right[2]{};
+        for (std::uint32_t index = 0; index < perBank * kBankCount; ++index) {
+            const MidiEvent on{0, static_cast<std::uint8_t>(base + index), 127, MidiEventType::NoteOn};
+            e.process(nullptr, nullptr, left, right, 1, &on, 1);
+            const auto expected = padForVisibleIndex(index, perBank, MidiBankMode::AllBanks);
+            check(e.padMetadata(expected).active,
+                  "every note from the base to the last visible pad of bank D plays its pad, no gaps");
+            if (index + 1U == perBank)
+                check(bankForPad(expected + 1U, perBank, MidiBankMode::AllBanks) == 1U,
+                      "the next pad after bank A belongs to bank B");
+        }
+        const MidiEvent after{0, static_cast<std::uint8_t>(base + perBank * kBankCount), 127, MidiEventType::NoteOn};
+        check(padForMidiNote(after.note, base, 0U, perBank, MidiBankMode::AllBanks) == kPadCount,
+              "only the note past bank D is unmapped");
+    }
+}
+
 void all_bank_midi_mapping() {
+    keys_after_bank_a_continue_into_next_banks();
     all_banks_are_one_continuous_range();
     midichopper::SamplerEngine defaultEngine(1000.0, 1.0);
     check(midichopper::kDefaultMidiBankMode == midichopper::MidiBankMode::AllBanks &&

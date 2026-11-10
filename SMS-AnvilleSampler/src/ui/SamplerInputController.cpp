@@ -60,6 +60,7 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.mainSampleHasSource = fSession.mainSample().hasSource();
     context.holdPlayback = fSession.state().playbackMode >= 0.5f;
     context.dropdown = fSession.dropdown();
+    context.perBankMidi = fSession.state().midiBankMode == 0;
     context.mainSampleConfirm = fSession.mainSample().confirmPending();
     context.mainSampleSlices = fSession.mainSample().displaySlices();
     context.mainSampleViewport = fSession.mainSample().viewport();
@@ -412,6 +413,11 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             return false;
         }
 
+        if (isTarget(clicked, InteractiveType::midiBankHint)) {
+            fSession.selectMidiBankMode(1); // All Banks: one continuous range across A-D
+            fHost.repaintSamplerInput();
+            return true;
+        }
         if (isTarget(clicked, InteractiveType::mainSampleOpen)) { fSession.openMainSample(); return true; }
         if (isTarget(clicked, InteractiveType::playStop)) {
             fPlayButtonPressCaptured = true;

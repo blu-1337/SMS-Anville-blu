@@ -46,6 +46,23 @@ void drawPadPanel(const ViewRenderContext& ctx)
                                   hovered(ctx, InteractiveType::bank, bank),
                                   ctx.state.currentPad < 0);
     }
+    if (ctx.state.midiBankMode == 0 && !ctx.state.armed) {
+        // Per-bank MIDI: keys beyond this bank's pads are silent. Offer the one-click fix.
+        const bool hint = hovered(ctx, InteractiveType::midiBankHint);
+        const auto& rect = uiLayout::midiBankHint;
+        ctx.canvas.beginPath();
+        ctx.canvas.roundedRect(rect.x, rect.y, rect.width, rect.height, 4.0f);
+        ctx.canvas.fillColor(colors.intentDanger.withAlpha(hint ? 0.32f : 0.18f));
+        ctx.canvas.fill();
+        ctx.canvas.strokeColor(colors.intentDanger.withAlpha(0.8f));
+        ctx.canvas.strokeWidth(1.0f);
+        ctx.canvas.stroke();
+        ctx.canvas.fontSize(10.0f);
+        ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+        ctx.canvas.fillColor(colors.contentPrimary);
+        text(ctx, rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f,
+             "MIDI PLAYS THIS BANK ONLY - CLICK TO PLAY ALL BANKS A-D CONTINUOUSLY", nullptr);
+    }
     sms::ui::dpf::drawWaveform(
         ctx.canvas, uiLayout::overviewWaveform, ctx.state.waveform, ctx.state.hasWaveform,
         ctx.state.currentPad >= 0 ? colors.activityCapture : colors.activityPlayback);

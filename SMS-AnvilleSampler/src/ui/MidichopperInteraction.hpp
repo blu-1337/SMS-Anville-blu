@@ -87,6 +87,7 @@ enum class InteractiveType : int {
     mainSampleClose,
     mainSampleWaveform,
     mainSampleMarker,
+    midiBankHint,
     mainSampleBadge, // index = slice; press and drag moves the whole region
     mainSampleOverview,
     mainSamplePad,
@@ -473,6 +474,7 @@ struct InteractionContext {
     bool chopSplitMode = false;
     bool mainSampleMode = false;
     bool mainSampleHasSource = false;
+    bool perBankMidi = false; // MIDI bank mode is "selected bank" (not continuous)
     bool holdPlayback = false; // global playback mode is HOLD (per-pad LOOP toggle visible)
     bool mainSampleConfirm = false;
     int dropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
@@ -821,6 +823,9 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
                 return target(InteractiveType::bank, bank);
         }
     }
+    if (!context.captureActive && !context.armed && context.perBankMidi &&
+        uiLayout::midiBankHint.contains(point))
+        return target(InteractiveType::midiBankHint);
     if (!context.captureActive) {
         const int visualPad = pads.grid(uiLayout::mainPadBounds, 10.0f).hit(point);
         const int localPad = pads.localIndex(visualPad);

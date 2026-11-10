@@ -1409,6 +1409,24 @@ void undoRedoRestoresState()
     check(undo.undoDepth() == 0U, "no steps right after a host restore");
 }
 
+void undoColorStatusCarriesNewColours()
+{
+    MainSampleFixture fixture;
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    undo.record(UndoController::Kind::colors, now + std::chrono::seconds(10), [&] {
+        colors[0].store(2);
+        colors[1].store(3);
+    });
+    const auto status = fixture.observer.latest(kUndoStatusKey);
+    check(status.size() >= 2U && status.find(';', status.find(';', status.find(';', 4) + 1) + 1) != std::string::npos,
+          "status has a header");
+    const auto digits = status.substr(status.rfind(';') + 1);
+    check(digits.size() >= 2U && digits[0] == '2' && digits[1] == '3',
+          "the colour status published for a step shows the colours after the edit");
+}
+
 void undoGestureCoalescesLiveUpdates()
 {
     MainSampleFixture fixture;
@@ -1612,6 +1630,7 @@ int main()
     mainSampleArrange();
     favoriteGuards();
     undoRedoRestoresState();
+    undoColorStatusCarriesNewColours();
     undoGestureCoalescesLiveUpdates();
     padSwap();
     arrangeKeepsColours();

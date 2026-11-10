@@ -74,11 +74,14 @@ public:
         const bool coalesce = lastKind_ == kind && now - lastEdit_ < kCoalesce;
         lastEdit_ = now;
         lastKind_ = kind;
-        if (!coalesce) {
+        const bool pushStep = !coalesce;
+        if (pushStep)
             history_.push(capture());
-            publishLocked();
-        }
         apply();
+        // Publish AFTER the edit: the UI replaces its pad colours from this status, so a
+        // pre-edit publish wiped the colours it had just set locally (first AUTO COLOR).
+        if (pushStep)
+            publishLocked();
     }
     /**
      * Live drag edits: 'B' captures the before-state, 'U' only applies, 'E' applies and

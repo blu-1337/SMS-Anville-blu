@@ -468,7 +468,7 @@ bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bo
 
 std::uint32_t MainSampleController::snapFrame(const std::uint32_t frame, const double framesPerPixel) const noexcept
 {
-    if (!fSnap)
+    if (!fSnap || fSnapBypass)
         return frame;
     const double tolerance = framesPerPixel * static_cast<double>(kSnapPixels);
     double best = tolerance;
@@ -587,7 +587,7 @@ void MainSampleController::dragRegionTo(const std::uint32_t frame, const double 
     const auto maxDelta = static_cast<std::int64_t>(fStatus.frames) - static_cast<std::int64_t>(fRegion->end);
     auto delta = std::clamp(static_cast<std::int64_t>(frame) - static_cast<std::int64_t>(fRegion->grab),
                             minDelta, std::max(minDelta, maxDelta));
-    if (fSnap) {
+    if (fSnap && !fSnapBypass) {
         // Snap whichever region edge is nearest to another slice's edge (never its own).
         const double tolerance = framesPerPixel * static_cast<double>(kSnapPixels);
         double best = tolerance;

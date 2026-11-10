@@ -9,7 +9,7 @@ note on an empty pad assigns the selection and makes no sound; a note on a loade
 pad opens the usual overwrite confirmation and the pad still plays (it previews
 what would be replaced). Dragging edges and selections snaps to other slice
 boundaries within 8 screen pixels; the SNAP button next to FIT turns that off
-(UI-local, on by default). Wheel-click and drag pans a zoomed waveform; right-drag
+(UI-local, on by default). Holding Alt or Shift during a drag turns snapping off for fine-tuning. Wheel-click and drag pans a zoomed waveform; right-drag
 inside a selection moves its nearer edge.
 
 ## Open and close

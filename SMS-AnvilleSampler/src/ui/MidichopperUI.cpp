@@ -40,6 +40,10 @@ KnobAdjustment knobAdjustment(const uint modifiers) noexcept
     if ((modifiers & DGL_NAMESPACE::kModifierShift) != 0U) return KnobAdjustment::fine;
     return KnobAdjustment::normal;
 }
+bool snapBypass(const uint modifiers) noexcept
+{
+    return (modifiers & (DGL_NAMESPACE::kModifierAlt | DGL_NAMESPACE::kModifierShift)) != 0U;
+}
 } // namespace
 
 class MidichopperUI final : public sms::ui::dpf::NanoUI,
@@ -282,9 +286,14 @@ protected:
         const auto button = ev.button == DGL_NAMESPACE::kMouseButtonLeft ? InputButton::left
             : ev.button == DGL_NAMESPACE::kMouseButtonMiddle ? InputButton::middle
             : ev.button == DGL_NAMESPACE::kMouseButtonRight ? InputButton::right : InputButton::other;
+        fInput.setSnapBypass(snapBypass(ev.mod));
         return fInput.mouse(point, button, ev.press, knobAdjustment(ev.mod));
     }
-    bool onMotion(const MotionEvent& ev) override { return fInput.motion(logicalPoint(ev.pos)); }
+    bool onMotion(const MotionEvent& ev) override
+    {
+        fInput.setSnapBypass(snapBypass(ev.mod)); // read live on every move
+        return fInput.motion(logicalPoint(ev.pos));
+    }
     bool onScroll(const ScrollEvent& ev) override
     {
         float delta = static_cast<float>(ev.delta.getY());
@@ -312,6 +321,7 @@ protected:
             : (ev.key >= '1' && ev.key <= '9' && (ev.mod & (DGL_NAMESPACE::kModifierControl | DGL_NAMESPACE::kModifierAlt)) == 0U)
                 ? static_cast<InputKey>(static_cast<int>(InputKey::digit1) + static_cast<int>(ev.key - '1'))
                 : InputKey::other;
+        fInput.setSnapBypass(snapBypass(ev.mod));
         return fInput.keyboard(key, ev.press, (ev.mod & DGL_NAMESPACE::kModifierShift) != 0U);
     }
     bool onCharacterInput(const CharacterInputEvent& ev) override { return fInput.character(ev.character); }

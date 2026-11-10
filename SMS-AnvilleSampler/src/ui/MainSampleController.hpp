@@ -166,6 +166,9 @@ public:
     /** Edge/selection drags snap to slice boundaries within kSnapPixels of screen space. */
     static constexpr float kSnapPixels = 8.0f;
     [[nodiscard]] bool snapEnabled() const noexcept { return fSnap; }
+    // Held modifier (Alt or Shift) turns snapping off for fine-tuning; set from every mouse event.
+    void setSnapBypass(const bool bypass) noexcept { fSnapBypass = bypass; }
+    [[nodiscard]] bool snapBypassed() const noexcept { return fSnapBypass; }
     void toggleSnap() noexcept { fSnap = !fSnap; fHost.repaintMainSample(); }
     /** The nearest committed slice start/end within kSnapPixels (framesPerPixel * 8), else the frame. */
     [[nodiscard]] std::uint32_t snapFrame(std::uint32_t frame, double framesPerPixel) const noexcept;
@@ -244,6 +247,7 @@ private:
     float fPreviewPosition = 0.0f;
     float fPadPosition = 0.0f;
     bool fSnap = true;
+    bool fSnapBypass = false;
     std::uint32_t fSelectionAnchor = 0U;
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;

@@ -567,6 +567,32 @@ void snapToSliceBoundaries()
           mainSampleTransport[5].x + mainSampleTransport[5].width < 640.0f, "SNAP sits after FIT, clear of the hint");
 }
 
+void snapBypassWhileHeld()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    check(controller.acceptStatus(status(1U, MainSampleState::ready,
+          {{1U, 0U, 300U}, {2U, 300U, 500U}, {3U, 800U, 900U}}, {{0U, 1U}, {1U, 2U}, {2U, 3U}}), now),
+          "source arrives");
+    check(!controller.snapBypassed(), "bypass defaults to off");
+    check(controller.snapFrame(503U, 1.0) == 500U, "snapped without the modifier");
+    controller.setSnapBypass(true);
+    check(controller.snapFrame(503U, 1.0) == 503U, "Alt/Shift held: edge and selection frames pass through");
+    controller.setSnapBypass(false);
+    check(controller.beginRegionDrag(3U, 850U), "region drag starts");
+    controller.dragRegionTo(553U, 1.0);
+    check(controller.displaySlices()[2] == MainSampleSlice{3U, 500U, 600U}, "region snaps its start to 500");
+    controller.setSnapBypass(true); // pressed mid-drag: the very next move is free
+    controller.dragRegionTo(553U, 1.0);
+    check(controller.displaySlices()[2] == MainSampleSlice{3U, 503U, 603U}, "bypass takes effect mid-drag");
+    controller.setSnapBypass(false); // released mid-drag: snapping resumes at once
+    controller.dragRegionTo(553U, 1.0);
+    check(controller.displaySlices()[2] == MainSampleSlice{3U, 500U, 600U}, "release resumes snapping mid-drag");
+    controller.cancelDrag();
+}
+
 void layoutRects()
 {
     using namespace layout;
@@ -821,6 +847,7 @@ int main()
     perBankMidiHintOnlyWhenPerBank();
     countFieldEntry();
     snapToSliceBoundaries();
+    snapBypassWhileHeld();
     layoutRects();
     assignPicksFirstFreePad();
     autoChopPanel();

@@ -32,6 +32,8 @@ public:
     bool mouse(sms::ui::Point position, InputButton button, bool press,
                KnobAdjustment adjustment = KnobAdjustment::normal);
     bool motion(sms::ui::Point position);
+    // Alt or Shift held: Main Sample drags ignore snapping. Call before every mouse/motion event.
+    void setSnapBypass(bool bypass) noexcept { fSession.mainSample().setSnapBypass(bypass); }
     bool scroll(sms::ui::Point position, float delta, bool control, bool shift,
                 KnobAdjustment adjustment = KnobAdjustment::normal);
     bool keyboard(InputKey key, bool press, bool backward = false);

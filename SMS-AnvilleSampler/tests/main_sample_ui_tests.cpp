@@ -348,6 +348,17 @@ void layoutRects()
         return r.x + r.width <= o.x || o.x + o.width <= r.x ||
                r.y + r.height <= o.y || o.y + o.height <= r.y;
     };
+    for (int bank = 0; bank < 4; ++bank) {
+        const auto rect = mainSampleBank(bank);
+        check(rect.y >= mainSamplePads.y + mainSamplePads.height && rect.y + rect.height <= 706.0f,
+              "bank buttons sit under the pad grid and above the footer");
+        check(rect.x >= mainSamplePads.x && rect.x + rect.width <= mainSamplePads.x + mainSamplePads.width,
+              "bank buttons stay under the grid width");
+        for (const auto& other : mainSampleRects)
+            check(disjoint(rect, other), "bank buttons overlap no Main Sample rect");
+        for (int second = bank + 1; second < 4; ++second)
+            check(disjoint(rect, mainSampleBank(second)), "bank buttons do not overlap each other");
+    }
     for (int index = 0; index < kMainSampleActionCount; ++index) {
         const auto rect = mainSampleAction(index);
         check(rect.x >= sidePanel.x && rect.y >= sidePanel.y &&

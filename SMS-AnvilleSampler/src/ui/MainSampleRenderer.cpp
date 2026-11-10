@@ -396,7 +396,7 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
     for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
         char label[4];
         std::snprintf(label, sizeof(label), "%c", 'A' + bank);
-        sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainBank(bank), label,
+        sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleBank(bank), label,
                                   bank == ctx.state.bank, colors.activityPlayback,
                                   hovered(ctx, InteractiveType::bank, bank));
     }

@@ -744,7 +744,7 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             }
         }
         for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
-            if (uiLayout::mainBank(bank).contains(point))
+            if (uiLayout::mainSampleBank(bank).contains(point))
                 return target(InteractiveType::bank, bank);
         }
         const int visualPad = pads.grid(uiLayout::mainSamplePads, 8.0f).hit(point);

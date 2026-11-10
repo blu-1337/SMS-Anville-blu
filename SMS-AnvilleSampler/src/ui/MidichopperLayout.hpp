@@ -250,6 +250,11 @@ inline constexpr sms::ui::Rect clearAction{1146.0f, 610.0f, 70.0f, 34.0f};
 inline constexpr sms::ui::Rect mainSampleWaveform{46.0f, 158.0f, 890.0f, 208.0f};
 inline constexpr sms::ui::Rect mainSampleOverview{46.0f, 374.0f, 890.0f, 20.0f};
 inline constexpr sms::ui::Rect mainSamplePads{46.0f, 402.0f, 890.0f, 264.0f};
+// A-D bank row under the pad grid (grid ends at y 666, the footer starts at 706).
+[[nodiscard]] constexpr sms::ui::Rect mainSampleBank(const int index) noexcept
+{
+    return {46.0f + static_cast<float>(index) * 56.0f, 674.0f, 50.0f, 28.0f};
+}
 inline constexpr sms::ui::Rect mainSampleClose{994.0f, 112.0f, 222.0f, 32.0f};
 inline constexpr sms::ui::Rect mainSampleInfo{994.0f, 392.0f, 222.0f, 60.0f};
 inline constexpr sms::ui::Rect mainSampleLoad{994.0f, 462.0f, 104.0f, 32.0f};

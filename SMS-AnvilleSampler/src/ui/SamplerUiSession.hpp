@@ -190,6 +190,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     SamplerUiState fState;
     PadPressTracker fPadPress;
     int fEditorAuditionPad = -1;
+    int fFollowBank = -1;
+    Time fFollowBankDeadline{};
     int fDropdown = 0;
     bool fEditorAuditionLoop = false;
     bool fCaptureTargetRequestAlternateHalf = false;

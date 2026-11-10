@@ -21,6 +21,7 @@ namespace
 {
 using namespace midichopper::plugin;
 constexpr auto kMeterFrameInterval = std::chrono::milliseconds(33);
+constexpr auto kBankFollowDelay = std::chrono::milliseconds(120);
 constexpr auto kEditorSnapshotRetryInterval = std::chrono::milliseconds(250);
 
 void copyString(char (&destination)[160], const char *source)
@@ -113,6 +114,17 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
                                                                 : fState.playbackMode >= 0.5f;
         fPlaybackIndicator.acceptHostPosition(value, now, loop);
         static_cast<void>(fMainSample.acceptPadPosition(value));
+        if (pad >= 0 && pad < static_cast<int>(midichopper::kPadCount) && !fState.armed &&
+            !fChopEditor.active()) {
+            // Follow MIDI playback onto another bank (debounced; latest pad wins).
+            const int bank = bankForGlobalPad(pad);
+            if (bank == fState.bank)
+                fFollowBank = -1;
+            else if (bank != fFollowBank) {
+                fFollowBank = bank;
+                fFollowBankDeadline = now + kBankFollowDelay;
+            }
+        }
         if (fState.editorMode)
             fHost.repaintUi();
         return;
@@ -1247,6 +1259,12 @@ void SamplerUiSession::setPadColor(const int pad, const int color)
 void SamplerUiSession::idle(const Time now, const float effectiveGlobalTune)
 {
     fPadActions.idle(now);
+    if (fFollowBank >= 0 && now >= fFollowBankDeadline) {
+        const int bank = fFollowBank;
+        fFollowBank = -1;
+        if (!fState.armed && !fChopEditor.active())
+            selectBank(bank);
+    }
     if (fMeterRepaintPending && now >= fNextMeterRepaint) {
         fMeterRepaintPending = false;
         fNextMeterRepaint = now + kMeterFrameInterval;

@@ -333,6 +333,16 @@ void sessionRouting()
     session.acceptParameter(kParameterMainSamplePreviewPosition, 0.0f);
     session.acceptParameter(kParameterPlaybackPosition, 0.0f);
     check(session.mainSample().playheadFrame() < 0.0, "the playhead clears when the voice ends");
+    {
+        const auto t0 = SamplerUiSession::Clock::now();
+        check(session.state().bank == 0, "starts on bank A");
+        session.acceptParameter(kParameterPlaybackPosition, 21.5f, t0); // pad 20 -> bank B
+        session.acceptParameter(kParameterPlaybackPosition, 37.5f, t0 + 50ms); // pad 36 -> bank C
+        session.idle(t0 + 100ms, 0.0f);
+        check(session.state().bank == 0, "bank follow is debounced");
+        session.idle(t0 + 400ms, 0.0f);
+        check(session.state().bank == 2, "the latest MIDI pad's bank is shown");
+    }
     session.closeMainSample();
     check(!session.state().mainSampleMode && !session.mainSample().isOpen(),
           "closing leaves the view");

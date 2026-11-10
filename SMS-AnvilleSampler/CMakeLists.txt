@@ -149,6 +149,7 @@ set(ANVILLESAMPLER_DSP_SOURCES
   src/plugin/MainSampleWorkflows.cpp
   src/plugin/PadFileActions.cpp
   src/plugin/PadWorkflows.cpp
+  src/plugin/UndoController.cpp
   src/plugin/StateCodec.cpp)
 set(ANVILLESAMPLER_ARTWORK_DIR "${PROJECT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${ANVILLESAMPLER_ARTWORK_DIR}")
@@ -462,12 +463,17 @@ if(BUILD_TESTING)
     src/plugin/MainSampleWorkflows.cpp
     src/plugin/PadWorkflows.cpp
     src/plugin/PadFileActions.cpp
+    src/plugin/UndoController.cpp
     src/plugin/StateCodec.cpp
     ../Common-Src/Audio/WavCodec.cpp)
   target_include_directories(anvillesampler_pad_workflow_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
   target_link_libraries(anvillesampler_pad_workflow_tests PRIVATE anvillesampler_core sms_analysis Threads::Threads)
   add_test(NAME pad-workflows COMMAND anvillesampler_pad_workflow_tests)
+
+  add_executable(anvillesampler_undo_history_tests tests/undo_history_tests.cpp)
+  target_include_directories(anvillesampler_undo_history_tests PRIVATE src/plugin)
+  add_test(NAME undo-history COMMAND anvillesampler_undo_history_tests)
 
   add_executable(anvillesampler_analysis_tests tests/analysis_tests.cpp)
   target_link_libraries(anvillesampler_analysis_tests PRIVATE sms_analysis)

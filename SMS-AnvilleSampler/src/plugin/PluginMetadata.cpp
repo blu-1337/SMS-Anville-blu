@@ -48,7 +48,9 @@ constexpr std::uint32_t kMainSampleSessionState = kMainSampleAudioState + 1U;
 constexpr std::uint32_t kMainSampleLinksState = kMainSampleSessionState + 1U;
 constexpr std::uint32_t kAutoChopRequestState = kMainSampleLinksState + 1U;
 constexpr std::uint32_t kAutoChopStatusState = kAutoChopRequestState + 1U;
-constexpr std::uint32_t kStateCount = kAutoChopStatusState + 1U;
+constexpr std::uint32_t kUndoRequestState = kAutoChopStatusState + 1U;
+constexpr std::uint32_t kUndoStatusState = kUndoRequestState + 1U;
+constexpr std::uint32_t kStateCount = kUndoStatusState + 1U;
 constexpr std::array<const char*, midichopper::kPadsPerBank> kPadOccupiedNames{{
     "Pad 1 Occupied", "Pad 2 Occupied", "Pad 3 Occupied", "Pad 4 Occupied", "Pad 5 Occupied", "Pad 6 Occupied", "Pad 7 Occupied", "Pad 8 Occupied",
     "Pad 9 Occupied", "Pad 10 Occupied", "Pad 11 Occupied", "Pad 12 Occupied", "Pad 13 Occupied", "Pad 14 Occupied", "Pad 15 Occupied", "Pad 16 Occupied",
@@ -369,6 +371,16 @@ void initPluginState(const uint32_t index, DISTRHO::State& state,
     } else if (index == kAutoChopStatusState) {
         state.key = kAutoChopStatusKey;
         state.label = "Auto Chop Status";
+        state.defaultValue = "";
+        state.hints = kStateIsOnlyForUI;
+    } else if (index == kUndoRequestState) {
+        state.key = kUndoRequestKey;
+        state.label = "Undo Request";
+        state.defaultValue = "";
+        state.hints = kStateIsOnlyForDSP;
+    } else if (index == kUndoStatusState) {
+        state.key = kUndoStatusKey;
+        state.label = "Undo Status";
         state.defaultValue = "";
         state.hints = kStateIsOnlyForUI;
     } else if (index >= kGlobalControlStateOffset) {

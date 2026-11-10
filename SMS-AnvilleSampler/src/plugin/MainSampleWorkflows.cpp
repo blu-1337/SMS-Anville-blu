@@ -158,6 +158,21 @@ void MainSampleWorkflows::restoreLinks(const char* const value)
         publishStatusLocked(0U, MainSampleState::ready);
 }
 
+bool MainSampleWorkflows::applyHistory(const HistoryChange& change)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (!change.imports.empty() && !sampler_.importPads(change.imports, nullptr))
+        return false;
+    for (const auto& item : change.settings)
+        sampler_.restorePadEditorSettings(item.pad, item.playback, item.mixer);
+    for (const auto& item : change.links)
+        static_cast<void>(sampler_.setPadProvenance(item.pad, item.provenance, item.fingerprint));
+    if (change.session != nullptr && !session_.empty() && change.session->sourceId == session_.sourceId)
+        session_ = *change.session;
+    publishStatusLocked(0U, MainSampleState::ready, {}, change.affected);
+    return true;
+}
+
 void MainSampleWorkflows::restorePad(const std::uint32_t pad, const PadData* const audio)
 {
     const std::lock_guard lock(mutationMutex_);

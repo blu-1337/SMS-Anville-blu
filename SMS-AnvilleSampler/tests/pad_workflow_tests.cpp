@@ -5,6 +5,7 @@
 #include "PadStructureProtocol.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
+#include "UndoController.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1250,6 +1251,69 @@ void mainSampleArrange()
     check(status.state == MainSampleState::ready && status.affectedMask == 0U, "a second arrange changes nothing");
 }
 
+float gainOf(const SamplerEngine& engine, const std::uint32_t pad)
+{
+    sms::dsp::SamplePlaybackSettings playback;
+    sms::dsp::SampleMixerSettings mixer;
+    engine.snapshotPadSettings(pad, playback, mixer);
+    return mixer.gainDecibels;
+}
+
+void undoRedoRestoresState()
+{
+    MainSampleFixture fixture;
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    using Kind = UndoController::Kind;
+    const auto now = UndoController::Clock::now();
+    const auto path = writeSourceWav("sms-undo-source.wav", 1000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    check(undo.undoDepth() == 0U, "nothing recorded yet");
+    // Action: assign a slice to pad 2.
+    undo.record(Kind::action, now, [&] { fixture.send(assignRequest(2U, 100U, 300U)); });
+    check(undo.undoDepth() == 1U && padHoldsSlice(fixture.engine, 2U, 100U, 300U), "assign is one step");
+    // A no-op request leaves no step.
+    undo.record(Kind::action, now, [&] { fixture.send(mainRequest(MainSampleVerb::query)); });
+    check(undo.undoDepth() == 1U, "queries leave no step");
+    // Settings edits within the coalescing window are one step.
+    auto mixer = fixture.engine.padMixerSettings(2U);
+    mixer.gainDecibels = -6;
+    undo.record(Kind::settings, now + std::chrono::seconds(5), [&] { fixture.engine.setPadMixerSettings(2U, mixer); });
+    mixer.gainDecibels = -9;
+    undo.record(Kind::settings, now + std::chrono::seconds(5) + std::chrono::milliseconds(100),
+                [&] { fixture.engine.setPadMixerSettings(2U, mixer); });
+    check(undo.undoDepth() == 2U, "a drag of settings is one step");
+    // Colour edit.
+    undo.record(Kind::colors, now + std::chrono::seconds(10), [&] { colors[2].store(3); });
+    check(undo.undoDepth() == 3U, "colour is a step");
+    undo.undo();
+    check(colors[2].load() == 0 && undo.redoDepth() == 1U, "undo colour");
+    undo.undo();
+    check(gainOf(fixture.engine, 2U) == 0 && padHoldsSlice(fixture.engine, 2U, 100U, 300U),
+          "undo settings keeps audio");
+    undo.undo();
+    check(!fixture.engine.padMetadata(2U).occupied && fixture.provenance(2U) == 0U &&
+          fixture.main.session().slices.empty(), "undo assign clears pad and link");
+    check(!fixture.main.session().empty(), "source stays loaded");
+    undo.redo();
+    check(padHoldsSlice(fixture.engine, 2U, 100U, 300U) && (fixture.provenance(2U) >> 16U) != 0U,
+          "redo restores audio and link");
+    undo.redo();
+    undo.redo();
+    check(gainOf(fixture.engine, 2U) == -9 && colors[2].load() == 3 &&
+          undo.redoDepth() == 0U, "redo everything");
+    check(fixture.observer.latest(kUndoStatusKey).rfind("UD1;", 0) == 0, "status published");
+    undo.undo();
+    undo.record(Kind::colors, now + std::chrono::seconds(20), [&] { colors[5].store(1); });
+    check(undo.redoDepth() == 0U, "new edit truncates redo");
+    undo.hostRestored(now + std::chrono::seconds(30));
+    check(undo.undoDepth() == 0U, "host restore clears the history");
+    undo.record(Kind::colors, now + std::chrono::seconds(30), [&] { colors[6].store(1); });
+    check(undo.undoDepth() == 0U, "no steps right after a host restore");
+}
+
 int main()
 {
     clipboardSnapshotAndReplies();
@@ -1267,5 +1331,6 @@ int main()
     mainSampleAssignEditAndDelete();
     autoChopWorkflow();
     mainSampleArrange();
+    undoRedoRestoresState();
     std::cout << "Pad workflow tests passed\n";
 }

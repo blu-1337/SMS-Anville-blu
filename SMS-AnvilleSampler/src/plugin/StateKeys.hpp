@@ -59,5 +59,8 @@ inline constexpr const char* kMainSampleLinksKey = "main_sample_links";
 // Auto-chop (AC1): request to the worker, status to the UI (Docs/AI/AUTO-CHOP.md).
 inline constexpr const char* kAutoChopRequestKey = "auto_chop_request";
 inline constexpr const char* kAutoChopStatusKey = "auto_chop_status";
+// Undo/redo: request "undo"|"redo" to the worker; UD1 status (depths, colours) to the UI.
+inline constexpr const char* kUndoRequestKey = "undo_request";
+inline constexpr const char* kUndoStatusKey = "undo_status";
 
 } // namespace midichopper::plugin

@@ -9,6 +9,7 @@
 #include "DSP/PeakMeter.hpp"
 #include "EditorSnapshotProtocol.hpp"
 #include "MainSampleWorkflows.hpp"
+#include "UndoController.hpp"
 #include "PadWorkflows.hpp"
 #include "PadDirectionRequest.hpp"
 #include "StateKeys.hpp"
@@ -301,7 +302,9 @@ protected:
             std::strcmp(key, kMainSampleStatusKey) == 0 ||
             std::strcmp(key, kMainSampleWaveformKey) == 0 ||
             std::strcmp(key, kAutoChopRequestKey) == 0 ||
-            std::strcmp(key, kAutoChopStatusKey) == 0)
+            std::strcmp(key, kAutoChopStatusKey) == 0 ||
+            std::strcmp(key, kUndoRequestKey) == 0 ||
+            std::strcmp(key, kUndoStatusKey) == 0)
             return String();
         return String();
     }
@@ -321,7 +324,8 @@ protected:
             std::strcmp(key, kChopSnapshotRequestKey) == 0 ||
             std::strcmp(key, kPadStructureRequestKey) == 0 ||
             std::strcmp(key, kMainSampleRequestKey) == 0 ||
-            std::strcmp(key, kAutoChopRequestKey) == 0;
+            std::strcmp(key, kAutoChopRequestKey) == 0 ||
+            std::strcmp(key, kUndoRequestKey) == 0;
         if (transient) {
             if (value == nullptr || value[0] == '\0')
                 return;
@@ -356,16 +360,23 @@ protected:
         }
         if (std::strcmp(key, kCaptureActionRequestKey) == 0 &&
             value != nullptr && std::strcmp(value, "reset") == 0) {
-            padWorkflows_.reset();
-            // The initiating UI invalidates its snapshots/colors locally;
-            // per-slot replies would overflow the bounded UI message bus.
-            for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad)
-                padColors_[pad].store(0, std::memory_order_relaxed);
+            undo_.record(UndoKind::action, UndoClock::now(), [&] {
+                padWorkflows_.reset();
+                // The initiating UI invalidates its snapshots/colors locally;
+                // per-slot replies would overflow the bounded UI message bus.
+                for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad)
+                    padColors_[pad].store(0, std::memory_order_relaxed);
+            });
             publishUiState(kPadFileStatusKey, "Pads cleared");
             return;
         }
         if (controls_.queueStateCommand(key, value))
             return;
+        if (std::strcmp(key, kUndoRequestKey) == 0) {
+            if (value != nullptr && std::strcmp(value, "undo") == 0) undo_.undo();
+            else if (value != nullptr && std::strcmp(value, "redo") == 0) undo_.redo();
+            return;
+        }
         if (std::strcmp(key, kChopSnapshotRequestKey) == 0) {
             midichopper::plugin::ChopSnapshotRequest request;
             if (midichopper::plugin::decodeChopSnapshotRequest(value, request)) {
@@ -388,28 +399,35 @@ protected:
         if (std::strcmp(key, midichopper::plugin::kPadDirectionRequestKey) == 0) {
             midichopper::plugin::PadDirectionRequest request;
             if (value != nullptr && midichopper::plugin::decodePadDirectionRequest(value, request)) {
-                const std::lock_guard lock(padWorkflows_.mutationMutex());
-                sampler_.restorePadEditorSettings(request.pad, request.playback, request.mixer);
+                undo_.record(UndoKind::settings, UndoClock::now(), [&] {
+                    const std::lock_guard lock(padWorkflows_.mutationMutex());
+                    sampler_.restorePadEditorSettings(request.pad, request.playback, request.mixer);
+                });
             }
             return;
         }
         if (std::strcmp(key, kMainSampleAudioKey) == 0) {
+            undo_.hostRestored(UndoClock::now());
             mainSampleWorkflows_.restoreAudio(value);
             return;
         }
         if (std::strcmp(key, kMainSampleSessionKey) == 0) {
+            undo_.hostRestored(UndoClock::now());
             mainSampleWorkflows_.restoreSession(value);
             return;
         }
         if (std::strcmp(key, kMainSampleLinksKey) == 0) {
+            undo_.hostRestored(UndoClock::now());
             mainSampleWorkflows_.restoreLinks(value);
             return;
         }
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
             if (std::strcmp(key, kPadColorStateKeys[pad].c_str()) != 0)
                 continue;
-            padColors_[pad].store(midichopper::plugin::decodePadColorIndex(
-                value != nullptr ? value : "", 255), std::memory_order_relaxed);
+            undo_.record(UndoKind::colors, UndoClock::now(), [&] {
+                padColors_[pad].store(midichopper::plugin::decodePadColorIndex(
+                    value != nullptr ? value : "", 255), std::memory_order_relaxed);
+            });
             return;
         }
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
@@ -417,6 +435,7 @@ protected:
                 continue;
             // Main Sample links are restored with the audio when a staged
             // LK1 entry's fingerprint matches (any key order).
+            undo_.hostRestored(UndoClock::now());
             if (value == nullptr || value[0] == '\0') {
                 mainSampleWorkflows_.restorePad(pad, nullptr);
                 return;
@@ -431,8 +450,10 @@ protected:
                 continue;
             sms::dsp::SampleMixerSettings settings;
             if (midichopper::plugin::decodeMixerSettings(value, settings)) {
-                const std::lock_guard lock(padWorkflows_.mutationMutex());
-                static_cast<void>(sampler_.restorePadMixerSettings(pad, settings));
+                undo_.record(UndoKind::settings, UndoClock::now(), [&] {
+                    const std::lock_guard lock(padWorkflows_.mutationMutex());
+                    static_cast<void>(sampler_.restorePadMixerSettings(pad, settings));
+                });
             }
             return;
         }
@@ -441,8 +462,10 @@ protected:
                 continue;
             sms::dsp::SamplePlaybackSettings settings;
             if (midichopper::plugin::decodePlaybackSettings(value, settings)) {
-                const std::lock_guard lock(padWorkflows_.mutationMutex());
-                static_cast<void>(sampler_.restorePadPlaybackSettings(pad, settings));
+                undo_.record(UndoKind::settings, UndoClock::now(), [&] {
+                    const std::lock_guard lock(padWorkflows_.mutationMutex());
+                    static_cast<void>(sampler_.restorePadPlaybackSettings(pad, settings));
+                });
             }
             return;
         }
@@ -504,7 +527,7 @@ protected:
             return;
         if (std::strcmp(key, kPadFileRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                padWorkflows_.handlePadFileRequest(value);
+                undo_.record(UndoKind::action, UndoClock::now(), [&] { padWorkflows_.handlePadFileRequest(value); });
             return;
         }
         if (std::strcmp(key, kPadFileBusyKey) == 0 ||
@@ -512,31 +535,31 @@ protected:
             return;
         if (std::strcmp(key, kPadClipboardRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                padWorkflows_.handlePadClipboardRequest(value);
+                undo_.record(UndoKind::action, UndoClock::now(), [&] { padWorkflows_.handlePadClipboardRequest(value); });
             return;
         }
         if (std::strcmp(key, kChopApplyRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                padWorkflows_.handleChopApplyRequest(value);
+                undo_.record(UndoKind::action, UndoClock::now(), [&] { padWorkflows_.handleChopApplyRequest(value); });
             return;
         }
         if (std::strcmp(key, kChopStatusKey) == 0)
             return;
         if (std::strcmp(key, kPadStructureRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                padWorkflows_.handlePadStructureRequest(value);
+                undo_.record(UndoKind::action, UndoClock::now(), [&] { padWorkflows_.handlePadStructureRequest(value); });
             return;
         }
         if (std::strcmp(key, kPadStructureStatusKey) == 0)
             return;
         if (std::strcmp(key, kMainSampleRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                mainSampleWorkflows_.handleRequest(value);
+                undo_.record(UndoKind::action, UndoClock::now(), [&] { mainSampleWorkflows_.handleRequest(value); });
             return;
         }
         if (std::strcmp(key, kAutoChopRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                mainSampleWorkflows_.handleAutoChop(value);
+                undo_.record(UndoKind::action, UndoClock::now(), [&] { mainSampleWorkflows_.handleAutoChop(value); });
             return;
         }
         if (std::strcmp(key, kAutoChopStatusKey) == 0)
@@ -852,6 +875,9 @@ private:
 #endif
     midichopper::plugin::PadWorkflows padWorkflows_;
     midichopper::plugin::MainSampleWorkflows mainSampleWorkflows_;
+    using UndoKind = midichopper::plugin::UndoController::Kind;
+    using UndoClock = midichopper::plugin::UndoController::Clock;
+    midichopper::plugin::UndoController undo_{sampler_, mainSampleWorkflows_, *this, padColors_};
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidichopperPlugin)
 };

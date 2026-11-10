@@ -66,6 +66,22 @@ public:
     void restoreAudio(const char* value);
     void restoreSession(const char* value);
     void restoreLinks(const char* value);
+    /** Undo/redo: apply a snapshot diff under the mutation mutex. */
+    struct HistoryChange {
+        std::vector<PadImport> imports; // changed audio, one atomic importPads
+        struct Settings {
+            std::uint32_t pad = 0U;
+            sms::dsp::SamplePlaybackSettings playback{};
+            sms::dsp::SampleMixerSettings mixer{};
+        };
+        std::vector<Settings> settings; // settings-only pads
+        struct Link { std::uint32_t pad = 0U; std::uint64_t provenance = 0U; std::uint64_t fingerprint = 0U; };
+        std::vector<Link> links;        // link-only pads
+        const MainSampleSession* session = nullptr; // adopted if the source id still matches
+        std::uint64_t affected = 0U;
+    };
+    /** False (nothing changed) when the pad transaction is refused, e.g. while armed. */
+    [[nodiscard]] bool applyHistory(const HistoryChange& change);
     /** Restore pad audio (nullptr clears), with a staged link if its fingerprint matches. */
     void restorePad(std::uint32_t pad, const PadData* audio);
 

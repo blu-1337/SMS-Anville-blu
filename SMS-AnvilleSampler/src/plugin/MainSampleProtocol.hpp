@@ -234,6 +234,8 @@ struct MainSampleRequest {
     bool confirm = false;                   // assign
     std::uint16_t sliceId = 0U;             // remove
     std::uint32_t tiles = 0U;               // waveform; spectrogram: columns
+    /** edit only: S = single step, B/U/E = live drag begin/update/end (one undo step). */
+    char phase = 'S';
 };
 
 [[nodiscard]] inline std::string encodeMainSampleRequest(const MainSampleRequest& request)
@@ -245,7 +247,8 @@ struct MainSampleRequest {
     case MainSampleVerb::query: return encoded + "Q";
     case MainSampleVerb::edit:
         return encoded + "S;" + main_sample_detail::encodeSlices(std::vector<MainSampleSlice>(
-            request.edits.begin(), request.edits.begin() + (request.editCount > 1U ? 2 : 1)));
+            request.edits.begin(), request.edits.begin() + (request.editCount > 1U ? 2 : 1))) +
+            (request.phase == 'S' ? std::string() : std::string(";") + request.phase);
     case MainSampleVerb::assign:
         return encoded + "A;" + std::to_string(request.pad) + ";" + std::to_string(request.start) +
                ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0");
@@ -292,8 +295,16 @@ struct MainSampleRequest {
     case 'S': {
         std::string_view list;
         std::vector<MainSampleSlice> edits;
-        if (!fields.next(list) || !fields.finished() ||
-            !main_sample_detail::decodeSlices(list, UINT32_MAX, edits) || edits.empty() ||
+        if (!fields.next(list))
+            return false;
+        if (!fields.finished()) {
+            std::string_view phase;
+            if (!fields.next(phase) || !fields.finished() || phase.size() != 1U ||
+                (phase[0] != 'B' && phase[0] != 'U' && phase[0] != 'E'))
+                return false;
+            decoded.phase = phase[0];
+        }
+        if (!main_sample_detail::decodeSlices(list, UINT32_MAX, edits) || edits.empty() ||
             edits.size() > 2U)
             return false;
         decoded.verb = MainSampleVerb::edit;

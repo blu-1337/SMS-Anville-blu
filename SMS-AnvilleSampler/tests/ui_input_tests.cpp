@@ -357,9 +357,9 @@ void mainSampleViewRoutes()
     check(f.input.mouse(shared, InputButton::left, true), "marker press handled");
     for (float dx = 4.0f; dx <= 60.0f; dx += 4.0f)
         f.input.motion({shared.x + dx, shared.y});
-    check(mainSampleVerbs(f, MainSampleVerb::edit) == edits, "no S while dragging");
+    check(mainSampleVerbs(f, MainSampleVerb::edit) == edits + 1U, "the drag re-cuts live once (throttled)");
     f.input.mouse({shared.x + 60.0f, shared.y}, InputButton::left, false);
-    check(mainSampleVerbs(f, MainSampleVerb::edit) == edits + 1U, "one S per drag");
+    check(mainSampleVerbs(f, MainSampleVerb::edit) == edits + 2U, "the release ends the gesture");
     check(f.session.mainSample().selectedSlice() == 2U, "the dragged marker selects its slice");
 
     // Delete removes the selected slice (the controller's mirror still has slice 2).

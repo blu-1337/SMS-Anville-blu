@@ -1341,6 +1341,23 @@ void undoGestureCoalescesLiveUpdates()
     check(undo.undoDepth() == 1U, "an unchanged gesture leaves no step");
     undo.recordGesture('S', now, [&] { setGain(0.0f); });
     check(undo.undoDepth() == 2U, "a single-shot (Ctrl+click reset) is one step");
+
+    // A live slice drag re-cuts the linked pad on every message and is still one step.
+    const auto path = writeSourceWav("sms-undo-live-source.wav", 1000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    undo.record(UndoController::Kind::action, now, [&] { fixture.send(assignRequest(2U, 100U, 300U)); });
+    const auto depth = undo.undoDepth();
+    const auto slice = fixture.main.session().slices.front();
+    undo.recordGesture('B', now, [&] { fixture.send(editRequest({slice.id, 100U, 320U})); });
+    check(padHoldsSlice(fixture.engine, 2U, 100U, 320U), "the pad plays the dragged range mid-drag");
+    undo.recordGesture('U', now, [&] { fixture.send(editRequest({slice.id, 100U, 340U})); });
+    check(padHoldsSlice(fixture.engine, 2U, 100U, 340U) && undo.undoDepth() == depth, "updates add no step");
+    undo.recordGesture('E', now, [&] { fixture.send(editRequest({slice.id, 100U, 360U})); });
+    check(undo.undoDepth() == depth + 1U && padHoldsSlice(fixture.engine, 2U, 100U, 360U), "one step for the drag");
+    undo.undo();
+    check(padHoldsSlice(fixture.engine, 2U, 100U, 300U), "undo returns to the range before the drag");
 }
 
 void favoriteGuards()

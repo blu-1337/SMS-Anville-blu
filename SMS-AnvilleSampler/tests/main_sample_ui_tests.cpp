@@ -5,6 +5,7 @@
 #include "StateKeys.hpp"
 
 #include <chrono>
+#include <thread>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -151,27 +152,63 @@ void markerDragSendsOneEdit()
 
     check(controller.beginMarkerDrag(1U, true), "grab the shared boundary");
     controller.dragTo(300U);
+    check(host.requests().size() == count + 1U && host.requests().back().phase == 'B' &&
+          host.requests().back().editCount == 2U && host.requests().back().edits[0].end == 300U,
+          "the first move begins a live gesture and re-cuts at once");
     controller.dragTo(450U);
-    check(host.requests().size() == count && controller.displaySlices()[0].end == 450U &&
-          controller.displaySlices()[1].start == 450U, "a drag is local and moves both slices");
+    check(host.requests().size() == count + 1U && controller.displaySlices()[0].end == 450U &&
+          controller.displaySlices()[1].start == 450U, "updates are throttled (80 ms) and the display follows");
+    std::this_thread::sleep_for(100ms);
+    controller.dragTo(460U);
+    check(host.requests().size() == count + 2U && host.requests().back().phase == 'U' &&
+          host.requests().back().edits[0].end == 460U, "an update follows after the interval");
+    controller.dragTo(470U);
     check(controller.endDrag(), "release commits");
     const auto edit = host.requests().back();
-    check(host.requests().size() == count + 1U && edit.verb == MainSampleVerb::edit &&
-          edit.editCount == 2U && edit.edits[0] == MainSampleSlice{1U, 0U, 450U} &&
-          edit.edits[1] == MainSampleSlice{2U, 450U, 1000U},
-          "exactly one S carries both edits of a shared boundary");
-
+    check(host.requests().size() == count + 3U && edit.verb == MainSampleVerb::edit && edit.phase == 'E' &&
+          edit.editCount == 2U && edit.edits[0] == MainSampleSlice{1U, 0U, 470U} &&
+          edit.edits[1] == MainSampleSlice{2U, 470U, 1000U},
+          "the end carries both edits of a shared boundary as one gesture");
     check(controller.beginMarkerDrag(2U, true), "grab the last end");
     controller.dragTo(5000U);
     check(controller.displaySlices()[1].end == 1000U, "a drag stays inside the source");
     controller.dragTo(0U);
-    check(controller.displaySlices()[1].end == 451U, "a slice keeps at least one frame");
+    check(controller.displaySlices()[1].end == 471U, "a slice keeps at least one frame");
     check(controller.endDrag() && host.requests().back().editCount == 1U,
           "an unshared boundary sends one edit");
 
     const auto after = host.requests().size();
     check(controller.beginMarkerDrag(1U, false), "grab the first start");
     check(!controller.endDrag() && host.requests().size() == after, "an unmoved marker sends nothing");
+}
+
+void liveDragSurvivesReplies()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    check(controller.acceptStatus(status(1U), now), "source arrives");
+
+    // The reply of a live edit must not corrupt a drag still in progress.
+    check(controller.beginMarkerDrag(1U, true), "grab the boundary");
+    controller.dragTo(500U);
+    check(controller.acceptStatus(status(900U, MainSampleState::ready, {{1U, 0U, 500U}, {2U, 500U, 1000U}}), now + 1s),
+          "a live reply arrives mid-drag");
+    controller.dragTo(520U);
+    check(controller.displaySlices()[0].end == 520U && controller.displaySlices()[1].start == 520U,
+          "the drag keeps working from the slices at the press");
+    controller.cancelDrag();
+    check(host.requests().back().phase == 'E' && host.requests().back().edits[0].end == 400U,
+          "cancel restores the original range and closes the gesture");
+
+    // A region (badge) drag is live too.
+    check(controller.beginRegionDrag(1U, 100U), "grab the badge");
+    controller.dragRegionTo(120U, 1.0);
+    check(host.requests().back().phase == 'B' && host.requests().back().editCount == 1U,
+          "a region drag re-cuts live");
+    check(controller.endDrag() && host.requests().back().phase == 'E', "region release ends the gesture");
+
 }
 
 void assignConfirmDeleteAndPreview()
@@ -417,15 +454,18 @@ void regionDragMovesWholeSlice()
     check(controller.displaySlices()[1] == MainSampleSlice{2U, 0U, 200U}, "clamped to the source start");
     controller.dragRegionTo(400U, 1.0);
     check(controller.displaySlices()[1] == MainSampleSlice{2U, 300U, 500U}, "back to the origin");
-    check(!controller.endDrag() && host.requests().size() == count, "no move, no edit");
+    check(controller.endDrag() && host.requests().back().phase == 'E' &&
+          host.requests().back().edits[0] == MainSampleSlice{2U, 300U, 500U},
+          "back at the origin the live gesture is still closed, with the original range");
     controller.dragRegionTo(450U, 1.0);
     controller.cancelDrag();
     check(controller.displaySlices()[1] == MainSampleSlice{2U, 300U, 500U} && !controller.dragging(),
           "cancel restores the slice");
 
+    const auto beforeRelease = host.requests().size();
     controller.beginRegionDrag(2U, 400U);
     controller.dragRegionTo(550U, 1.0);
-    check(controller.endDrag() && host.requests().size() == count + 1U, "release sends exactly one edit");
+    check(controller.endDrag() && host.requests().size() == beforeRelease + 2U, "a begin and an end message");
     const auto edit = host.requests().back();
     check(edit.verb == MainSampleVerb::edit && edit.editCount == 1U &&
               edit.edits[0] == MainSampleSlice{2U, 450U, 650U},
@@ -711,9 +751,9 @@ void rightDragEdges()
     check(!controller.beginEdgeDrag(200U, 10U), "no edge near the middle of a slice");
     check(controller.beginEdgeDrag(395U, 10U), "grab the shared boundary near its end side");
     controller.dragTo(450U);
-    check(controller.endDrag() && host.requests().size() == count + 1U &&
-          host.requests().back().editCount == 2U && host.requests().back().edits[0].end == 450U,
-          "edge drag sends one re-cut request");
+    check(controller.endDrag() && host.requests().size() == count + 2U &&
+          host.requests().back().editCount == 2U && host.requests().back().edits[0].end == 450U && host.requests().back().phase == 'E',
+          "edge drag re-cuts live (B) and ends the gesture (E)");
 
     check(controller.beginEdgeDrag(2U, 10U), "grab the first start");
     controller.dragTo(0U);
@@ -813,7 +853,7 @@ void selectedSliceKeepsEditPriority()
     check(!controller.beginEdgeDrag(500U, 10U), "a first-slice marker is ignored while the second slice is selected");
     check(controller.beginEdgeDrag(405U, 10U), "the selected slice's own edge is grabbed");
     controller.dragTo(450U);
-    check(controller.endDrag() && host.requests().size() == count + 1U, "one request");
+    check(controller.endDrag() && host.requests().size() == count + 2U, "live begin plus end");
     const auto edit = host.requests().back();
     check(edit.editCount == 1U && edit.edits[0] == MainSampleSlice{2U, 450U, 1000U},
           "only the selected slice changes");
@@ -892,6 +932,7 @@ int main()
     queriesAndStaleReplies();
     waveformRequests();
     markerDragSendsOneEdit();
+    liveDragSurvivesReplies();
     rightDragEdges();
     selectedSliceKeepsEditPriority();
     spreadColorsContrast();

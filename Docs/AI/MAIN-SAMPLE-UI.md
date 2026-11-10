@@ -28,8 +28,13 @@ detail is a `W` for the zoomed viewport, debounced 50 ms. Both retry every
 
 ## Editing
 
-- Marker drags are local (`displaySlices()`). `endDrag()` sends exactly one
-  `S`: the dragged slice, plus the neighbour when they share the boundary.
+- Marker and badge drags are live: the first move sends `S;...;B`, then `;U` at most
+  every 80 ms, and `endDrag()` sends `;E` (`S` alone if nothing was sent). The linked
+  pad is re-cut each time, so a note played mid-drag sounds the dragged range, and
+  `UndoController::recordGesture` makes the drag one undo step. Replies cannot
+  disturb the drag: it clamps and builds requests from `fDragBase`, the slices at
+  the press. Each `S` holds the dragged slice, plus the neighbour on a shared
+  boundary. `cancelDrag()` after a send restores the range with an `E`.
   - `assignSelection(pad)` sends `A`. A CONFIRM whose mask is that pad sets
   `confirmPending()`; `confirmAssign(true)` resends with confirm.
 - `deleteSlice(id)` sends `D` for a known slice.

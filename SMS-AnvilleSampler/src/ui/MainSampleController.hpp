@@ -277,6 +277,18 @@ private:
     std::vector<plugin::ArrangeMove> fArrangeMoves;   // sent, awaiting the reply
     std::uint64_t fArrangeSequence = 0U;
     std::vector<plugin::ArrangeMove> fArrangeConfirmed;
+    // Live drag: the slices at the press (statuses may move fStatus mid-drag) and the throttle state.
+    static constexpr auto kLiveInterval = std::chrono::milliseconds(80);
+    void beginLiveDrag();
+    [[nodiscard]] const std::vector<plugin::MainSampleSlice>& dragSlices() const noexcept;
+    [[nodiscard]] std::int64_t dragValue() const noexcept;
+    [[nodiscard]] bool makeDragRequest(std::vector<plugin::MainSampleSlice>& slices,
+                                       plugin::MainSampleRequest& request) const;
+    void liveDragUpdate(Time now);
+    std::vector<plugin::MainSampleSlice> fDragBase;
+    bool fLiveBegun = false;
+    Time fLiveLast{};
+    std::int64_t fLiveSent = 0;
     std::optional<Drag> fDrag;
     std::optional<Region> fRegion;
     int fSelectionEdge = 0; // 1 = start, 2 = end of the selection while right-dragging

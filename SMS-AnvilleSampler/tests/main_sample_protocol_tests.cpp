@@ -28,6 +28,24 @@ MainSampleRequest roundTrip(const MainSampleRequest& request)
     return decoded;
 }
 
+void livePhaseCodec()
+{
+    MainSampleRequest request;
+    request.sequence = 3U;
+    request.verb = MainSampleVerb::edit;
+    request.editCount = 1U;
+    request.edits[0] = MainSampleSlice{1U, 0U, 10U};
+    check(roundTrip(request).phase == 'S' && encodeMainSampleRequest(request) == "MS1;3;S;1:0:10",
+          "the default edit carries no phase");
+    for (const char phase : {'B', 'U', 'E'}) {
+        request.phase = phase;
+        check(roundTrip(request).phase == phase, "live phase round-trips");
+    }
+    MainSampleRequest ignored;
+    check(!decodeMainSampleRequest("MS1;3;S;1:0:10;X", ignored) && !decodeMainSampleRequest("MS1;3;S;1:0:10;BU", ignored) &&
+          !decodeMainSampleRequest("MS1;3;S;1:0:10;B;E", ignored), "unknown phases are refused");
+}
+
 void requests()
 {
     MainSampleRequest load;
@@ -372,6 +390,7 @@ void spectrogramCodec()
 
 int main()
 {
+    livePhaseCodec();
     requests();
     arrangement();
     statuses();

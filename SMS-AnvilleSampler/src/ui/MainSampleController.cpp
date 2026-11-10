@@ -522,6 +522,7 @@ bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bo
         return false;
     const auto edge = endEdge ? slice->end : slice->start;
     fDrag = Drag{sliceId, endEdge, solo, edge, edge};
+    beginLiveDrag();
     return true;
 }
 
@@ -538,7 +539,7 @@ std::uint32_t MainSampleController::snapFrame(const std::uint32_t frame, const d
         const double distance = std::abs(static_cast<double>(edge) - static_cast<double>(frame));
         if (distance <= best) { best = distance; result = edge; }
     };
-    for (const auto& slice : fStatus.slices) {
+    for (const auto& slice : dragSlices()) {
         consider(slice.start);
         consider(slice.end);
     }
@@ -610,7 +611,7 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
     // Each slice touching the boundary keeps at least one frame.
     std::uint32_t low = 0U;
     std::uint32_t high = fStatus.frames;
-    for (const auto& slice : fStatus.slices) {
+    for (const auto& slice : dragSlices()) {
         if (fDrag->solo && slice.id != fDrag->sliceId)
             continue;
         if (slice.end == fDrag->original && slice.start < fDrag->original &&
@@ -622,6 +623,7 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
     }
     fDrag->frame = std::clamp(frame, low, std::max(low, high));
     rebuildDisplaySlices();
+    liveDragUpdate(Clock::now());
     fHost.repaintMainSample();
 }
 
@@ -634,6 +636,7 @@ bool MainSampleController::beginRegionDrag(const std::uint16_t sliceId, const st
     fDrag.reset();
     fSelectionEdge = 0;
     fRegion = Region{sliceId, slice->start, slice->end, grabFrame, 0};
+    beginLiveDrag();
     return true;
 }
 
@@ -651,7 +654,7 @@ void MainSampleController::dragRegionTo(const std::uint32_t frame, const double 
         const double tolerance = framesPerPixel * static_cast<double>(kSnapPixels);
         double best = tolerance;
         std::int64_t snapped = delta;
-        for (const auto& other : fStatus.slices) {
+        for (const auto& other : dragSlices()) {
             if (other.id == fRegion->sliceId)
                 continue;
             for (const std::uint32_t edge : {other.start, other.end}) {
@@ -669,7 +672,79 @@ void MainSampleController::dragRegionTo(const std::uint32_t frame, const double 
     }
     fRegion->delta = delta;
     rebuildDisplaySlices();
+    liveDragUpdate(Clock::now());
     fHost.repaintMainSample();
+}
+
+void MainSampleController::beginLiveDrag()
+{
+    fDragBase = fStatus.slices;
+    fLiveBegun = false;
+    fLiveSent = 0;
+    fLiveLast = Time{};
+}
+
+const std::vector<plugin::MainSampleSlice>& MainSampleController::dragSlices() const noexcept
+{
+    return (fDrag || fRegion) ? fDragBase : fStatus.slices;
+}
+
+std::int64_t MainSampleController::dragValue() const noexcept
+{
+    if (fRegion) return fRegion->delta;
+    return fDrag ? static_cast<std::int64_t>(fDrag->frame) - static_cast<std::int64_t>(fDrag->original) : 0;
+}
+
+bool MainSampleController::makeDragRequest(std::vector<plugin::MainSampleSlice>& slices,
+                                           plugin::MainSampleRequest& request) const
+{
+    request = {};
+    request.verb = MainSampleVerb::edit;
+    if (fRegion) {
+        for (auto& slice : slices) {
+            if (slice.id != fRegion->sliceId)
+                continue;
+            slice.start = static_cast<std::uint32_t>(static_cast<std::int64_t>(fRegion->start) + fRegion->delta);
+            slice.end = static_cast<std::uint32_t>(static_cast<std::int64_t>(fRegion->end) + fRegion->delta);
+            request.edits[request.editCount++] = slice;
+            break;
+        }
+        return request.editCount != 0U;
+    }
+    if (!fDrag)
+        return false;
+    const auto& drag = *fDrag;
+    // The dragged slice first, then at most one neighbour sharing the boundary.
+    for (const bool own : {true, false}) {
+        for (auto& slice : slices) {
+            if ((slice.id == drag.sliceId) != own || (drag.solo && !own))
+                continue;
+            const bool movesEnd = slice.end == drag.original && (own ? drag.endEdge : !drag.endEdge);
+            const bool movesStart = slice.start == drag.original && (own ? !drag.endEdge : drag.endEdge);
+            if (!movesEnd && !movesStart)
+                continue;
+            (movesEnd ? slice.end : slice.start) = drag.frame;
+            request.edits[request.editCount++] = slice;
+            break;
+        }
+    }
+    return request.editCount != 0U;
+}
+
+void MainSampleController::liveDragUpdate(const Time now)
+{
+    const auto value = dragValue();
+    if (!fLiveBegun ? value == 0 : (now - fLiveLast < kLiveInterval || value == fLiveSent))
+        return;
+    auto slices = fDragBase;
+    plugin::MainSampleRequest request;
+    if (!makeDragRequest(slices, request))
+        return;
+    request.phase = fLiveBegun ? 'U' : 'B';
+    fLiveBegun = true;
+    fLiveLast = now;
+    fLiveSent = value;
+    send(request); // the pad is re-cut now, so a note played mid-drag sounds the dragged range
 }
 
 bool MainSampleController::endDrag()
@@ -678,58 +753,28 @@ bool MainSampleController::endDrag()
         fSelectionEdge = 0;
         return false;
     }
-    if (fRegion) {
-        const auto region = *fRegion;
+    if (!fRegion && !fDrag)
+        return false;
+    const bool begun = fLiveBegun;
+    fLiveBegun = false;
+    if (dragValue() == 0 && !begun) {
         fRegion.reset();
-        if (region.delta == 0) {
-            rebuildDisplaySlices();
-            return false;
-        }
-        MainSampleRequest request;
-        request.verb = MainSampleVerb::edit;
-        for (auto& slice : fStatus.slices) {
-            if (slice.id != region.sliceId)
-                continue;
-            slice.start = static_cast<std::uint32_t>(static_cast<std::int64_t>(region.start) + region.delta);
-            slice.end = static_cast<std::uint32_t>(static_cast<std::int64_t>(region.end) + region.delta);
-            request.edits[request.editCount++] = slice; // optimistic until the reply; one S edit
-            break;
-        }
+        fDrag.reset();
         rebuildDisplaySlices();
-        if (request.editCount == 0U)
-            return false;
-        send(request);
-        return true;
-    }
-    if (!fDrag)
         return false;
-    const auto drag = *fDrag;
+    }
+    auto slices = fDragBase; // the live replies may already have moved fStatus; start from the press
+    plugin::MainSampleRequest request;
+    const bool ok = makeDragRequest(slices, request);
+    fRegion.reset();
     fDrag.reset();
-    if (drag.frame == drag.original) {
+    if (!ok) {
         rebuildDisplaySlices();
         return false;
     }
-    MainSampleRequest request;
-    request.verb = MainSampleVerb::edit;
-    // The dragged slice first, then at most one neighbour sharing the boundary.
-    for (const bool own : {true, false}) {
-        for (auto& slice : fStatus.slices) {
-            if ((slice.id == drag.sliceId) != own || (drag.solo && !own))
-                continue;
-            const bool movesEnd = slice.end == drag.original &&
-                                  (own ? drag.endEdge : !drag.endEdge);
-            const bool movesStart = slice.start == drag.original &&
-                                    (own ? !drag.endEdge : drag.endEdge);
-            if (!movesEnd && !movesStart)
-                continue;
-            (movesEnd ? slice.end : slice.start) = drag.frame; // Optimistic until the reply.
-            request.edits[request.editCount++] = slice;
-            break;
-        }
-    }
+    request.phase = begun ? 'E' : 'S';
+    fStatus.slices = std::move(slices); // optimistic until the reply
     rebuildDisplaySlices();
-    if (request.editCount == 0U)
-        return false;
     send(request);
     return true;
 }
@@ -737,6 +782,18 @@ bool MainSampleController::endDrag()
 void MainSampleController::cancelDrag() noexcept
 {
     fSelectionEdge = 0;
+    if (fLiveBegun) {
+        // Live edits already reached the plugin: send the original range back and close the gesture.
+        fLiveBegun = false;
+        if (fRegion) fRegion->delta = 0;
+        else if (fDrag) fDrag->frame = fDrag->original;
+        auto slices = fDragBase;
+        plugin::MainSampleRequest request;
+        if (makeDragRequest(slices, request)) {
+            request.phase = 'E';
+            send(request);
+        }
+    }
     if (fRegion) {
         fRegion.reset();
         rebuildDisplaySlices();
@@ -749,7 +806,7 @@ void MainSampleController::cancelDrag() noexcept
 
 void MainSampleController::rebuildDisplaySlices()
 {
-    fDisplaySlices = fStatus.slices;
+    fDisplaySlices = dragSlices();
     if (fRegion) {
         for (auto& slice : fDisplaySlices) {
             if (slice.id != fRegion->sliceId)

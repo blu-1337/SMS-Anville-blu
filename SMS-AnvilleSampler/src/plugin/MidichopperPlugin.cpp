@@ -582,7 +582,13 @@ protected:
             return;
         if (std::strcmp(key, kMainSampleRequestKey) == 0) {
             if (value != nullptr && value[0] != '\0')
-                undo_.record(UndoKind::action, UndoClock::now(), [&] { mainSampleWorkflows_.handleRequest(value); });
+            {
+                // A live slice drag sends B/U/E edits: one undo step for the whole drag.
+                midichopper::plugin::MainSampleRequest live;
+                const char phase = midichopper::plugin::decodeMainSampleRequest(value, live) &&
+                    live.verb == midichopper::plugin::MainSampleVerb::edit ? live.phase : 'S';
+                undo_.recordGesture(phase, UndoClock::now(), [&] { mainSampleWorkflows_.handleRequest(value); });
+            }
             return;
         }
         if (std::strcmp(key, kAutoChopRequestKey) == 0) {

@@ -126,25 +126,27 @@ DGL_NAMESPACE::Color darker(const DGL_NAMESPACE::Color& color) noexcept
     return DGL_NAMESPACE::Color(color.red * 0.55f, color.green * 0.55f, color.blue * 0.55f, 1.0f);
 }
 
-/** Slice-number tab next to a marker line; start tabs sit right of it, end tabs left, darker. */
-void drawMarkerTab(const ViewRenderContext& ctx, const float x, const sms::ui::Rect& bounds,
-                   const unsigned number, const bool endEdge, const bool isHovered,
-                   const DGL_NAMESPACE::Color& color)
+/** Slice-number badge, half the former tab; the selected slice gets an outline. */
+void drawSliceBadge(const ViewRenderContext& ctx, const sms::ui::Rect& rect, const unsigned number,
+                    const bool selected, const bool isHovered, const DGL_NAMESPACE::Color& color)
 {
     const auto& colors = sms::ui::dpf::theme();
-    const float width = isHovered ? 22.0f : 18.0f;
-    const float left = endEdge ? x - width : x;
     ctx.canvas.beginPath();
-    ctx.canvas.roundedRect(left, bounds.y + 6.0f, width, isHovered ? 20.0f : 16.0f, 3.0f);
-    ctx.canvas.fillColor(endEdge ? darker(color) : color);
+    ctx.canvas.roundedRect(rect.x, rect.y, rect.width, rect.height, 2.0f);
+    ctx.canvas.fillColor(isHovered ? color.withAlpha(1.0f) : color);
     ctx.canvas.fill();
+    if (selected || isHovered) {
+        ctx.canvas.strokeColor(colors.contentPrimary);
+        ctx.canvas.strokeWidth(1.0f);
+        ctx.canvas.stroke();
+    }
     char label[8];
     std::snprintf(label, sizeof(label), "%u", number);
     ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
-    ctx.canvas.fontSize(9.0f);
+    ctx.canvas.fontSize(7.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
-    ctx.canvas.fillColor(endEdge ? colors.contentPrimary : colors.canvas);
-    text(ctx, left + width * 0.5f, bounds.y + 14.0f + (isHovered ? 2.0f : 0.0f), label, nullptr);
+    ctx.canvas.fillColor(colors.canvas);
+    text(ctx, rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f, label, nullptr);
 }
 
 void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& main)
@@ -258,36 +260,23 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             const auto* tint = zoneTint(ctx, main, static_cast<std::size_t>(slice));
             return tint != nullptr ? *tint : colors.selection;
         };
-        if (room >= 38.0f) {
-            const auto lineColor = sliceColor(marker.slice);
-            ctx.canvas.beginPath();
-            ctx.canvas.moveTo(marker.x, bounds.y);
-            ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
-            ctx.canvas.strokeColor(marker.edge == 1 ? darker(lineColor) : lineColor);
-            ctx.canvas.strokeWidth(isHovered ? 4.0f : 2.0f);
-            ctx.canvas.stroke();
-            if (marker.endSlice >= 0)
-                drawMarkerTab(ctx, marker.x, bounds, static_cast<unsigned>(marker.endSlice + 1), true,
-                              false, sliceColor(marker.endSlice));
-            drawMarkerTab(ctx, marker.x, bounds, static_cast<unsigned>(marker.slice + 1), marker.edge == 1,
-                          isHovered, lineColor);
-            continue;
-        }
+        const auto lineColor = sliceColor(marker.slice);
         ctx.canvas.beginPath();
         ctx.canvas.moveTo(marker.x, bounds.y);
         ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
-        ctx.canvas.strokeColor(marker.edge == 1 ? darker(sliceColor(marker.slice)) : sliceColor(marker.slice));
-        ctx.canvas.strokeWidth(isHovered ? 3.0f : 1.0f);
+        ctx.canvas.strokeColor(marker.edge == 1 ? darker(lineColor) : lineColor);
+        ctx.canvas.strokeWidth(isHovered ? (room >= 38.0f ? 4.0f : 3.0f) : (room >= 38.0f ? 2.0f : 1.0f));
         ctx.canvas.stroke();
-        if (marker.edge == 0 && (room >= 16.0f || isHovered)) {
-            char label[8];
-            std::snprintf(label, sizeof(label), "%u", static_cast<unsigned>(marker.slice + 1));
-            ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
-            ctx.canvas.fontSize(8.0f);
-            ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-            ctx.canvas.fillColor(sliceColor(marker.slice));
-            text(ctx, marker.x, bounds.y + 3.0f, label, nullptr);
-        }
+    }
+
+    // One badge per slice that is in view, whatever its neighbours or scroll position.
+    for (std::size_t index = 0; index < markerCount; ++index) {
+        const auto rect = mainSampleBadgeRect(slices, viewport, index);
+        if (rect.width <= 0.0f)
+            continue;
+        const auto* tint = zoneTint(ctx, main, index);
+        drawSliceBadge(ctx, rect, static_cast<unsigned>(index + 1U), slices[index].id == main.selectedSlice(),
+                       false, tint != nullptr ? *tint : colors.selection);
     }
 
     if (const double frame = main.playheadFrame(); frame >= 0.0) {

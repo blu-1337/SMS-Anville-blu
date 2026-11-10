@@ -1,4 +1,5 @@
 #include "MainSampleController.hpp"
+#include "MidichopperInteraction.hpp"
 #include "MidichopperLayout.hpp"
 #include "SamplerUiSession.hpp"
 #include "StateKeys.hpp"
@@ -344,6 +345,34 @@ void sessionRouting()
     silent.idle(Clock::now(), 0.0f);
     check(!silent.state().mainSampleMode && silentHost.sent.empty(),
           "without state transport the view stays closed and silent");
+}
+
+void sliceBadgesAreSmallAndComplete()
+{
+    std::vector<MainSampleSlice> slices;
+    for (std::uint16_t i = 0; i < 24U; ++i)
+        slices.push_back({static_cast<std::uint16_t>(i + 1U), i * 1000U, (i + 1U) * 1000U});
+    sms::ui::waveform::Viewport view;
+    view.reset(24000U);
+    const auto bounds = layout::mainSampleWaveform;
+    for (std::size_t i = 0; i < slices.size(); ++i) {
+        const auto rect = mainSampleBadgeRect(slices, view, i);
+        check(rect.width > 0.0f && rect.width <= 14.0f && rect.height <= 9.0f,
+              "every slice has a badge at most half the old 18x16 tab");
+        check(rect.x >= bounds.x && rect.x + rect.width <= bounds.x + bounds.width &&
+                  rect.y >= bounds.y && rect.y + rect.height <= bounds.y + bounds.height,
+              "the badge stays inside the waveform");
+    }
+    // Crowded neighbours (37 px each) share rows without hiding any badge.
+    const auto a = mainSampleBadgeRect(slices, view, 0U);
+    const auto b = mainSampleBadgeRect(slices, view, 1U);
+    check(a.x + a.width <= b.x || a.y != b.y, "adjacent badges do not overlap");
+    // Zoomed so slice 1 starts off-screen: it still gets a badge at the left edge.
+    view.start = 500U;
+    view.end = 6500U;
+    const auto partial = mainSampleBadgeRect(slices, view, 0U);
+    check(partial.width > 0.0f && partial.x <= bounds.x + 2.0f, "a partly visible region keeps its badge");
+    check(mainSampleBadgeRect(slices, view, 10U).width == 0.0f, "a region out of view has none");
 }
 
 void editorHeaderChipsFit()
@@ -704,6 +733,7 @@ int main()
     padChangesRequery();
     sessionRouting();
     editorHeaderChipsFit();
+    sliceBadgesAreSmallAndComplete();
     countFieldEntry();
     snapToSliceBoundaries();
     layoutRects();

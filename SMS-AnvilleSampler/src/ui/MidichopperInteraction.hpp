@@ -508,6 +508,32 @@ struct InteractionContext {
     sms::ui::waveform::Viewport waveformViewport;
 };
 
+/**
+ * Slice-number badge of slice `index`: a small tab at the left edge of the part of the region that is
+ * visible, so every slice in view has exactly one (even when its start is scrolled off or its
+ * neighbours are crowded). Regions too narrow for the badge stagger over three rows.
+ * Returns a zero-size rect when the region is not in view.
+ */
+[[nodiscard]] inline sms::ui::Rect mainSampleBadgeRect(
+    const std::span<const plugin::MainSampleSlice> slices,
+    const sms::ui::waveform::Viewport& viewport, const std::size_t index) noexcept
+{
+    const auto bounds = layout::mainSampleWaveform;
+    if (index >= slices.size() || viewport.total == 0U)
+        return {};
+    const auto& slice = slices[index];
+    const float x0 = std::max(bounds.x, viewport.xForFrame(static_cast<double>(slice.start), bounds));
+    const float x1 = std::min(bounds.x + bounds.width,
+                              viewport.xForFrame(static_cast<double>(slice.end), bounds));
+    if (x1 <= x0)
+        return {};
+    const float width = index + 1U >= 10U ? layout::sliceBadgeWideWidth : layout::sliceBadgeWidth;
+    const bool narrow = x1 - x0 < width + 2.0f;
+    const float row = narrow ? static_cast<float>(index % 3U) : 0.0f;
+    const float left = std::min(x0 + 1.0f, bounds.x + bounds.width - width);
+    return {left, bounds.y + 3.0f + row * (layout::sliceBadgeHeight + 1.0f), width, layout::sliceBadgeHeight};
+}
+
 /** Marker index = slice * 2 + (end edge ? 1 : 0). A boundary shared with the next slice is
  * reported once, as that slice's start edge. Returns -1 when no marker is within 6 px. */
 [[nodiscard]] inline int mainSampleMarkerAt(const float x, const InteractionContext& context) noexcept

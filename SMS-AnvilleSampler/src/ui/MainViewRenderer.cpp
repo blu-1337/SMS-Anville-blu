@@ -33,15 +33,12 @@ void drawPadPanel(const ViewRenderContext& ctx)
     ctx.canvas.fontSize(13.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
     ctx.canvas.fillColor(colors.contentSecondary);
-    text(ctx, 650.0f, 174.0f, ctx.state.armed ? "DESTINATION PADS" : "PAD BANK", nullptr);
+    if (ctx.state.armed) text(ctx, 650.0f, 174.0f, "DESTINATION PADS", nullptr);
     if (ctx.state.armed) {
         ctx.canvas.fontSize(11.0f);
         ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
         text(ctx, 936.0f, 146.0f, "CLICK A PAD TO SET START", nullptr);
     }
-    ctx.canvas.fontSize(10.0f);
-    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
-    text(ctx, 650.0f, 118.0f, "BANK", nullptr);
     for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
         char label[4];
         std::snprintf(label, sizeof(label), sms::ui::dpf::themeFormat("%c"), 'A' + bank);
@@ -49,6 +46,12 @@ void drawPadPanel(const ViewRenderContext& ctx)
                                   bank == ctx.state.bank, colors.activityPlayback,
                                   hovered(ctx, InteractiveType::bank, bank),
                                   ctx.state.currentPad < 0);
+    }
+    if (!ctx.state.armed) {
+        sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainUndo, "UNDO", false, colors.activityPlayback,
+                                  ctx.state.canUndo && hovered(ctx, InteractiveType::historyUndo), ctx.state.canUndo);
+        sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainRedo, "REDO", false, colors.activityPlayback,
+                                  ctx.state.canRedo && hovered(ctx, InteractiveType::historyRedo), ctx.state.canRedo);
     }
     if (ctx.state.midiBankMode == 0 && !ctx.state.armed) {
         // Per-bank MIDI: keys beyond this bank's pads are silent. Offer the one-click fix.

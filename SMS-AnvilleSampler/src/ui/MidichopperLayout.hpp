@@ -217,7 +217,12 @@ inline constexpr sms::ui::Rect clearAction{1146.0f, 610.0f, 70.0f, 34.0f};
 
 // Shown only while MIDI is set to "selected bank": notes past that bank's pads play nothing.
 // Clicking it switches to All Banks (one continuous note range across banks A-D).
-inline constexpr sms::ui::Rect midiBankHint{650.0f, 140.0f, 286.0f, 28.0f};
+inline constexpr sms::ui::Rect midiBankHint{650.0f, 170.0f, 286.0f, 22.0f};
+
+// Pads-view undo / redo (same history as the Main Sample pair): directly under the A-D bank
+// buttons, spanning exactly their width (x 690-908), two buttons with a 6 px gap.
+inline constexpr sms::ui::Rect mainUndo{690.0f, 138.0f, 106.0f, 28.0f};
+inline constexpr sms::ui::Rect mainRedo{802.0f, 138.0f, 106.0f, 28.0f};
 
 [[nodiscard]] constexpr sms::ui::Rect editorBank(const int index) noexcept
 {

@@ -518,6 +518,22 @@ void perBankMidiHintOnlyWhenPerBank()
           "no hint while armed");
 }
 
+void padsViewHistoryButtons()
+{
+    using namespace layout;
+    InteractionContext context;
+    const auto mid = [](const sms::ui::Rect& r) { return sms::ui::Point{r.x + r.width * 0.5f, r.y + r.height * 0.5f}; };
+    check(isTarget(interactiveTargetAt(mid(mainUndo), context), InteractiveType::historyUndo), "pads UNDO is clickable");
+    check(isTarget(interactiveTargetAt(mid(mainRedo), context), InteractiveType::historyRedo), "pads REDO is clickable");
+    check(mainUndo.y >= mainBank(3).y + mainBank(3).height && mainUndo.x == mainBank(0).x &&
+          mainRedo.x + mainRedo.width == mainBank(3).x + mainBank(3).width && mainUndo.height == mainRedo.height &&
+          mainUndo.x + mainUndo.width < mainRedo.x, "UNDO/REDO sit aligned under the bank buttons");
+    check(mainRedo.y + mainRedo.height <= midiBankHint.y && midiBankHint.y + midiBankHint.height <= mainPadBounds.y,
+          "history buttons clear of the MIDI hint and the pads");
+    context.armed = true;
+    check(!isTarget(interactiveTargetAt(mid(mainUndo), context), InteractiveType::historyUndo), "hidden while armed");
+}
+
 void editorHeaderChipsFit()
 {
     using namespace layout;
@@ -982,6 +998,7 @@ int main()
     sliceBadgesAreSmallAndComplete();
     regionDragMovesWholeSlice();
     perBankMidiHintOnlyWhenPerBank();
+    padsViewHistoryButtons();
     countFieldEntry();
     snapToSliceBoundaries();
     snapBypassWhileHeld();

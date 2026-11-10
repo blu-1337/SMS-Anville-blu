@@ -87,3 +87,5 @@ Dragging from the upper two-thirds still sets volume and pan. Undo reverts the s
 With SNAP on, a new or adjusted slice edge moves to the nearest zero crossing (within about 3 ms) when you
 release, which avoids clicks. Holding Alt or Shift, or turning SNAP off, keeps the exact position. An edge snapped
 to another slice stays there.
+
+Pads view: UNDO/REDO sit under the A-D bank buttons (shared history with Main Sample); the BANK/PAD BANK labels are gone.

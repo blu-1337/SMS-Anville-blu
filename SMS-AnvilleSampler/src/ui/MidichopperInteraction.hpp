@@ -830,6 +830,12 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
                 return target(InteractiveType::bank, bank);
         }
     }
+    if (!context.captureActive && !context.armed) {
+        if (uiLayout::mainUndo.contains(point))
+            return target(InteractiveType::historyUndo);
+        if (uiLayout::mainRedo.contains(point))
+            return target(InteractiveType::historyRedo);
+    }
     if (!context.captureActive && !context.armed && context.perBankMidi &&
         uiLayout::midiBankHint.contains(point))
         return target(InteractiveType::midiBankHint);

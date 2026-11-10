@@ -1252,6 +1252,40 @@ void mainSampleArrange()
     check(status.state == MainSampleState::ready && status.affectedMask == 0U, "a second arrange changes nothing");
 }
 
+void arrangeKeepsColours()
+{
+    MainSampleFixture fixture;
+    std::array<int, kPadCount> colors{};
+    fixture.main.setArrangeHook([&](const std::vector<ArrangeMove>& moves) {
+        std::vector<int> values;
+        for (const auto& move : moves) values.push_back(colors[move.from]);
+        for (std::size_t i = 0; i < moves.size(); ++i) colors[moves[i].to] = values[i];
+    });
+    const auto path = writeSourceWav("sms-arrange-colours.wav", 1000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    fixture.send(assignRequest(0U, 700U, 900U));
+    fixture.send(assignRequest(1U, 0U, 200U));
+    fixture.send(assignRequest(2U, 500U, 700U));
+    fixture.send(assignRequest(3U, 200U, 500U));
+    // AUTO COLOR keys the colour by slice: tag each pad with its slice id.
+    std::array<int, kPadCount> bySlice{};
+    for (std::uint32_t pad = 0; pad < 4U; ++pad) {
+        colors[pad] = 1 + static_cast<int>(fixture.provenance(pad) & 0xFFFFU);
+        bySlice[fixture.provenance(pad) & 0xFFFFU] = colors[pad];
+    }
+    for (int press = 0; press < 3; ++press) {
+        fixture.send(mainRequest(MainSampleVerb::arrange));
+        for (std::uint32_t pad = 0; pad < 4U; ++pad) {
+            const auto slice = fixture.provenance(pad) & 0xFFFFU;
+            check(colors[pad] == bySlice[slice], "each pad keeps its slice's colour after every arrange");
+        }
+    }
+    check(padHoldsSlice(fixture.engine, 0U, 0U, 200U) && padHoldsSlice(fixture.engine, 3U, 700U, 900U),
+          "the audio is in time order");
+}
+
 float gainOf(const SamplerEngine& engine, const std::uint32_t pad)
 {
     sms::dsp::SamplePlaybackSettings playback;
@@ -1520,5 +1554,6 @@ int main()
     undoRedoRestoresState();
     undoGestureCoalescesLiveUpdates();
     padSwap();
+    arrangeKeepsColours();
     std::cout << "Pad workflow tests passed\n";
 }

@@ -482,6 +482,8 @@ void MainSampleWorkflows::arrange(const MainSampleRequest& request)
         publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
         return;
     }
+    if (arrangeHook_)
+        arrangeHook_(moves);
     publishPadSettings(affected, true);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
 }

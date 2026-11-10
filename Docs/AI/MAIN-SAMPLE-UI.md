@@ -58,3 +58,7 @@ the pad file browser. Dropping a WAV on the waveform or overview loads
 the first (`Kind::mainSample`).
 
 Tests: `main-sample-ui`, `ui-input-routing`.
+
+Arrange moves pad colours (and favourite flags) in the plug-in, in the same undo step as the
+audio (`MainSampleWorkflows::setArrangeHook`). The UI no longer replays the moves: replaying
+raced the UD1/colour echoes and shuffled colours on repeated Arrange.

@@ -490,7 +490,8 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
     if (std::strcmp(key, kMainSampleStatusKey) == 0)
     {
         const bool accepted = fMainSample.acceptStatus(value);
-        applyArrangedColors(fMainSample.takeArrangedMoves());
+        // Colours move with the pads inside the plug-in (one undo step); the moves are not replayed here.
+        static_cast<void>(fMainSample.takeArrangedMoves());
         return accepted;
     }
     if (std::strcmp(key, kMainSampleWaveformKey) == 0)
@@ -1259,15 +1260,6 @@ midichopper::ui::PadActionContext SamplerUiSession::padActionContext() const noe
             fState.padState,       fState.editorSettingsPad,
             fState.editorSettings, fState.mixerSettingsPad,
             fState.mixerSettings};
-}
-
-void SamplerUiSession::applyArrangedColors(const std::vector<plugin::ArrangeMove>& moves)
-{
-    std::vector<int> colors;
-    for (const auto& move : moves)
-        colors.push_back(fState.padColors[move.from]);
-    for (std::size_t index = 0; index < moves.size(); ++index)
-        setPadColor(static_cast<int>(moves[index].to), colors[index]);
 }
 
 void SamplerUiSession::autoColorPads()

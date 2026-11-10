@@ -356,6 +356,27 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
     }
     case kParameterPlaybackPadEvent: {
         const std::uint32_t pad = fPlaybackPadEvents.consume(value);
+        if (pad < midichopper::kPadCount && midichopper::plugin::playbackEventIsEmptyPad(value)) {
+            // A note hit an empty pad: with a Main Sample selection it assigns, like clicking
+            // the pad. Otherwise it stays silent, exactly as before.
+            if (fState.mainSampleMode && !fState.editorMode && fMainSample.hasSource() &&
+                fMainSample.hasSelection() && !fMainSample.confirmPending()) {
+                fMainSample.assignSelection(pad);
+                fMainSample.clearSelection();
+                fHost.repaintUi();
+            }
+            changed = false;
+            break;
+        }
+        if (pad < midichopper::kPadCount && fState.mainSampleMode && !fState.editorMode &&
+            fMainSample.hasSource() && fMainSample.hasSelection() && !fMainSample.confirmPending()) {
+            // Loaded pad: assigning opens the usual overwrite confirmation; the pad still
+            // sounds (the audio path is unchanged and previews what would be replaced).
+            fMainSample.assignSelection(pad);
+            fMainSample.clearSelection();
+            changed = true;
+            break;
+        }
         // MIDI performance remains audible in the Cut Point Editor, but it must not
         // silently switch the editor bank or discard a pending boundary plan.
         changed = !fState.armed && !fChopEditor.active() && pad < midichopper::kPadCount;

@@ -153,6 +153,7 @@ void SamplerEngine::reset() noexcept {
     ringWritePosition_ = ringCount_ = 0;
     nextVoiceOrder_ = 1;
     lastPlaybackTrigger_ = {};
+    lastEmptyPadTrigger_ = {};
     playbackPositionGeneration_ = 0;
     playbackPositionHoldFrames_ = 0;
     playbackPositionOutput_ = 0.0f;
@@ -870,6 +871,11 @@ void SamplerEngine::handleEvent(const MidiEvent& event) noexcept {
     }
     const auto pad = noteToPad(event.note);
     if (pad >= kPadCount) return;
+    if (!pads_[pad].occupied.load(std::memory_order_acquire)) {
+        lastEmptyPadTrigger_.pad = pad; // plain stores, no allocation; observed by the plugin
+        ++lastEmptyPadTrigger_.generation;
+        return;
+    }
     startVoice(pad, event.velocity, settings_.playbackMode == PlaybackMode::Hold
         ? VoiceMode::Hold : VoiceMode::OneShot, event.note);
 }

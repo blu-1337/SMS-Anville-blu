@@ -186,6 +186,11 @@ public:
     {
         return lastPlaybackTrigger_;
     }
+    /** Most recent MIDI note that addressed an empty pad (audio thread; no voice starts). */
+    [[nodiscard]] PlaybackTrigger lastEmptyPadTrigger() const noexcept
+    {
+        return lastEmptyPadTrigger_;
+    }
     /**
      * Current recording pad, or the next destination while armed and idle.
      * This is an audio-thread observation; kPadCount means there is no target.
@@ -587,6 +592,7 @@ private:
     MidiBankMode captureMidiBankMode_ = kDefaultMidiBankMode;
     std::uint64_t nextVoiceOrder_ = 1;
     PlaybackTrigger lastPlaybackTrigger_{};
+    PlaybackTrigger lastEmptyPadTrigger_{};
     std::uint64_t playbackPositionGeneration_ = 0;
     std::uint32_t playbackPositionHoldFrames_ = 0;
     float playbackPositionOutput_ = 0.0f;

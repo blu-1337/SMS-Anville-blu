@@ -451,8 +451,36 @@ void captureStorageFailureStatus()
 
 } // namespace
 
+void midiNoteAssignsMainSampleSelection()
+{
+    Fixture f;
+    f.session.openMainSample();
+    MainSampleStatus status;
+    status.sequence = 1U;
+    status.state = MainSampleState::ready;
+    status.sourceId = 0xABCU;
+    status.frames = 1000U;
+    status.sampleRate = 48000U;
+    status.slices = {{1U, 0U, 1000U}};
+    status.text = "loop.wav";
+    check(f.session.mainSample().acceptStatus(encodeMainSampleStatus(status), std::chrono::steady_clock::now()),
+          "main sample source arrives");
+    f.host.clearTrace();
+    f.session.acceptParameter(kParameterPlaybackPadEvent, playbackPadEventValue(5, false, true));
+    check(f.host.messages.empty(), "an empty-pad note without a selection stays silent and does nothing");
+    f.session.mainSample().beginSelection(100U);
+    f.session.mainSample().extendSelection(400U);
+    f.session.acceptParameter(kParameterPlaybackPadEvent, playbackPadEventValue(5, true, true));
+    MainSampleRequest request;
+    check(decodeMainSampleRequest(f.host.latestMessage(kMainSampleRequestKey), request) &&
+          request.verb == MainSampleVerb::assign && request.pad == 5U && request.start == 100U && request.end == 400U,
+          "an empty-pad note assigns the selection to that pad like a click");
+    check(!f.session.mainSample().hasSelection(), "the selection is consumed by the assignment");
+}
+
 int main()
 {
+    midiNoteAssignsMainSampleSelection();
     optimisticParametersAndArmOrdering();
     captureAndPhysicalMidiOwnership();
     hostAndUserBankSelection();

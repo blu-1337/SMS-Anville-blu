@@ -1700,7 +1700,17 @@ void playback_trigger_notifications() {
           second.generation + 1U == retrigger.generation,
           "every successful MIDI note-on reports its pad, including an active-pad retrigger");
 
+    const midichopper::MidiEvent emptyPad{0, 41, 127, midichopper::MidiEventType::NoteOn};
+    e.process(nullptr, nullptr, left, right, 1, &emptyPad, 1);
+    check(e.lastEmptyPadTrigger().pad == 5U && e.lastEmptyPadTrigger().generation == 1U &&
+          e.lastPlaybackTrigger().generation == retrigger.generation,
+          "a note on an empty pad is reported separately and starts no voice");
+
     using namespace midichopper::plugin;
+    const float emptyEvent = playbackPadEventValue(5U, true, true);
+    check(padFromPlaybackEvent(emptyEvent) == 5U && playbackEventIsEmptyPad(emptyEvent) &&
+          !playbackEventIsEmptyPad(playbackPadEventValue(5U, true)),
+          "empty-pad events decode to their pad and are distinguishable");
     const float low = playbackPadEventValue(0U, false);
     const float high = playbackPadEventValue(0U, true);
     check(low != high && padFromPlaybackEvent(low) == 0U &&

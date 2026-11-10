@@ -814,6 +814,14 @@ private:
     void updatePlaybackPadEvent() noexcept
     {
         using namespace midichopper::plugin;
+        const midichopper::PlaybackTrigger empty = sampler_.lastEmptyPadTrigger();
+        if (empty.generation != publishedEmptyTriggerGeneration_ && empty.pad < midichopper::kPadCount) {
+            publishedEmptyTriggerGeneration_ = empty.generation;
+            playbackPadEventAlternateHalf_ = !playbackPadEventAlternateHalf_;
+            controls_.publishParameterValue(kParameterPlaybackPadEvent,
+                playbackPadEventValue(empty.pad, playbackPadEventAlternateHalf_, true));
+            return;
+        }
         const midichopper::PlaybackTrigger trigger = sampler_.lastPlaybackTrigger();
         if (trigger.generation == publishedPlaybackTriggerGeneration_ ||
             trigger.pad >= midichopper::kPadCount)
@@ -860,6 +868,7 @@ private:
     sms::audio::RealtimeLatestMailbox<GlobalSettingsArray> globalValueSettingsMailbox_;
     mutable sms::audio::RealtimeAccessGate samplerAccess_;
     std::uint64_t publishedPlaybackTriggerGeneration_ = 0;
+    std::uint64_t publishedEmptyTriggerGeneration_ = 0;
     bool playbackPadEventAlternateHalf_ = false;
     // Written by run(), read by control workers; see TIMEPOS note in Docs/AI/AUTO-CHOP.md.
     std::atomic<double> hostBpm_{0.0};

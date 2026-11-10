@@ -215,6 +215,10 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     MainSampleController fMainSample{*this};
     bool fMainSampleBrowsing = false;
     bool fMeterRepaintPending = false;
+    bool fColorBatchPending = false; // a batched colour request awaits its UD1 echo
+    Time fColorBatchDeadline{};
+    [[nodiscard]] std::string encodedPadColors() const;
+    void sendPadColorBatch();
     bool fCaptureStorageExhausted = false;
     Time fNextMeterRepaint{};
 };

@@ -473,7 +473,17 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
         fState.undoDepth = static_cast<int>(field[1]);
         fState.redoDepth = static_cast<int>(field[2]);
         const char *digits = cursor;
-        if (std::strlen(digits) >= fState.padColors.size()) {
+        bool applyColors = std::strlen(digits) >= fState.padColors.size();
+        if (applyColors && fColorBatchPending) {
+            // An older status (published before the plugin applied our batch) must not overwrite
+            // the colours we set locally; the batch's own status equals them and ends the wait.
+            if (encodedPadColors().compare(0, fState.padColors.size(), digits, fState.padColors.size()) == 0 ||
+                Clock::now() >= fColorBatchDeadline)
+                fColorBatchPending = false;
+            else
+                applyColors = false;
+        }
+        if (applyColors) {
             for (std::size_t pad = 0; pad < fState.padColors.size(); ++pad) {
                 const bool fav = digits[pad] >= 'a' && digits[pad] <= 'j';
                 const int digit = digits[pad] - (fav ? 'a' : '0');
@@ -1269,16 +1279,40 @@ midichopper::ui::PadActionContext SamplerUiSession::padActionContext() const noe
 
 void SamplerUiSession::autoColorPads()
 {
+    const auto before = encodedPadColors();
     for (const auto& [pad, color] : fMainSample.autoColor(static_cast<std::size_t>(fCapabilities.colorCount)))
         if (pad < midichopper::kPadCount)
-            setPadColor(static_cast<int>(pad), color);
+            fState.padColors[pad] = color;
+    if (encodedPadColors() != before)
+        sendPadColorBatch();
 }
 
 void SamplerUiSession::clearPadColors()
 {
     fMainSample.clearColors();
-    for (int pad = 0; pad < static_cast<int>(midichopper::kPadCount); ++pad)
-        setPadColor(pad, 0);
+    const auto before = encodedPadColors();
+    fState.padColors.fill(0);
+    if (encodedPadColors() != before)
+        sendPadColorBatch();
+}
+
+std::string SamplerUiSession::encodedPadColors() const
+{
+    std::string text;
+    text.reserve(fState.padColors.size());
+    for (std::size_t pad = 0; pad < fState.padColors.size(); ++pad)
+        text.push_back(static_cast<char>((fState.padFavorites[pad] ? 'a' : '0') +
+                                         std::clamp(fState.padColors[pad], 0, 9)));
+    return text;
+}
+
+/** One request sets every pad colour on the plugin: one undo step, one status after the apply. */
+void SamplerUiSession::sendPadColorBatch()
+{
+    fColorBatchPending = true;
+    fColorBatchDeadline = Clock::now() + std::chrono::seconds(2);
+    fHost.sendUiState(midichopper::plugin::kUndoRequestKey, ("colors:" + encodedPadColors()).c_str());
+    fHost.repaintUi();
 }
 
 void SamplerUiSession::setPadColor(const int pad, const int color)

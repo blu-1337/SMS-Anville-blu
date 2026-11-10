@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -111,6 +112,12 @@ public:
             gestureBefore_ = UndoSnapshot{};
         }
     }
+    /**
+     * Batched colour edit (AUTO COLOR / CLEAR): one char per pad ('0'-'9', 'a'-'j' = favourite).
+     * All pads change atomically as ONE undo step; the status is published once, after the apply.
+     * False when the text is too short.
+     */
+    bool applyColorBatch(std::string_view digits, Clock::time_point now);
     void undo() { step(true); }
     void redo() { step(false); }
     /** Host restored durable state: history no longer describes it. */

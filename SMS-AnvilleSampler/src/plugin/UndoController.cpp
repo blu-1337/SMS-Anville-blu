@@ -135,6 +135,23 @@ void UndoController::hostRestored(const Clock::time_point now)
     publishLocked();
 }
 
+bool UndoController::applyColorBatch(const std::string_view digits, const Clock::time_point now)
+{
+    if (digits.size() < kPadCount)
+        return false;
+    record(Kind::action, now, [&] {
+        for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+            const char c = digits[pad];
+            const bool favorite = c >= 'a' && c <= 'j';
+            const int index = c - (favorite ? 'a' : '0');
+            colors_[pad].store((favorite ? kPadFavoriteBit : 0) | (index >= 0 && index <= 9 ? index : 0),
+                               std::memory_order_relaxed);
+        }
+        sampler_.setFavoriteMask(favoriteMaskOf(colors_));
+    });
+    return true;
+}
+
 void UndoController::clear()
 {
     const std::lock_guard lock(mutex_);

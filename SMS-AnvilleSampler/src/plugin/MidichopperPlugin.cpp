@@ -406,6 +406,11 @@ protected:
         if (controls_.queueStateCommand(key, value))
             return;
         if (std::strcmp(key, kUndoRequestKey) == 0) {
+            if (value != nullptr && std::strncmp(value, "colors:", 7) == 0) {
+                // Batched colour edit (AUTO COLOR / CLEAR): all pads atomically, ONE undo step, one status.
+                undo_.applyColorBatch(std::string_view(value + 7), UndoClock::now());
+                return;
+            }
             if (value != nullptr && std::strcmp(value, "undo") == 0) undo_.undo();
             else if (value != nullptr && std::strcmp(value, "redo") == 0) undo_.redo();
             return;

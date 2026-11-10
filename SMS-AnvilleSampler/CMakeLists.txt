@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SMSAnvilleSampler VERSION 1.2.63 LANGUAGES C CXX)
+project(SMSAnvilleSampler VERSION 1.2.64 LANGUAGES C CXX)
 set(ANVILLESAMPLER_PRERELEASE "")
 set(ANVILLESAMPLER_RELEASE_VERSION "${PROJECT_VERSION}")
 if(NOT ANVILLESAMPLER_PRERELEASE STREQUAL "")
@@ -468,7 +468,7 @@ if(BUILD_TESTING)
     ../Common-Src/Audio/WavCodec.cpp)
   target_include_directories(anvillesampler_pad_workflow_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin")
-  target_link_libraries(anvillesampler_pad_workflow_tests PRIVATE anvillesampler_core sms_analysis Threads::Threads)
+  target_link_libraries(anvillesampler_pad_workflow_tests PRIVATE anvillesampler_core anvillesampler_ui_controllers sms_analysis Threads::Threads)
   add_test(NAME pad-workflows COMMAND anvillesampler_pad_workflow_tests)
 
   add_executable(anvillesampler_undo_history_tests tests/undo_history_tests.cpp)

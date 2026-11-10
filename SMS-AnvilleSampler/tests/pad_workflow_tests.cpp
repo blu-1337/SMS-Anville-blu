@@ -7,6 +7,7 @@
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
 #include "UndoController.hpp"
+#include "SamplerUiSession.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1409,6 +1410,79 @@ void undoRedoRestoresState()
     check(undo.undoDepth() == 0U, "no steps right after a host restore");
 }
 
+struct RoundTripHost final : midichopper::ui::SamplerUiHost {
+    std::vector<std::pair<std::string, std::string>> sent;
+    void sendUiParameter(std::uint32_t, float) override {}
+    void sendUiState(const char* key, const std::string& value) override { sent.emplace_back(key, value); }
+    void sendUiNote(std::uint8_t, std::uint8_t) override {}
+    void repaintUi() override {}
+    bool showUiPadFileBrowser(bool, const char*) override { return false; }
+    void invalidateUiInteraction(midichopper::ui::UiInteractionInvalidation) override {}
+};
+
+// One AUTO COLOR click over 16 linked pads: UI -> plugin -> UI, replies processed in arrival order.
+void autoColorRoundTrip()
+{
+    for (const bool hotCoalescingWindow : {false, true}) {
+        MainSampleFixture fixture;
+        std::array<std::atomic<int>, kPadCount> colors{};
+        UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+        RoundTripHost host;
+        midichopper::ui::SamplerUiSession session(host);
+        session.openMainSample();
+        MainSampleStatus status;
+        status.state = MainSampleState::ready;
+        status.sourceId = 0xABCU;
+        status.frames = 16000U;
+        status.sampleRate = 48000U;
+        status.text = "loop.wav";
+        for (std::uint16_t i = 0U; i < 16U; ++i) {
+            status.slices.push_back({static_cast<std::uint16_t>(i + 1U), i * 1000U, (i + 1U) * 1000U});
+            status.links.push_back({i, static_cast<std::uint16_t>(i + 1U)});
+        }
+        status.sequence = 1U;
+        check(session.acceptState(kMainSampleStatusKey, encodeMainSampleStatus(status).c_str()), "links reach the UI");
+
+        const auto now = UndoController::Clock::now();
+        std::size_t delivered = fixture.observer.messages.size();
+        const auto deliver = [&] {
+            for (; delivered < fixture.observer.messages.size(); ++delivered) {
+                const auto& [key, value] = fixture.observer.messages[delivered];
+                session.acceptState(key.c_str(), value.c_str());
+            }
+        };
+        if (hotCoalescingWindow) {
+            // A colour edit just before the click: the coalescing window is open.
+            undo.record(UndoController::Kind::colors, now, [&] { colors[0].store(0); });
+            deliver();
+        }
+        // An older status that is still in flight when the click happens.
+        const std::string stale = fixture.observer.latest(kUndoStatusKey);
+        session.autoColorPads();
+        const auto depth = undo.undoDepth();
+        std::string batch;
+        for (const auto& [key, value] : host.sent)
+            if (key == kUndoRequestKey && value.starts_with("colors:")) batch = value;
+        check(!batch.empty() && std::count_if(host.sent.begin(), host.sent.end(), [](const auto& m) {
+                  return m.first == kUndoRequestKey; }) == 1, "AUTO COLOR sends exactly one batched request");
+        if (!stale.empty())
+            session.acceptState(kUndoStatusKey, stale.c_str()); // arrives before the plugin's reply
+        check(undo.applyColorBatch(std::string_view(batch).substr(7), now + std::chrono::milliseconds(hotCoalescingWindow ? 100 : 0)),
+              "the plugin applies the batch");
+        deliver();
+        check(undo.undoDepth() == depth + 1U, "the whole batch is one undo step");
+        for (std::uint32_t pad = 0U; pad < 16U; ++pad) {
+            const int expected = midichopper::ui::MainSampleController::spreadColor(
+                pad, static_cast<std::size_t>(8), session.mainSample().colorPress());
+            check(session.state().padColors[pad] == expected && colors[pad].load() == expected,
+                  "every pad colour (UI state and plugin) equals its slice colour after one click");
+        }
+        undo.undo();
+        deliver();
+        check(colors[5].load() == 0 && session.state().padColors[5] == 0, "undo reverts all pads in one step");
+    }
+}
+
 void undoColorStatusCarriesNewColours()
 {
     MainSampleFixture fixture;
@@ -1661,6 +1735,7 @@ int main()
     favoriteGuards();
     undoRedoRestoresState();
     undoColorStatusCarriesNewColours();
+    autoColorRoundTrip();
     undoGestureCoalescesLiveUpdates();
     padSwap();
     arrangeKeepsColours();

@@ -409,10 +409,47 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
         fHost.repaintUi();
 }
 
+bool SamplerUiSession::requestHistory(const bool undo)
+{
+    if (!(undo ? canUndo() : canRedo()))
+        return false;
+    fHost.sendUiState(midichopper::plugin::kUndoRequestKey, undo ? "undo" : "redo");
+    return true;
+}
+
 bool SamplerUiSession::acceptState(const char *key, const char *value)
 {
     if (key == nullptr || value == nullptr)
         return false;
+
+    if (std::strcmp(key, midichopper::plugin::kUndoStatusKey) == 0)
+    {
+        // "UD1;seq;undoDepth;redoDepth;" + one colour digit per pad.
+        if (std::strncmp(value, "UD1;", 4) != 0)
+            return false;
+        char *end = nullptr;
+        const char *cursor = value + 4;
+        unsigned long field[3]{};
+        for (auto &part : field) {
+            part = std::strtoul(cursor, &end, 10);
+            if (end == cursor || *end != ';')
+                return false;
+            cursor = end + 1;
+        }
+        fState.undoDepth = static_cast<int>(field[1]);
+        fState.redoDepth = static_cast<int>(field[2]);
+        const char *digits = cursor;
+        if (std::strlen(digits) >= fState.padColors.size()) {
+            for (std::size_t pad = 0; pad < fState.padColors.size(); ++pad) {
+                const int digit = digits[pad] - '0';
+                fState.padColors[pad] = digit >= 0 && digit <= 9 ? digit : 0;
+            }
+        }
+        if (fState.editorMode)
+            refreshPadWaveform();
+        fHost.repaintUi();
+        return true;
+    }
 
     if (std::strcmp(key, kMainSampleStatusKey) == 0)
     {

@@ -96,6 +96,8 @@ enum class InteractiveType : int {
     mainSampleTransport,
     mainSampleAction,
     menuMainSample,
+    historyUndo,
+    historyRedo,
 };
 
 class PadPressTracker {
@@ -580,6 +582,10 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
 
     if (uiLayout::menuButton.contains(point))
         return target(InteractiveType::menuButton);
+    if (uiLayout::historyUndo.contains(point))
+        return target(InteractiveType::historyUndo);
+    if (uiLayout::historyRedo.contains(point))
+        return target(InteractiveType::historyRedo);
 
     if (context.menuOpen) {
         if (context.menuSubmenu == uiLayout::MenuSubmenu::skin) {

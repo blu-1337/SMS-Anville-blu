@@ -267,6 +267,11 @@ void drawMainHeader(const ViewRenderContext& ctx)
     ctx.canvas.fillColor(modeColor);
     text(ctx, 1160.0f, 43.0f, ctx.state.armed ? "ARMED" : "PLAY", nullptr);
 
+    sms::ui::dpf::drawAction(ctx.canvas, uiLayout::historyUndo, "UNDO", colors.activityPlayback,
+                             ctx.state.canUndo, ctx.state.canUndo && hovered(ctx, InteractiveType::historyUndo));
+    sms::ui::dpf::drawAction(ctx.canvas, uiLayout::historyRedo, "REDO", colors.activityPlayback,
+                             ctx.state.canRedo, ctx.state.canRedo && hovered(ctx, InteractiveType::historyRedo));
+
     const bool menuHovered = hovered(ctx, InteractiveType::menuButton);
     sms::ui::dpf::drawRaisedControlSurface(ctx.canvas, uiLayout::menuButton,
                                            colors.activityPlayback,

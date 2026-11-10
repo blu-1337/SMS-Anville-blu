@@ -75,6 +75,10 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     [[nodiscard]] const PadActionController &padActions() const noexcept { return fPadActions; }
     [[nodiscard]] ChopEditorController &chopEditor() noexcept { return fChopEditor; }
     [[nodiscard]] const ChopEditorController &chopEditor() const noexcept { return fChopEditor; }
+    [[nodiscard]] bool canUndo() const noexcept { return fState.undoDepth > 0; }
+    [[nodiscard]] bool canRedo() const noexcept { return fState.redoDepth > 0; }
+    /** Asks the plugin to undo/redo; false (nothing sent) when that history is empty. */
+    bool requestHistory(bool undo);
     [[nodiscard]] MainSampleController &mainSample() noexcept { return fMainSample; }
     [[nodiscard]] const MainSampleController &mainSample() const noexcept { return fMainSample; }
     [[nodiscard]] PadActionContext padActionContext() const noexcept;

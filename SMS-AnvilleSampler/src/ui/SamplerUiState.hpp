@@ -38,6 +38,8 @@ struct SamplerUiState {
     int bank = 0;
     int layout = 0;
     int selectedPad = -1;
+    int undoDepth = 0;
+    int redoDepth = 0;
     int lastPlayedPad = -1;
     int currentPad = -1;
     bool editorMode = false;

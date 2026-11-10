@@ -204,7 +204,11 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             }
             return true;
         }
-        if (fMenu.press(fHost.applicationMenuContext(), clicked, Clock::now())) return true;
+        if (isTarget(clicked, InteractiveType::historyUndo) || isTarget(clicked, InteractiveType::historyRedo)) {
+        fSession.requestHistory(isTarget(clicked, InteractiveType::historyUndo));
+        return true;
+    }
+    if (fMenu.press(fHost.applicationMenuContext(), clicked, Clock::now())) return true;
         if (chop.active()) {
             if (beginViewportDrag(clicked, position)) return true;
             if (isTarget(clicked, InteractiveType::chopBoundary)) chop.beginBoundaryDrag(clicked.index, x);
@@ -599,6 +603,12 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
         else if (press && (key == InputKey::backspace || key == InputKey::deleteText)) main.countBackspace();
         fHost.repaintSamplerInput();
         return true; // typing owns the keyboard; digits arrive through character()
+    }
+    if (key == InputKey::undo || key == InputKey::redo) {
+        // Consumed (even when nothing happens) so the host never also acts on Ctrl+Z.
+        if (press && !fMixer.entry().target().valid() && !fSession.chopEditor().active())
+            fSession.requestHistory(key == InputKey::undo);
+        return true;
     }
     if (key == InputKey::space) {
         fHost.ignoreSamplerKeyRepeat(press);

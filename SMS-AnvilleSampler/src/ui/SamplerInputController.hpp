@@ -9,7 +9,17 @@ namespace midichopper::ui {
 
 enum class InputButton { left, middle, right, other };
 enum class InputKey { other, space, escape, commit, tab, backspace, deleteText,
-                      digit1, digit2, digit3, digit4, digit5, digit6, digit7, digit8, digit9 };
+                      digit1, digit2, digit3, digit4, digit5, digit6, digit7, digit8, digit9,
+                      undo, redo };
+
+/** Ctrl+Z undo, Ctrl+Shift+Z and Ctrl+Y redo; anything else is InputKey::other. */
+[[nodiscard]] constexpr InputKey historyKeyFor(const std::uint32_t key, const bool ctrl, const bool shift) noexcept
+{
+    if (!ctrl) return InputKey::other;
+    if (key == 'z' || key == 'Z' || key == 26U) return shift ? InputKey::redo : InputKey::undo;
+    if ((key == 'y' || key == 'Y' || key == 25U) && !shift) return InputKey::redo;
+    return InputKey::other;
+}
 
 class SamplerInputHost {
 public:

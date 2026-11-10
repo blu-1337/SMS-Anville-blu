@@ -103,6 +103,8 @@ struct ViewState {
     int dropHoverPad = -1; // Global pad a file drag would load, or -1.
     bool mainSampleMode = false;
     const MainSampleController* mainSample = nullptr;
+    bool canUndo = false;
+    bool canRedo = false;
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

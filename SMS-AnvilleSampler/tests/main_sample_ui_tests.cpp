@@ -359,6 +359,9 @@ void editorHeaderChipsFit()
     }
     check(padChoke.x + padChoke.width < padOutput.x, "CHOKE and OUT chips do not overlap");
     check(padLoop.y > padChoke.y + padChoke.height, "LOOP toggle is clear of the chips");
+    check(closeEditor.x - (padOutput.x + padOutput.width) >= 64.0f,
+          "the chips keep clear spacing from CLOSE and the menu");
+    check(padOutput.x - (padChoke.x + padChoke.width) >= 12.0f, "the chips have a clean gap between them");
     check(padLoop.x == padGlobalMixer.x && padLoop.width == padGlobalMixer.width &&
           padLoop.y >= padGlobalMixer.y + padGlobalMixer.height + 4.0f &&
           padLoop.y <= padGlobalMixer.y + padGlobalMixer.height + 16.0f,

@@ -426,14 +426,15 @@ void MainSampleController::extendSelection(const std::uint32_t frame) noexcept
         fSelectionEnd = clamped;
 }
 
-bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bool endEdge) noexcept
+bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bool endEdge,
+                                           const bool solo) noexcept
 {
     const auto slice = std::find_if(fStatus.slices.begin(), fStatus.slices.end(),
         [&](const MainSampleSlice& item) { return item.id == sliceId; });
     if (slice == fStatus.slices.end())
         return false;
     const auto edge = endEdge ? slice->end : slice->start;
-    fDrag = Drag{sliceId, endEdge, edge, edge};
+    fDrag = Drag{sliceId, endEdge, solo, edge, edge};
     return true;
 }
 
@@ -453,7 +454,10 @@ bool MainSampleController::beginEdgeDrag(const std::uint32_t frame,
         if (distance(fSelectionStart) < best) { best = distance(fSelectionStart); selection = 1; }
         if (distance(fSelectionEnd) < best) { best = distance(fSelectionEnd); selection = 2; }
     }
+    const bool prioritized = fSelectedSlice != 0U && !hasSelection();
     for (const auto& slice : fStatus.slices) {
+        if (prioritized && slice.id != fSelectedSlice)
+            continue; // The active slice wins over any closer or overlapping marker.
         if (distance(slice.start) < best) {
             best = distance(slice.start); sliceId = slice.id; endEdge = false; selection = 0;
         }
@@ -468,8 +472,9 @@ bool MainSampleController::beginEdgeDrag(const std::uint32_t frame,
         fSelectionEdge = selection;
         return true;
     }
+    const bool solo = fSelectedSlice != 0U;
     selectSlice(sliceId);
-    return beginMarkerDrag(sliceId, endEdge);
+    return beginMarkerDrag(sliceId, endEdge, solo);
 }
 
 void MainSampleController::dragTo(const std::uint32_t frame) noexcept
@@ -489,6 +494,8 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
     std::uint32_t low = 0U;
     std::uint32_t high = fStatus.frames;
     for (const auto& slice : fStatus.slices) {
+        if (fDrag->solo && slice.id != fDrag->sliceId)
+            continue;
         if (slice.end == fDrag->original && slice.start < fDrag->original &&
             (slice.id == fDrag->sliceId || !fDrag->endEdge))
             low = std::max(low, slice.start + 1U);
@@ -520,7 +527,7 @@ bool MainSampleController::endDrag()
     // The dragged slice first, then at most one neighbour sharing the boundary.
     for (const bool own : {true, false}) {
         for (auto& slice : fStatus.slices) {
-            if ((slice.id == drag.sliceId) != own)
+            if ((slice.id == drag.sliceId) != own || (drag.solo && !own))
                 continue;
             const bool movesEnd = slice.end == drag.original &&
                                   (own ? drag.endEdge : !drag.endEdge);
@@ -556,7 +563,7 @@ void MainSampleController::rebuildDisplaySlices()
         return;
     for (const bool own : {true, false}) {
         for (auto& slice : fDisplaySlices) {
-            if ((slice.id == fDrag->sliceId) != own)
+            if ((slice.id == fDrag->sliceId) != own || (fDrag->solo && !own))
                 continue;
             if (slice.end == fDrag->original && (own ? fDrag->endEdge : !fDrag->endEdge)) {
                 slice.end = fDrag->frame;

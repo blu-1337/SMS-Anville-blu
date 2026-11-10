@@ -469,12 +469,45 @@ void arrangeSendsOneRequestAndKeepsMoves()
     check(!controller.arrange() && host.requests().size() == count + 1U, "ordered pads send nothing");
 }
 
+void selectedSliceKeepsEditPriority()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    // Overlapping slices: 1 = [0,500), 2 = [400,1000).
+    check(controller.acceptStatus(status(1U, MainSampleState::ready, {{1U, 0U, 500U}, {2U, 400U, 1000U}},
+          {{0U, 1U}, {1U, 2U}}), now), "source arrives");
+    controller.selectSlice(2U);
+    const auto count = host.requests().size();
+    check(!controller.beginEdgeDrag(500U, 10U), "a first-slice marker is ignored while the second slice is selected");
+    check(controller.beginEdgeDrag(405U, 10U), "the selected slice's own edge is grabbed");
+    controller.dragTo(450U);
+    check(controller.endDrag() && host.requests().size() == count + 1U, "one request");
+    const auto edit = host.requests().back();
+    check(edit.editCount == 1U && edit.edits[0] == MainSampleSlice{2U, 450U, 1000U},
+          "only the selected slice changes");
+    check(controller.displaySlices()[0] == MainSampleSlice{1U, 0U, 500U}, "the other slice is untouched");
+
+    // A shared boundary is not moved with the selected slice.
+    controller.acceptStatus(status(2U, MainSampleState::ready, {{1U, 0U, 400U}, {2U, 400U, 1000U}},
+          {{0U, 1U}, {1U, 2U}}), now);
+    controller.selectSlice(2U);
+    check(controller.beginMarkerDrag(2U, false, true), "grab the shared boundary solo");
+    controller.dragTo(450U);
+    check(controller.endDrag() && host.requests().back().editCount == 1U &&
+          host.requests().back().edits[0] == MainSampleSlice{2U, 450U, 1000U}, "no move-both while selected");
+    controller.selectSlice(0U);
+    check(controller.beginEdgeDrag(402U, 10U), "without selection the nearest marker works");
+}
+
 int main()
 {
     queriesAndStaleReplies();
     waveformRequests();
     markerDragSendsOneEdit();
     rightDragEdges();
+    selectedSliceKeepsEditPriority();
     arrangeSendsOneRequestAndKeepsMoves();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();

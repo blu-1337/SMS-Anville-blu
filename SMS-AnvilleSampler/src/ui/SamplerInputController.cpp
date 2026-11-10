@@ -336,8 +336,22 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 const auto& slices = main.displaySlices();
                 const auto index = static_cast<std::size_t>(clicked.index / 2);
                 if (index >= slices.size()) return false;
+                const bool hadSelection = main.selectedSlice() != 0U;
+                if (hadSelection && slices[index].id != main.selectedSlice()) {
+                    // The active slice keeps priority: grab its edge if one is in reach.
+                    const auto& viewport = main.viewport();
+                    const double perPixel = static_cast<double>(viewport.end - viewport.start) /
+                                            static_cast<double>(uiLayout::mainSampleWaveform.width);
+                    if (main.beginEdgeDrag(static_cast<std::uint32_t>(
+                            viewport.frameAt(position.x, uiLayout::mainSampleWaveform)),
+                            static_cast<std::uint32_t>(perPixel * 8.0))) {
+                        fMainSampleDrag = MainSampleDrag::marker;
+                        fHost.repaintSamplerInput();
+                        return true;
+                    }
+                }
                 main.selectSlice(slices[index].id);
-                if (main.beginMarkerDrag(slices[index].id, (clicked.index & 1) != 0))
+                if (main.beginMarkerDrag(slices[index].id, (clicked.index & 1) != 0, hadSelection))
                     fMainSampleDrag = MainSampleDrag::marker;
                 fHost.repaintSamplerInput();
                 return true;

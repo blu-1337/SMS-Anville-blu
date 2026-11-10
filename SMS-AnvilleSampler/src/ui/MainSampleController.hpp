@@ -123,7 +123,8 @@ public:
     [[nodiscard]] std::uint16_t selectedSlice() const noexcept { return fSelectedSlice; }
 
     // Marker drags: boundary of one slice; a shared boundary moves both slices.
-    bool beginMarkerDrag(std::uint16_t sliceId, bool endEdge) noexcept;
+    /** solo: edit only this slice, never the neighbour sharing the boundary (a slice is selected). */
+    bool beginMarkerDrag(std::uint16_t sliceId, bool endEdge, bool solo = false) noexcept;
     void dragTo(std::uint32_t frame) noexcept;
     /**
      * Right-drag editing: picks the slice edge (or selection edge) nearest to the frame within
@@ -160,6 +161,7 @@ private:
     struct Drag {
         std::uint16_t sliceId = 0U;
         bool endEdge = false;
+        bool solo = false;
         std::uint32_t original = 0U;
         std::uint32_t frame = 0U;
     };

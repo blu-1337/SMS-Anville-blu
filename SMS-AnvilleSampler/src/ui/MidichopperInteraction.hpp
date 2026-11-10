@@ -584,10 +584,6 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
 
     if (uiLayout::menuButton.contains(point))
         return target(InteractiveType::menuButton);
-    if (uiLayout::historyUndo.contains(point))
-        return target(InteractiveType::historyUndo);
-    if (uiLayout::historyRedo.contains(point))
-        return target(InteractiveType::historyRedo);
 
     if (context.menuOpen) {
         if (context.menuSubmenu == uiLayout::MenuSubmenu::skin) {
@@ -737,6 +733,10 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
                 return target(InteractiveType::mainSampleConfirm, 1);
             return sms::ui::kNoInteractiveTarget;
         }
+        if (uiLayout::historyUndo.contains(point))
+            return target(InteractiveType::historyUndo);
+        if (uiLayout::historyRedo.contains(point))
+            return target(InteractiveType::historyRedo);
         if (uiLayout::mainSampleClose.contains(point))
             return target(InteractiveType::mainSampleClose);
         if (uiLayout::mainSampleLoad.contains(point))

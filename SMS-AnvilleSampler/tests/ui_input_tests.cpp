@@ -298,8 +298,13 @@ void undoRedoButtonsAndKeys()
     Fixture f;
     namespace L = midichopper::ui::layout;
     check(L::historyUndo.x + L::historyUndo.width <= L::historyRedo.x &&
-          L::historyRedo.x + L::historyRedo.width + 60.0f <= 1146.0f && L::historyUndo.x > 600.0f,
-          "undo/redo buttons fit between the logo and the PLAY indicator");
+          L::historyRedo.x + L::historyRedo.width == L::mainSampleWaveform.x + L::mainSampleWaveform.width &&
+          L::historyRedo.y + L::historyRedo.height <= 122.0f && L::historyUndo.y >= L::mainPanel.y,
+          "undo/redo end at the waveform's right edge, just above the hint line");
+    check(!isTarget(f.input.targetAt(center(L::historyUndo)), InteractiveType::historyUndo),
+          "no undo button outside the Main Sample view");
+    f.session.openMainSample();
+    f.states.clear();
     check(!f.session.canUndo() && !f.session.canRedo(), "buttons start disabled");
     f.click(center(L::historyUndo));
     check(f.states.empty(), "disabled undo button sends nothing");

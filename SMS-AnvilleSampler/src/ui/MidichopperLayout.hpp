@@ -41,9 +41,10 @@ inline constexpr sms::ui::Rect outputMeter{1294.0f, 140.0f, 44.0f, 476.0f};
 inline constexpr sms::ui::Rect mainPanel{24.0f, 96.0f, 934.0f, 596.0f};
 inline constexpr sms::ui::Rect sidePanel{974.0f, 96.0f, 266.0f, 596.0f};
 inline constexpr sms::ui::Rect menuButton{1208.0f, 25.0f, 32.0f, 32.0f};
-// Undo / redo of pad and slice edits, as a grouped pair well clear of the PLAY/ARMED indicator.
-inline constexpr sms::ui::Rect historyUndo{884.0f, 25.0f, 72.0f, 32.0f};
-inline constexpr sms::ui::Rect historyRedo{962.0f, 25.0f, 72.0f, 32.0f};
+// Undo / redo of pad and slice edits: a single pair in the Main Sample view, just above the hint line,
+// right-aligned to the end of the waveform window (x 936).
+inline constexpr sms::ui::Rect historyUndo{818.0f, 98.0f, 56.0f, 20.0f};
+inline constexpr sms::ui::Rect historyRedo{880.0f, 98.0f, 56.0f, 20.0f};
 enum class MenuSubmenu { none, padLayout, bankMode, skin };
 
 inline constexpr sms::ui::Rect menuPanel{1048.0f, 68.0f, 192.0f, 298.0f};

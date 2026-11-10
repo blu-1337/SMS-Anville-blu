@@ -1,4 +1,5 @@
 #include "PadStar.hpp"
+#include "PadQuickEditRenderer.hpp"
 #include "ViewRenderers.hpp"
 #include "PadViewMapping.hpp"
 #include "DPF/AnalogMaterials.hpp"
@@ -374,6 +375,8 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
             ctx.canvas, cell,
             {occupied, playing, false, ctx.state.selectedPad == pad, padHovered,
              ctx.state.pressedPad == localPad, true, padTint(ctx, pad)});
+        if (ctx.state.quickEditPad == pad && ctx.state.quickEditAxis != 0)
+            drawQuickEdit(ctx, cell);
         drawPadStar(ctx.canvas, cell, isFavoritePad(ctx, pad), padHovered);
         ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
         ctx.canvas.fontSize(11.0f);

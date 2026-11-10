@@ -389,6 +389,29 @@ void mainSampleViewRoutes()
     check(!f.session.state().editorMode && !f.session.padActions().menuOpen(),
           "pad double-click opens neither the Sample Editor nor a menu");
 
+    // The same volume/pan gestures as the main view; a click still just plays.
+    const auto quick = [&] {
+        std::size_t n = 0;
+        for (const auto& [key, value] : f.states)
+            if (key == std::string(kPadMixerStateKeys[2]) && isPadQuickEdit(value.c_str())) ++n;
+        return n;
+    };
+    f.states.clear();
+    f.click(pad);
+    check(quick() == 0, "clicking a Main Sample pad sends no mixer edit");
+    f.input.mouse(pad, InputButton::left, true);
+    f.input.motion({pad.x, pad.y + 18.0f});
+    check(f.input.quickEditPad() == 2 && f.input.quickEditAxis() == 1 && quick() == 1,
+          "vertical drag on a Main Sample pad edits its volume live");
+    f.input.mouse({pad.x, pad.y + 18.0f}, InputButton::left, false);
+    check(quick() == 2, "release ends the gesture");
+    f.input.mouse(pad, InputButton::left, true, KnobAdjustment::stepped);
+    f.input.mouse(pad, InputButton::left, false, KnobAdjustment::stepped);
+    PadQuickEditDelta reset;
+    check(quick() == 3 && decodePadQuickEdit(f.states.back().second.c_str(), reset) &&
+          reset.hasGain && reset.hasPan && reset.gainDecibels == 0.0f && reset.pan == 0.0f,
+          "Ctrl+click resets volume and pan in the Main Sample view");
+
     // Right-clicking a pad opens the same pad context menu as the main view.
     check(f.input.mouse(pad, InputButton::right, true), "right-click on a Main Sample pad is handled");
     f.input.mouse(pad, InputButton::right, false);

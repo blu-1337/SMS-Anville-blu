@@ -89,7 +89,7 @@ private:
     bool beginMainSampleWaveform(sms::ui::Point position);
     void updateMainSampleDrag(sms::ui::Point position);
     bool endMainSampleDrag(sms::ui::Point position);
-    bool pressMainSamplePad(int localPad);
+    bool pressMainSamplePad(int localPad, sms::ui::Point position, KnobAdjustment adjustment);
     [[nodiscard]] std::uint32_t snappedFrame(float x) const;
     void toggleMainSamplePreview();
     void assignSelectionToFreePad();

@@ -383,7 +383,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             if (isTarget(clicked, InteractiveType::mainSampleLoad)) { fSession.browseMainSample(); return true; }
             if (isTarget(clicked, InteractiveType::mainSampleClear)) { main.clear(); return true; }
             if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }
-            if (isTarget(clicked, InteractiveType::mainSamplePad)) return pressMainSamplePad(clicked.index);
+            if (isTarget(clicked, InteractiveType::mainSamplePad)) return pressMainSamplePad(clicked.index, position, adjustment);
             if (isTarget(clicked, InteractiveType::mainSampleOverview)) {
                 fMainSampleDrag = MainSampleDrag::overview;
                 updateMainSampleDrag(position);
@@ -790,10 +790,16 @@ void SamplerInputController::invalidate(const UiInteractionInvalidation reason)
     }
 }
 
-bool SamplerInputController::pressMainSamplePad(const int localPad)
+bool SamplerInputController::pressMainSamplePad(const int localPad, const sms::ui::Point position,
+                                                const KnobAdjustment adjustment)
 {
     auto& main = fSession.mainSample();
     const int pad = fSession.globalPad(localPad);
+    if (!main.hasSelection() && adjustment == KnobAdjustment::stepped) {
+        fSession.sendPadReset(pad);
+        fHost.repaintSamplerInput();
+        return true;
+    }
     if (main.hasSelection()) {
         main.assignSelection(static_cast<std::uint32_t>(pad));
         main.clearSelection();
@@ -807,6 +813,9 @@ bool SamplerInputController::pressMainSamplePad(const int localPad)
         main.revealRange(linked.start, linked.end, now);
     }
     fSession.pressPlaybackPad(localPad);
+    // A press that turns into a drag edits volume (vertical) or pan (horizontal), as in the main view.
+    const auto grid = fSession.padLayout().grid(uiLayout::mainSamplePads, 8.0f);
+    fQuickEdit.begin(pad, grid.cell(fSession.padLayout().visualIndex(localPad)), position);
     fHost.repaintSamplerInput();
     return true;
 }

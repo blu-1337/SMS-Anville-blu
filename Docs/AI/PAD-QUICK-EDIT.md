@@ -1,6 +1,6 @@
 # Pad quick edit
 
-Dragging a Main-view pad sets its Gain (vertical, top full and bottom muted) or Pan
+Dragging a Main-view or Main Sample-view pad sets its Gain (vertical, top full and bottom muted) or Pan
 (horizontal). A press still plays the pad; the gesture starts after 7 logical pixels and
 the first dominant axis stays locked until release (`src/ui/PadQuickEdit.hpp`).
 
@@ -17,3 +17,6 @@ plugin applies each message to the pad's live mixer settings through
 the in-progress value) and publishes the mixer blob. `UndoController::recordGesture` captures
 the state at `B` and pushes one step at `E` only if something changed. The UI keeps no copy
 that could overwrite other knobs.
+
+The Main Sample view uses the same gestures; there a click still assigns a pending
+selection, selects the linked slice and plays the pad. `renderers`: `PadQuickEditRenderer.hpp`.

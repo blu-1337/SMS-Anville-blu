@@ -299,8 +299,11 @@ void undoRedoButtonsAndKeys()
     namespace L = midichopper::ui::layout;
     check(L::historyUndo.x + L::historyUndo.width <= L::historyRedo.x &&
           L::historyRedo.x + L::historyRedo.width == L::mainSampleWaveform.x + L::mainSampleWaveform.width &&
-          L::historyRedo.y + L::historyRedo.height <= 122.0f && L::historyUndo.y >= L::mainPanel.y,
-          "undo/redo end at the waveform's right edge, just above the hint line");
+          L::historyUndo.y == L::mainSampleTransport[0].y && L::historyRedo.y == L::mainSampleTransport[0].y &&
+          L::historyUndo.height == L::mainSampleTransport[0].height &&
+          L::historyRedo.height == L::mainSampleTransport[0].height &&
+          L::historyUndo.x >= L::mainSampleTransport[5].x + L::mainSampleTransport[5].width,
+          "undo/redo sit in the header button row, same size row, right-aligned to the waveform's right edge");
     check(!isTarget(f.input.targetAt(center(L::historyUndo)), InteractiveType::historyUndo),
           "no undo button outside the Main Sample view");
     f.session.openMainSample();

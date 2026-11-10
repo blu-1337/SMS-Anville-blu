@@ -507,13 +507,10 @@ void drawMainSampleView(const ViewRenderContext& ctx)
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
     ctx.canvas.fillColor(colors.contentSecondary);
     text(ctx, 46.0f, 120.0f, "MAIN SAMPLE", nullptr);
-    ctx.canvas.fontSize(10.0f);
-    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-    text(ctx, 936.0f, 122.0f, "SPACE PLAY/STOP  1-9 PICK SLICE  DRAG, THEN CLICK A PAD", nullptr);
-    sms::ui::dpf::drawAction(ctx.canvas, uiLayout::historyUndo, "UNDO", colors.activityPlayback,
-                             ctx.state.canUndo, ctx.state.canUndo && hovered(ctx, InteractiveType::historyUndo));
-    sms::ui::dpf::drawAction(ctx.canvas, uiLayout::historyRedo, "REDO", colors.activityPlayback,
-                             ctx.state.canRedo, ctx.state.canRedo && hovered(ctx, InteractiveType::historyRedo));
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::historyUndo, "UNDO", false, colors.activityPlayback,
+                              ctx.state.canUndo && hovered(ctx, InteractiveType::historyUndo), ctx.state.canUndo);
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::historyRedo, "REDO", false, colors.activityPlayback,
+                              ctx.state.canRedo && hovered(ctx, InteractiveType::historyRedo), ctx.state.canRedo);
     if (main.hasSource()) {
         const auto drawTransport = [&](const int index, const char* label, const bool active) {
             sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleTransport[static_cast<std::size_t>(index)],

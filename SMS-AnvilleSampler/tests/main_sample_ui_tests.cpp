@@ -564,7 +564,7 @@ void snapToSliceBoundaries()
     controller.endDrag();
     using namespace layout;
     check(mainSampleTransport[5].x >= mainSampleTransport[4].x + mainSampleTransport[4].width &&
-          mainSampleTransport[5].x + mainSampleTransport[5].width < 640.0f, "SNAP sits after FIT, clear of the hint");
+          mainSampleTransport[5].x + mainSampleTransport[5].width < historyUndo.x, "SNAP sits after FIT, clear of UNDO");
 }
 
 void snapBypassWhileHeld()

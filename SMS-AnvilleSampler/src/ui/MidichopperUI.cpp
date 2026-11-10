@@ -269,7 +269,7 @@ protected:
             fMixer.menu(), fMixer.settings(),
             fFileDrop.highlightedPad() ? static_cast<int>(*fFileDrop.highlightedPad()) : -1,
             fSession.state().mainSampleMode, &fSession.mainSample(),
-            fSession.canUndo(), fSession.canRedo(),
+            fSession.canUndo(), fSession.canRedo(), fSession.dropdown(),
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();

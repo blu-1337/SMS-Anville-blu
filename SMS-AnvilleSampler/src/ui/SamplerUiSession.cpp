@@ -905,6 +905,7 @@ void SamplerUiSession::openSampleEditor(const int targetPad)
 {
     const int pad = clampPad(static_cast<float>(targetPad));
     fState.editorMode = true;
+    fDropdown = 0;
     fState.status[0] = '\0';
     if (midichopper::ui::editorPadSelectionChanged(fState.selectedPad, pad))
         selectEditorPad(pad);
@@ -1091,27 +1092,30 @@ void SamplerUiSession::toggleSampleGlobalMixer()
     fHost.repaintUi();
 }
 
-void SamplerUiSession::cycleSampleChokeGroup()
+void SamplerUiSession::toggleDropdown(const int kind)
 {
-    if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
-        fState.mixerSettingsPad != fState.selectedPad)
-        return;
-    auto settings = fState.mixerSettings;
-    settings.chokeGroup = std::fmod(std::round(settings.chokeGroup) + 1.0f,
-                                    static_cast<float>(sms::dsp::kChokeGroupCount + 1));
-    commitMixerSettings(settings);
+    fDropdown = fDropdown == kind ? 0 : (kind == 1 || kind == 2 ? kind : 0);
     fHost.repaintUi();
 }
 
-void SamplerUiSession::cycleSampleOutput()
+void SamplerUiSession::closeDropdown()
 {
-    if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
-        fState.mixerSettingsPad != fState.selectedPad)
+    if (fDropdown == 0)
         return;
-    auto settings = fState.mixerSettings;
-    settings.outputBus = std::fmod(std::round(settings.outputBus) + 1.0f,
-                                   static_cast<float>(sms::dsp::kAuxOutputCount + 1));
-    commitMixerSettings(settings);
+    fDropdown = 0;
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::chooseDropdown(const int index)
+{
+    const int kind = fDropdown;
+    fDropdown = 0;
+    if (kind != 0 && index >= 0 && index < (kind == 1 ? 9 : 17) && hasSelectedPad() &&
+        fState.editorSettingsPad == fState.selectedPad && fState.mixerSettingsPad == fState.selectedPad) {
+        auto settings = fState.mixerSettings;
+        (kind == 1 ? settings.chokeGroup : settings.outputBus) = static_cast<float>(index);
+        commitMixerSettings(settings);
+    }
     fHost.repaintUi();
 }
 

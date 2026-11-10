@@ -478,8 +478,42 @@ void midiNoteAssignsMainSampleSelection()
     check(!f.session.mainSample().hasSelection(), "the selection is consumed by the assignment");
 }
 
+void editorDropdownsSelectValues()
+{
+    Fixture f;
+    f.session.openSampleEditor(3);
+    f.deliver(f.snapshot());
+    check(f.session.state().mixerSettingsPad == 3 && f.session.dropdown() == 0, "editor ready, no list open");
+    const float chokeBefore = f.session.state().mixerSettings.chokeGroup;
+    f.session.toggleDropdown(1);
+    check(f.session.dropdown() == 1 && f.session.state().mixerSettings.chokeGroup == chokeBefore,
+          "opening the CHOKE list does not cycle the value");
+    f.session.toggleDropdown(1);
+    check(f.session.dropdown() == 0, "the chip toggles its list closed");
+    f.session.toggleDropdown(2);
+    f.session.toggleDropdown(1);
+    check(f.session.dropdown() == 1, "the other chip switches lists");
+    f.session.chooseDropdown(5);
+    check(f.session.state().mixerSettings.chokeGroup == 5.0f && f.session.dropdown() == 0,
+          "picking CHOKE 5 sets it and closes the list");
+    f.session.toggleDropdown(2);
+    f.session.chooseDropdown(16);
+    check(f.session.state().mixerSettings.outputBus == 16.0f && f.session.dropdown() == 0,
+          "picking OUT 16 sets it");
+    f.session.toggleDropdown(2);
+    f.session.chooseDropdown(0);
+    check(f.session.state().mixerSettings.outputBus == 0.0f, "OUT item 0 is Main");
+    f.session.toggleDropdown(1);
+    f.session.chooseDropdown(9);
+    check(f.session.state().mixerSettings.chokeGroup == 5.0f, "an item past the list changes nothing");
+    f.session.toggleDropdown(1);
+    f.session.closeDropdown();
+    check(f.session.dropdown() == 0, "closeDropdown dismisses the list");
+}
+
 int main()
 {
+    editorDropdownsSelectValues();
     midiNoteAssignsMainSampleSelection();
     optimisticParametersAndArmOrdering();
     captureAndPhysicalMidiOwnership();

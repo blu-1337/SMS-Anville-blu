@@ -138,10 +138,12 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void commitMixerSettings(const sms::dsp::SampleMixerSettings &settings);
     void flipSampleDirection();
     void toggleSampleGlobalMixer();
-    /** Cycles the selected pad's choke group Off, 1..8, Off. */
-    void cycleSampleChokeGroup();
-    /** Cycles the selected pad's output Main, Out 1..16, Main. */
-    void cycleSampleOutput();
+    /** Sample Editor drop-down lists: kind 1 = CHOKE (Off, 1..8), 2 = OUT (Main, 1..16). */
+    [[nodiscard]] int dropdown() const noexcept { return fState.editorMode ? fDropdown : 0; }
+    void toggleDropdown(int kind);
+    void closeDropdown();
+    /** Applies list item `index` to the selected pad and closes the list. */
+    void chooseDropdown(int index);
     void toggleSampleHoldLoop();
 
   private:
@@ -188,6 +190,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     SamplerUiState fState;
     PadPressTracker fPadPress;
     int fEditorAuditionPad = -1;
+    int fDropdown = 0;
     bool fEditorAuditionLoop = false;
     bool fCaptureTargetRequestAlternateHalf = false;
     plugin::PlaybackPadEventTracker fPlaybackPadEvents;

@@ -361,6 +361,21 @@ void editorHeaderChipsFit()
     check(padLoop.y > padChoke.y + padChoke.height, "LOOP toggle is clear of the chips");
     check(closeEditor.x - (padOutput.x + padOutput.width) >= 64.0f,
           "the chips keep clear spacing from CLOSE and the menu");
+    for (const int kind : {1, 2}) {
+        const auto box = dropdownBox(kind);
+        check(box.x >= 0.0f && box.x + box.width <= closeEditor.x && box.y > (kind == 1 ? padChoke : padOutput).y,
+              "a drop-down sits under its chip and clear of the right-hand panel");
+        for (int item = 0; item < dropdownCount(kind); ++item) {
+            const auto cell = dropdownItem(kind, item);
+            check(cell.x >= box.x && cell.y >= box.y && cell.x + cell.width <= box.x + box.width &&
+                  cell.y + cell.height <= box.y + box.height, "list items stay inside the list");
+            if (item > 0) {
+                const auto prev = dropdownItem(kind, item - 1);
+                check(!(cell.x == prev.x && cell.y == prev.y), "list items are distinct cells");
+            }
+        }
+    }
+    check(dropdownCount(1) == 9 && dropdownCount(2) == 17, "CHOKE lists Off+1-8, OUT lists Main+1-16");
     check(padOutput.x - (padChoke.x + padChoke.width) >= 12.0f, "the chips have a clean gap between them");
     check(padLoop.x == padGlobalMixer.x && padLoop.width == padGlobalMixer.width &&
           padLoop.y >= padGlobalMixer.y + padGlobalMixer.height + 4.0f &&

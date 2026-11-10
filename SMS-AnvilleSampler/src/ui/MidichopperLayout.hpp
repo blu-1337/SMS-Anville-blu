@@ -174,6 +174,27 @@ inline constexpr sms::ui::Rect padOutput{800.0f, 112.0f, 120.0f, 28.0f};
 // HOLD-mode loop toggle, directly under the GLOBAL MIXER button (same x and width).
 inline constexpr sms::ui::Rect padLoop{879.0f, 646.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect padChoke{664.0f, 112.0f, 120.0f, 28.0f};
+// Drop-down lists under the CHOKE (kind 1: Off, 1-8) and OUT (kind 2: Main, 1-16) chips.
+inline constexpr float dropdownCellWidth = 56.0f;
+inline constexpr float dropdownCellHeight = 24.0f;
+inline constexpr float dropdownInset = 4.0f;
+inline constexpr int dropdownColumns = 3;
+[[nodiscard]] constexpr int dropdownCount(const int kind) noexcept { return kind == 1 ? 9 : 17; }
+[[nodiscard]] constexpr sms::ui::Rect dropdownBox(const int kind) noexcept
+{
+    const sms::ui::Rect anchor = kind == 1 ? padChoke : padOutput;
+    const int rows = (dropdownCount(kind) + dropdownColumns - 1) / dropdownColumns;
+    return {anchor.x, anchor.y + anchor.height + 2.0f,
+            dropdownColumns * dropdownCellWidth + 2.0f * dropdownInset,
+            static_cast<float>(rows) * dropdownCellHeight + 2.0f * dropdownInset};
+}
+[[nodiscard]] constexpr sms::ui::Rect dropdownItem(const int kind, const int index) noexcept
+{
+    const auto box = dropdownBox(kind);
+    return {box.x + dropdownInset + static_cast<float>(index % dropdownColumns) * dropdownCellWidth,
+            box.y + dropdownInset + static_cast<float>(index / dropdownColumns) * dropdownCellHeight,
+            dropdownCellWidth, dropdownCellHeight};
+}
 inline constexpr sms::ui::Rect padDirection{64.0f, 604.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect globalDirection{1007.0f, 428.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect finalizeAction{994.0f, 610.0f, 70.0f, 34.0f};

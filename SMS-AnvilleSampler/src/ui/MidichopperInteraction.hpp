@@ -98,6 +98,7 @@ enum class InteractiveType : int {
     menuMainSample,
     historyUndo,
     historyRedo,
+    dropdownItem,
 };
 
 class PadPressTracker {
@@ -473,6 +474,7 @@ struct InteractionContext {
     bool mainSampleHasSource = false;
     bool holdPlayback = false; // global playback mode is HOLD (per-pad LOOP toggle visible)
     bool mainSampleConfirm = false;
+    int dropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
     std::span<const plugin::MainSampleSlice> mainSampleSlices;
     sms::ui::waveform::Viewport mainSampleViewport;
     bool menuOpen = false;
@@ -666,6 +668,11 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         return sms::ui::kNoInteractiveTarget;
     }
     if (context.editorMode) {
+        if (context.dropdown != 0) {
+            for (int item = 0; item < uiLayout::dropdownCount(context.dropdown); ++item)
+                if (uiLayout::dropdownItem(context.dropdown, item).contains(point))
+                    return target(InteractiveType::dropdownItem, item);
+        }
         if (uiLayout::closeEditor.contains(point))
             return target(InteractiveType::closeEditor);
         if (context.waveformViewport.total != 0U) {

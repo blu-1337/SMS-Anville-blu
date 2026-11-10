@@ -105,6 +105,7 @@ struct ViewState {
     const MainSampleController* mainSample = nullptr;
     bool canUndo = false;
     bool canRedo = false;
+    int editorDropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

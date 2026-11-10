@@ -256,6 +256,7 @@ void drawSampleEditorView(const ViewRenderContext& ctx)
 {
     drawSampleEditor(ctx);
     drawEditorPadPanel(ctx);
+    drawEditorDropdown(ctx);
 }
 
 } // namespace midichopper::ui::rendering

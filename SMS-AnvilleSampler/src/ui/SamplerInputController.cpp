@@ -59,6 +59,7 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.mainSampleMode = s.mainSampleMode;
     context.mainSampleHasSource = fSession.mainSample().hasSource();
     context.holdPlayback = fSession.state().playbackMode >= 0.5f;
+    context.dropdown = fSession.dropdown();
     context.mainSampleConfirm = fSession.mainSample().confirmPending();
     context.mainSampleSlices = fSession.mainSample().displaySlices();
     context.mainSampleViewport = fSession.mainSample().viewport();
@@ -237,6 +238,17 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             return true;
         }
         if (s.editorMode) {
+            if (fSession.dropdown() != 0) {
+                if (isTarget(clicked, InteractiveType::dropdownItem))
+                    fSession.chooseDropdown(clicked.index);
+                else if (isTarget(clicked, InteractiveType::padChoke))
+                    fSession.toggleDropdown(1);
+                else if (isTarget(clicked, InteractiveType::padOutput))
+                    fSession.toggleDropdown(2);
+                else
+                    fSession.closeDropdown();
+                return true; // an open list swallows the click that dismisses it
+            }
             if (beginViewportDrag(clicked, position)) return true;
             if (isTarget(clicked, InteractiveType::playStop)) {
                 fPlayButtonPressCaptured = true;
@@ -252,7 +264,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 return true;
             }
             if (isTarget(clicked, InteractiveType::padOutput)) {
-                fSession.cycleSampleOutput();
+                fSession.toggleDropdown(2);
                 return true;
             }
             if (isTarget(clicked, InteractiveType::padLoop)) {
@@ -260,7 +272,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 return true;
             }
             if (isTarget(clicked, InteractiveType::padChoke)) {
-                fSession.cycleSampleChokeGroup();
+                fSession.toggleDropdown(1);
                 return true;
             }
             if (fMixer.sampleMixerPress(mixerContext(), clicked, position, adjustment)) {
@@ -651,6 +663,10 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
         return true;
     }
     if (!press || key != InputKey::escape) return false;
+    if (fSession.dropdown() != 0) {
+        fSession.closeDropdown();
+        return true;
+    }
     if (fSession.padActions().menuOpen()) {
         fSession.padActions().closeMenu();
         fHost.repaintSamplerInput();

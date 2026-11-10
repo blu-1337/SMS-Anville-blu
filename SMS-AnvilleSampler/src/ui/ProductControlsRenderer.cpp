@@ -295,6 +295,46 @@ void drawOutputSelector(const ViewRenderContext& ctx)
     text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f, label, nullptr);
 }
 
+void drawEditorDropdown(const ViewRenderContext& ctx)
+{
+    const int kind = ctx.state.editorDropdown;
+    if (kind != 1 && kind != 2)
+        return;
+    const auto& colors = sms::ui::dpf::theme();
+    const auto box = uiLayout::dropdownBox(kind);
+    const int current = static_cast<int>((kind == 1 ? ctx.state.mixerSettings.chokeGroup
+                                                    : ctx.state.mixerSettings.outputBus) + 0.5f);
+    ctx.canvas.beginPath();
+    ctx.canvas.roundedRect(box.x, box.y, box.width, box.height, 5.0f);
+    ctx.canvas.fillColor(colors.recess);
+    ctx.canvas.fill();
+    ctx.canvas.strokeColor(colors.controlAccent);
+    ctx.canvas.strokeWidth(1.5f);
+    ctx.canvas.stroke();
+    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    ctx.canvas.fontSize(11.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    for (int item = 0; item < uiLayout::dropdownCount(kind); ++item) {
+        const auto cell = uiLayout::dropdownItem(kind, item);
+        const bool selected = item == current;
+        const bool hot = ctx.state.hoveredTarget.is(static_cast<int>(InteractiveType::dropdownItem)) &&
+                         ctx.state.hoveredTarget.index == item;
+        if (selected || hot) {
+            ctx.canvas.beginPath();
+            ctx.canvas.roundedRect(cell.x + 1.0f, cell.y + 1.0f, cell.width - 2.0f, cell.height - 2.0f, 4.0f);
+            ctx.canvas.fillColor(colors.controlAccent.withAlpha(selected ? 0.35f : 0.18f));
+            ctx.canvas.fill();
+        }
+        char label[8];
+        if (item == 0)
+            std::snprintf(label, sizeof(label), kind == 1 ? "OFF" : "MAIN");
+        else
+            std::snprintf(label, sizeof(label), "%d", item);
+        ctx.canvas.fillColor(selected ? colors.controlAccent : colors.contentPrimary);
+        text(ctx, cell.x + cell.width * 0.5f, cell.y + cell.height * 0.5f, label, nullptr);
+    }
+}
+
 void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
                      const InteractiveType type, const float slope)
 {

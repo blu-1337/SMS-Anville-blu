@@ -81,8 +81,8 @@ are unaffected.
 
 ## Choke groups
 
-The Sample Editor has a **CHOKE** button beside the Global Mixer button. Click it to cycle the pad
-through Off and groups 1 to 8. When a pad starts, from MIDI, the mouse or an audition, every
+The Sample Editor has a **CHOKE** button beside the Global Mixer button. Click it to open a list, then pick
+Off or a group from 1 to 8. When a pad starts, from MIDI, the mouse or an audition, every
 other playing pad in the same group fades out over 5 ms and stops. Retriggering the same pad
 works as before. Cut voices do not count toward the voice limit. The group is stored with the
 pad's mixer settings and follows copy, move and split.
@@ -90,7 +90,7 @@ pad's mixer settings and follows copy, move and split.
 ## Multi-out
 
 The plugin has 16 auxiliary stereo outputs after the main pair. In the Sample Editor, the
-**OUTPUT** button cycles a pad through Main and Out 1 to 16. A pad on Out N plays only on that
+**OUT** chip opens a list to pick Main or Out 1 to 16 for the pad. A pad on Out N plays only on that
 output, not on Main. Main keeps its level control and monitoring. In FL Studio, open the plugin
 wrapper's Processing tab and route each output to a mixer track. If the host leaves an output
 disabled, that pad is silent.

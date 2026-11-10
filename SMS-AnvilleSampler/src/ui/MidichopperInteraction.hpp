@@ -101,6 +101,7 @@ enum class InteractiveType : int {
     historyUndo,
     historyRedo,
     dropdownItem,
+    mainSampleModeItem,
 };
 
 class PadPressTracker {
@@ -477,6 +478,7 @@ struct InteractionContext {
     bool perBankMidi = false; // MIDI bank mode is "selected bank" (not continuous)
     bool holdPlayback = false; // global playback mode is HOLD (per-pad LOOP toggle visible)
     bool mainSampleConfirm = false;
+    bool mainSampleModeMenu = false; // auto-chop mode list is open
     int dropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
     std::span<const plugin::MainSampleSlice> mainSampleSlices;
     sms::ui::waveform::Viewport mainSampleViewport;
@@ -761,6 +763,11 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             if (uiLayout::mainSampleCancel.contains(point))
                 return target(InteractiveType::mainSampleConfirm, 1);
             return sms::ui::kNoInteractiveTarget;
+        }
+        if (context.mainSampleModeMenu) {
+            for (int item = 0; item < uiLayout::kAutoChopModeCount; ++item)
+                if (uiLayout::autoChopModeItem(item).contains(point))
+                    return target(InteractiveType::mainSampleModeItem, item);
         }
         if (uiLayout::historyUndo.contains(point))
             return target(InteractiveType::historyUndo);

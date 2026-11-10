@@ -473,6 +473,14 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
         ctx.canvas.scissor(msg.x, msg.y, msg.width, msg.height);
         text(ctx, msg.x, msg.y, main.autoChopMessage().c_str(), nullptr);
         ctx.canvas.restore();
+        if (main.modeMenuOpen()) {
+            for (int item = 0; item < uiLayout::kAutoChopModeCount; ++item)
+                sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::autoChopModeItem(item),
+                                          MainSampleController::autoChopModeLabel(item),
+                                          MainSampleController::autoChopModeAt(item) == main.autoChopMode(),
+                                          colors.activityPlayback,
+                                          hovered(ctx, InteractiveType::mainSampleModeItem, item));
+        }
     }
 
     const auto status = uiLayout::mainSampleStatus;

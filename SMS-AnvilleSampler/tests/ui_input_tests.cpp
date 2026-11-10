@@ -412,6 +412,28 @@ void mainSampleViewRoutes()
           reset.hasGain && reset.hasPan && reset.gainDecibels == 0.0f && reset.pan == 0.0f,
           "Ctrl+click resets volume and pan in the Main Sample view");
 
+    // The auto-chop mode is a dropdown list, not a cycle.
+    auto& mainSample = f.session.mainSample();
+    check(!mainSample.modeMenuOpen() && mainSample.autoChopMode() == AutoChopMode::transient, "mode starts closed");
+    f.click(center(layout::autoChopMode));
+    check(mainSample.modeMenuOpen() && mainSample.autoChopMode() == AutoChopMode::transient,
+          "clicking the mode opens the list without changing it");
+    check(isTarget(f.input.targetAt(center(layout::autoChopModeItem(3))), InteractiveType::mainSampleModeItem, 3),
+          "list rows are targets");
+    f.click(center(layout::autoChopModeItem(3)));
+    check(!mainSample.modeMenuOpen() && mainSample.autoChopMode() == AutoChopMode::equal,
+          "choosing a row sets the mode and closes the list");
+    f.click(center(layout::autoChopMode));
+    f.click({10.0f, 10.0f});
+    check(!mainSample.modeMenuOpen() && mainSample.autoChopMode() == AutoChopMode::equal,
+          "an outside click closes the list and keeps the mode");
+    f.click(center(layout::autoChopMode));
+    check(f.input.keyboard(InputKey::escape, true) && !mainSample.modeMenuOpen() && f.session.state().mainSampleMode,
+          "Escape closes the list and stays in the Main Sample view");
+    f.click(center(layout::autoChopMode));
+    f.click(center(layout::autoChopMode));
+    check(!mainSample.modeMenuOpen(), "clicking the mode again closes the list");
+
     // Right-clicking a pad opens the same pad context menu as the main view.
     check(f.input.mouse(pad, InputButton::right, true), "right-click on a Main Sample pad is handled");
     f.input.mouse(pad, InputButton::right, false);

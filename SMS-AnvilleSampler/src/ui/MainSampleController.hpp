@@ -109,6 +109,13 @@ public:
     // Auto chop (AC1): panel settings, request and reply. Pad and slice effects
     // arrive through the usual main_sample_status.
     void cycleAutoChopMode() noexcept;
+    /** Auto-chop mode dropdown (index 0..5 in the cycle order). */
+    [[nodiscard]] bool modeMenuOpen() const noexcept { return fModeMenu; }
+    void toggleModeMenu() noexcept { fModeMenu = !fModeMenu; fHost.repaintMainSample(); }
+    void closeModeMenu() noexcept { if (fModeMenu) { fModeMenu = false; fHost.repaintMainSample(); } }
+    void chooseAutoChopMode(int index) noexcept;
+    [[nodiscard]] static const char* autoChopModeLabel(int index) noexcept;
+    [[nodiscard]] static plugin::AutoChopMode autoChopModeAt(int index) noexcept;
     void adjustAutoChopCount(int delta) noexcept;
     void adjustAutoChopFirstPad(int delta) noexcept;
     /** Click on the count field; the second click within 400 ms starts typing the count. */
@@ -296,6 +303,7 @@ private:
     std::uint32_t fSpectrogramVersion = 0U;
     Time fSpectrogramDeadline{};
     plugin::AutoChopMode fAutoMode = plugin::AutoChopMode::transient;
+    bool fModeMenu = false;
     std::uint32_t fAutoCount = 16U;
     std::uint32_t fAutoFirstPad = 0U;
     std::uint64_t fAutoSequence = 0U;

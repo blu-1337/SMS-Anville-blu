@@ -822,6 +822,34 @@ int MainSampleController::sliceForPad(const std::uint32_t pad) const noexcept
 
 namespace midichopper::ui {
 
+plugin::AutoChopMode MainSampleController::autoChopModeAt(const int index) noexcept
+{
+    constexpr plugin::AutoChopMode order[] = {
+        plugin::AutoChopMode::transient, plugin::AutoChopMode::spectral, plugin::AutoChopMode::findSamples,
+        plugin::AutoChopMode::equal, plugin::AutoChopMode::beat, plugin::AutoChopMode::random};
+    return order[std::clamp(index, 0, 5)];
+}
+
+const char* MainSampleController::autoChopModeLabel(const int index) noexcept
+{
+    switch (autoChopModeAt(index)) {
+    case plugin::AutoChopMode::transient: return "TRANSIENT";
+    case plugin::AutoChopMode::spectral: return "TRANSIENT 2";
+    case plugin::AutoChopMode::findSamples: return "FIND SAMPLES";
+    case plugin::AutoChopMode::equal: return "EQUAL";
+    case plugin::AutoChopMode::beat: return "BEAT";
+    case plugin::AutoChopMode::random: return "RANDOM";
+    }
+    return "";
+}
+
+void MainSampleController::chooseAutoChopMode(const int index) noexcept
+{
+    fAutoMode = autoChopModeAt(index);
+    fModeMenu = false;
+    fHost.repaintMainSample();
+}
+
 const char* MainSampleController::autoChopModeName() const noexcept
 {
     switch (fAutoMode) {

@@ -63,6 +63,7 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.dropdown = fSession.dropdown();
     context.perBankMidi = fSession.state().midiBankMode == 0;
     context.mainSampleConfirm = fSession.mainSample().confirmPending();
+    context.mainSampleModeMenu = fSession.mainSample().modeMenuOpen();
     context.mainSampleSlices = fSession.mainSample().displaySlices();
     context.mainSampleViewport = fSession.mainSample().viewport();
     context.menuOpen = fMenu.open();
@@ -339,6 +340,12 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fHost.repaintSamplerInput();
                 return true;
             }
+            if (main.modeMenuOpen()) {
+                if (isTarget(clicked, InteractiveType::mainSampleModeItem)) main.chooseAutoChopMode(clicked.index);
+                else main.closeModeMenu(); // the dismissing click is swallowed, like the editor lists
+                fHost.repaintSamplerInput();
+                return true;
+            }
             if (main.countEditing() &&
                 !(isTarget(clicked, InteractiveType::mainSampleAutoChop) && clicked.index == 6))
                 main.commitCount();
@@ -346,7 +353,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             if (isTarget(clicked, InteractiveType::mainSampleClose)) { fSession.closeMainSample(); return true; }
             if (isTarget(clicked, InteractiveType::mainSampleAutoChop)) {
                 switch (clicked.index) {
-                case 0: main.cycleAutoChopMode(); break;
+                case 0: main.toggleModeMenu(); break;
                 case 1: main.adjustAutoChopCount(-1); break;
                 case 2: main.adjustAutoChopCount(1); break;
                 case 3: main.adjustAutoChopFirstPad(-1); break;
@@ -719,6 +726,11 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
     if (!press || key != InputKey::escape) return false;
     if (fSession.dropdown() != 0) {
         fSession.closeDropdown();
+        return true;
+    }
+    if (fSession.mainSample().modeMenuOpen()) {
+        fSession.mainSample().closeModeMenu();
+        fHost.repaintSamplerInput();
         return true;
     }
     if (fSession.padActions().menuOpen()) {

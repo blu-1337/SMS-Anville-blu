@@ -183,13 +183,19 @@ void assignConfirmDeleteAndPreview()
     check(!controller.assignSelection(0U), "assign needs a selection");
     controller.beginSelection(700U);
     controller.extendSelection(100U);
+    check(controller.selectionStart() == 100U && controller.selectionEnd() == 700U,
+          "dragging left of the anchor selects back to the pointer");
     controller.extendSelection(900U);
-    check(controller.selectionStart() == 100U && controller.selectionEnd() == 900U,
-          "the selection grows in both directions");
+    check(controller.selectionStart() == 700U && controller.selectionEnd() == 900U,
+          "dragging back across the anchor flips direction and never re-anchors");
+    controller.extendSelection(400U);
+    controller.extendSelection(400U);
+    check(controller.selectionStart() == 400U && controller.selectionEnd() == 700U,
+          "the anchor is fixed for the whole drag");
     check(controller.assignSelection(5U), "assign the selection");
     const auto assign = host.requests().back();
-    check(assign.verb == MainSampleVerb::assign && assign.pad == 5U && assign.start == 100U &&
-          assign.end == 900U && !assign.confirm, "A carries the pad and range");
+    check(assign.verb == MainSampleVerb::assign && assign.pad == 5U && assign.start == 400U &&
+          assign.end == 700U && !assign.confirm, "A carries the pad and range");
     check(controller.acceptStatus(status(assign.sequence, MainSampleState::confirm, {}, {},
                                          std::uint64_t{1} << 5U), now) &&
           controller.confirmPending(), "CONFIRM for the pad waits for the user");

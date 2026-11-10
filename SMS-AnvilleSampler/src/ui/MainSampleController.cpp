@@ -413,17 +413,16 @@ std::uint32_t MainSampleController::clampFrame(const std::uint32_t frame) const 
 
 void MainSampleController::beginSelection(const std::uint32_t frame) noexcept
 {
-    fSelectionStart = fSelectionEnd = clampFrame(frame);
+    fSelectionStart = fSelectionEnd = fSelectionAnchor = clampFrame(frame);
     fDrag.reset();
 }
 
 void MainSampleController::extendSelection(const std::uint32_t frame) noexcept
 {
     const auto clamped = clampFrame(frame);
-    if (clamped < fSelectionStart)
-        fSelectionStart = clamped;
-    else
-        fSelectionEnd = clamped;
+    // The anchor stays at the mouse-down frame; crossing it only flips the direction.
+    fSelectionStart = std::min(fSelectionAnchor, clamped);
+    fSelectionEnd = std::max(fSelectionAnchor, clamped);
 }
 
 bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bool endEdge,

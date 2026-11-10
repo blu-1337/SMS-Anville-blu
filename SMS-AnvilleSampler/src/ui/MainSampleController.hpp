@@ -217,6 +217,7 @@ private:
     std::uint32_t fPlayStart = 0U;
     std::uint32_t fPlayEnd = 0U;
     float fPreviewPosition = 0.0f;
+    std::uint32_t fSelectionAnchor = 0U;
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;
     std::uint16_t fSelectedSlice = 0U;

@@ -117,7 +117,8 @@ void drawPadPanel(const ViewRenderContext& ctx)
                              DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
         ctx.canvas.fillColor(occupied || recording ? colors.contentPrimary
                                                    : colors.contentSecondary);
-        text(ctx, cell.x + cell.width * 0.5f, cell.y + cell.height * 0.54f, note, nullptr);
+        if (!(ctx.state.quickEditPad == pad && (ctx.state.quickEditAxis == 1 || ctx.state.quickEditAxis == 2)))
+            text(ctx, cell.x + cell.width * 0.5f, cell.y + cell.height * 0.54f, note, nullptr); // the readout owns the centre
         ctx.canvas.fontSize(10.0f);
         ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT |
                              DGL_NAMESPACE::NanoVG::ALIGN_BOTTOM);

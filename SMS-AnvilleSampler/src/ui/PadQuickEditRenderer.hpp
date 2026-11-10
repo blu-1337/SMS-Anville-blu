@@ -81,11 +81,16 @@ inline void drawQuickEdit(const ViewRenderContext& ctx, const sms::ui::Rect& cel
                                line2, sizeof(line2));
     canvas.resetScissor();
     canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
-    canvas.fontSize(15.0f);
+    // Size follows the pad so both lines stay legible and apart at any scale.
+    const float size = std::clamp(std::min(cell.height * 0.22f, cell.width * 0.2f), 11.0f, 20.0f);
+    const float centreX = cell.x + cell.width * 0.5f;
+    const float centreY = cell.y + cell.height * 0.5f;
+    const float offset = line2[0] ? size * 0.85f : 0.0f;
+    canvas.fontSize(size);
     canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
     canvas.fillColor(Color(1.0f, 1.0f, 1.0f, 0.95f));
-    canvas.text(cell.x + cell.width * 0.5f, cell.y + cell.height * (line2[0] ? 0.28f : 0.32f), line1, nullptr);
-    if (line2[0]) canvas.text(cell.x + cell.width * 0.5f, cell.y + cell.height * 0.42f, line2, nullptr);
+    canvas.text(centreX, centreY - offset, line1, nullptr);
+    if (line2[0]) canvas.text(centreX, centreY + offset, line2, nullptr);
 }
 
 } // namespace midichopper::ui::rendering

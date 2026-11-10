@@ -392,7 +392,9 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
         std::snprintf(label, sizeof(label), "%02d", localPad + 1);
         text(ctx, cell.x + 10.0f, cell.y + 8.0f, label, nullptr);
         const int slice = main.sliceForPad(static_cast<std::uint32_t>(pad));
-        if (slice >= 0) {
+        const bool readout = ctx.state.quickEditPad == pad &&
+            (ctx.state.quickEditAxis == 1 || ctx.state.quickEditAxis == 2);
+        if (slice >= 0 && !readout) { // the volume/pan readout owns the centre
             char number[16];
             std::snprintf(number, sizeof(number), "S%d", slice + 1);
             ctx.canvas.fontSize(20.0f);

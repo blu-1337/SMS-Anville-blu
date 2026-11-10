@@ -483,6 +483,21 @@ void spreadColorsContrast()
           "a new press changes the colours");
 }
 
+void autoColorPressesAndClear()
+{
+    Host host;
+    MainSampleController controller(host);
+    check(controller.colorPress() == 0U && !controller.neutralZones(), "default colours");
+    (void)controller.autoColor(6U);
+    check(controller.colorPress() == 1U, "press counted");
+    (void)controller.autoColor(6U);
+    check(controller.colorPress() == 2U, "a new press, a new spread");
+    controller.clearColors();
+    check(controller.neutralZones() && controller.colorPress() == 0U, "clear neutralises zones");
+    (void)controller.autoColor(6U);
+    check(!controller.neutralZones(), "auto colour brings the zones back");
+}
+
 void selectedSliceKeepsEditPriority()
 {
     Host host;
@@ -523,6 +538,7 @@ int main()
     rightDragEdges();
     selectedSliceKeepsEditPriority();
     spreadColorsContrast();
+    autoColorPressesAndClear();
     arrangeSendsOneRequestAndKeepsMoves();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();

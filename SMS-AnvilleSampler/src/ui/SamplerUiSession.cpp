@@ -1149,6 +1149,20 @@ void SamplerUiSession::applyArrangedColors(const std::vector<plugin::ArrangeMove
         setPadColor(static_cast<int>(moves[index].to), colors[index]);
 }
 
+void SamplerUiSession::autoColorPads()
+{
+    for (const auto& [pad, color] : fMainSample.autoColor(static_cast<std::size_t>(fCapabilities.colorCount)))
+        if (pad < midichopper::kPadCount)
+            setPadColor(static_cast<int>(pad), color);
+}
+
+void SamplerUiSession::clearPadColors()
+{
+    fMainSample.clearColors();
+    for (int pad = 0; pad < static_cast<int>(midichopper::kPadCount); ++pad)
+        setPadColor(pad, 0);
+}
+
 void SamplerUiSession::setPadColor(const int pad, const int color)
 {
     const auto index = static_cast<std::size_t>(pad);

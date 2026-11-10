@@ -718,4 +718,16 @@ int MainSampleController::spreadColor(const std::size_t rank, const std::size_t 
     return static_cast<int>(index) + 1;
 }
 
+std::vector<std::pair<std::uint32_t, int>> MainSampleController::autoColor(const std::size_t paletteSize)
+{
+    ++fColorPress;
+    fNeutralZones = false;
+    std::vector<std::pair<std::uint32_t, int>> result;
+    for (const auto& link : fStatus.links)
+        for (std::size_t index = 0U; index < fDisplaySlices.size(); ++index)
+            if (fDisplaySlices[index].id == link.sliceId)
+                result.emplace_back(link.pad, spreadColor(index, paletteSize, fColorPress));
+    return result;
+}
+
 } // namespace midichopper::ui

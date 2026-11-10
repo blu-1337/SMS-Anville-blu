@@ -76,6 +76,16 @@ public:
      */
     [[nodiscard]] static int spreadColor(std::size_t rank, std::size_t paletteSize,
                                          std::size_t press) noexcept;
+    /**
+     * AUTO COLOR: advances the press counter (a new spread each time) and returns the colour
+     * of every linked pad as (global pad, 1-based palette index). Unlinked zones follow the
+     * same spread. Local only; the session stores the pad colours.
+     */
+    [[nodiscard]] std::vector<std::pair<std::uint32_t, int>> autoColor(std::size_t paletteSize);
+    /** CLEAR COLORS: zones become neutral until the next AUTO COLOR; the session resets the pads. */
+    void clearColors() noexcept { fColorPress = 0U; fNeutralZones = true; }
+    [[nodiscard]] std::size_t colorPress() const noexcept { return fColorPress; }
+    [[nodiscard]] bool neutralZones() const noexcept { return fNeutralZones; }
     /** Moves of the arrange the plug-in confirmed; empty until its reply. Consumed once. */
     [[nodiscard]] std::vector<plugin::ArrangeMove> takeArrangedMoves();
     bool deleteSlice(std::uint16_t sliceId);
@@ -200,6 +210,8 @@ private:
     std::uint32_t fSelectionStart = 0U;
     std::uint32_t fSelectionEnd = 0U;
     std::uint16_t fSelectedSlice = 0U;
+    std::size_t fColorPress = 0U;
+    bool fNeutralZones = false;
     std::vector<plugin::ArrangeMove> fArrangeMoves;   // sent, awaiting the reply
     std::uint64_t fArrangeSequence = 0U;
     std::vector<plugin::ArrangeMove> fArrangeConfirmed;

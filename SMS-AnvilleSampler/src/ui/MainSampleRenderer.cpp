@@ -114,8 +114,10 @@ const DGL_NAMESPACE::Color* zoneTint(const ViewRenderContext& ctx, const MainSam
     const auto& slices = main.displaySlices();
     if (const auto* tint = padTint(ctx, padForSlice(main, slices[index].id)); tint != nullptr)
         return tint;
+    if (main.neutralZones())
+        return nullptr;
     const auto& palette = sms::ui::dpf::theme().padColors;
-    const int color = MainSampleController::spreadColor(index, palette.size(), 0U);
+    const int color = MainSampleController::spreadColor(index, palette.size(), main.colorPress());
     return color > 0 ? &palette[static_cast<std::size_t>(color - 1)].tint : nullptr;
 }
 

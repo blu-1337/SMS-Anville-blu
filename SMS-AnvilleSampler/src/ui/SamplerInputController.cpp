@@ -108,6 +108,19 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
     if (fMixer.menu().active() && press)
         return fMixer.menuPress(mixerButton(button), targetAt(position), position);
     if (button == InputButton::middle) {
+        if (!press && fMainSampleDrag == MainSampleDrag::pan) {
+            fMainSampleDrag = MainSampleDrag::none;
+            return true;
+        }
+        if (press && s.mainSampleMode && !s.editorMode && !fMenu.open() && !actions.menuOpen() &&
+            !fSession.mainSample().confirmPending() && fSession.mainSample().hasSource() &&
+            uiLayout::mainSampleWaveform.contains(position)) {
+            // Wheel-click and drag pans a zoomed waveform sideways.
+            fMainSampleDrag = MainSampleDrag::pan;
+            fMainSampleOriginX = position.x;
+            fPanOriginStart = static_cast<double>(fSession.mainSample().viewport().start);
+            return true;
+        }
         if (!press) {
             if (fMixer.releaseCaptured(MixerPointerButton::middle)) return true;
             const bool captured = fResetPointerCaptured;
@@ -140,7 +153,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                                     static_cast<double>(uiLayout::mainSampleWaveform.width);
             const auto frame = static_cast<std::uint32_t>(viewport.frameAt(position.x, uiLayout::mainSampleWaveform));
             const auto tolerance = static_cast<std::uint32_t>(perPixel * 8.0);
-            if (main.beginEdgeDrag(frame, tolerance)) {
+            if (main.beginSelectionHalfDrag(frame) || main.beginEdgeDrag(frame, tolerance)) {
                 fMainSampleDrag = MainSampleDrag::marker;
                 fMainSampleRightDrag = true;
                 fHost.repaintSamplerInput();
@@ -765,6 +778,14 @@ void SamplerInputController::updateMainSampleDrag(const sms::ui::Point position)
         if (!fMainSampleMoved && std::abs(position.x - fMainSampleOriginX) < 3.0f) return;
         fMainSampleMoved = true;
         main.extendSelection(frame);
+    } else if (fMainSampleDrag == MainSampleDrag::pan) {
+        const auto& viewport = main.viewport();
+        const auto length = viewport.end - viewport.start;
+        if (viewport.total <= length) return;
+        const double perPixel = static_cast<double>(length) / static_cast<double>(uiLayout::mainSampleWaveform.width);
+        const double start = fPanOriginStart - static_cast<double>(position.x - fMainSampleOriginX) * perPixel;
+        main.setScrollPosition(static_cast<float>(std::clamp(
+            start / static_cast<double>(viewport.total - length), 0.0, 1.0)), Clock::now());
     } else if (fMainSampleDrag == MainSampleDrag::overview) {
         const auto& viewport = main.viewport();
         const auto length = viewport.end - viewport.start;

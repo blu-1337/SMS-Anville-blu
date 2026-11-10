@@ -523,6 +523,21 @@ void rightDragEdges()
     controller.dragTo(100U);
     controller.endDrag();
     check(controller.selectionEnd() == 151U, "selection keeps one frame");
+
+    controller.beginSelection(100U);
+    controller.extendSelection(900U);
+    check(!controller.beginSelectionHalfDrag(50U) && !controller.beginSelectionHalfDrag(950U),
+          "a press outside the selection does not grab a selection edge");
+    check(controller.beginSelectionHalfDrag(200U), "a press in the left half grabs the start");
+    controller.dragTo(300U);
+    controller.endDrag();
+    check(controller.selectionStart() == 300U && controller.selectionEnd() == 900U,
+          "left-half drag moves the start and follows the pointer");
+    check(controller.beginSelectionHalfDrag(800U), "a press in the right half grabs the end");
+    controller.dragTo(950U);
+    controller.endDrag();
+    check(controller.selectionStart() == 300U && controller.selectionEnd() == 950U,
+          "right-half drag moves the end and follows the pointer");
 }
 
 void arrangeSendsOneRequestAndKeepsMoves()

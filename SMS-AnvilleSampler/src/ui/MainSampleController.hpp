@@ -157,6 +157,8 @@ public:
      * Right-drag editing: picks the slice edge (or selection edge) nearest to the frame within
      * the tolerance and starts dragging it with dragTo()/endDrag(). False when none is near.
      */
+    /** Right-press inside the selection: grabs the edge on the pressed half (start on the left, end on the right). */
+    bool beginSelectionHalfDrag(std::uint32_t frame) noexcept;
     bool beginEdgeDrag(std::uint32_t frame, std::uint32_t toleranceFrames) noexcept;
     bool endDrag();
     void cancelDrag() noexcept;

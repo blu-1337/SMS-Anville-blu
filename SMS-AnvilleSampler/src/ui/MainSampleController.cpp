@@ -437,6 +437,16 @@ bool MainSampleController::beginMarkerDrag(const std::uint16_t sliceId, const bo
     return true;
 }
 
+bool MainSampleController::beginSelectionHalfDrag(const std::uint32_t frame) noexcept
+{
+    if (!hasSource() || !hasSelection() || frame < fSelectionStart || frame > fSelectionEnd)
+        return false;
+    fDrag.reset();
+    const auto middle = fSelectionStart + (fSelectionEnd - fSelectionStart) / 2U;
+    fSelectionEdge = frame < middle ? 1 : 2;
+    return true;
+}
+
 bool MainSampleController::beginEdgeDrag(const std::uint32_t frame,
                                          const std::uint32_t toleranceFrames) noexcept
 {

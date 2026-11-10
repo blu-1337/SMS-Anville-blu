@@ -69,6 +69,13 @@ public:
      * until takeArrangedMoves() so the session can carry pad colours along.
      */
     bool arrange();
+    /**
+     * Zone colour of slice number `rank` (0-based, time order) as a 1-based palette index:
+     * an interleaved walk of the palette so neighbours contrast. `press` rotates the walk
+     * (deterministic: the same press always gives the same colours).
+     */
+    [[nodiscard]] static int spreadColor(std::size_t rank, std::size_t paletteSize,
+                                         std::size_t press) noexcept;
     /** Moves of the arrange the plug-in confirmed; empty until its reply. Consumed once. */
     [[nodiscard]] std::vector<plugin::ArrangeMove> takeArrangedMoves();
     bool deleteSlice(std::uint16_t sliceId);

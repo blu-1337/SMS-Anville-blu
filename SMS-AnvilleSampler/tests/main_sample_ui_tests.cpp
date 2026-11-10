@@ -469,6 +469,20 @@ void arrangeSendsOneRequestAndKeepsMoves()
     check(!controller.arrange() && host.requests().size() == count + 1U, "ordered pads send nothing");
 }
 
+void spreadColorsContrast()
+{
+    for (std::size_t press = 0U; press < 4U; ++press) {
+        for (std::size_t rank = 0U; rank < 12U; ++rank) {
+            const int a = MainSampleController::spreadColor(rank, 6U, press);
+            const int b = MainSampleController::spreadColor(rank + 1U, 6U, press);
+            check(a >= 1 && a <= 6 && a != b, "adjacent zones differ");
+            check(a == MainSampleController::spreadColor(rank, 6U, press), "deterministic");
+        }
+    }
+    check(MainSampleController::spreadColor(0U, 6U, 0U) != MainSampleController::spreadColor(0U, 6U, 1U),
+          "a new press changes the colours");
+}
+
 void selectedSliceKeepsEditPriority()
 {
     Host host;
@@ -508,6 +522,7 @@ int main()
     markerDragSendsOneEdit();
     rightDragEdges();
     selectedSliceKeepsEditPriority();
+    spreadColorsContrast();
     arrangeSendsOneRequestAndKeepsMoves();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();

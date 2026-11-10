@@ -107,6 +107,18 @@ int padForSlice(const MainSampleController& main, const std::uint16_t sliceId) n
     return best;
 }
 
+/** Zone colour of a slice: its pad's colour, else a spread palette colour by time rank. */
+const DGL_NAMESPACE::Color* zoneTint(const ViewRenderContext& ctx, const MainSampleController& main,
+                                     const std::size_t index) noexcept
+{
+    const auto& slices = main.displaySlices();
+    if (const auto* tint = padTint(ctx, padForSlice(main, slices[index].id)); tint != nullptr)
+        return tint;
+    const auto& palette = sms::ui::dpf::theme().padColors;
+    const int color = MainSampleController::spreadColor(index, palette.size(), 0U);
+    return color > 0 ? &palette[static_cast<std::size_t>(color - 1)].tint : nullptr;
+}
+
 DGL_NAMESPACE::Color darker(const DGL_NAMESPACE::Color& color) noexcept
 {
     return DGL_NAMESPACE::Color(color.red * 0.55f, color.green * 0.55f, color.blue * 0.55f, 1.0f);
@@ -165,11 +177,11 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         const float x1 = std::min(bounds.x + bounds.width, viewport.xForFrame(slice.end, bounds));
         if (x1 <= x0)
             continue;
-        const auto* tint = padTint(ctx, padForSlice(main, slice.id));
+        const auto* tint = zoneTint(ctx, main, index);
         ctx.canvas.beginPath();
         ctx.canvas.rect(x0, bounds.y, x1 - x0, bounds.height);
         ctx.canvas.fillColor((tint != nullptr ? *tint : colors.selection)
-            .withAlpha(slice.id == main.selectedSlice() ? 0.38f : 0.10f));
+            .withAlpha(slice.id == main.selectedSlice() ? 0.42f : 0.20f));
         ctx.canvas.fill();
         if (slice.id == main.selectedSlice()) {
             ctx.canvas.beginPath();
@@ -241,7 +253,7 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         const bool isHovered =
             hovered(ctx, InteractiveType::mainSampleMarker, marker.slice * 2 + marker.edge);
         const auto sliceColor = [&](const int slice) {
-            const auto* tint = padTint(ctx, padForSlice(main, slices[static_cast<std::size_t>(slice)].id));
+            const auto* tint = zoneTint(ctx, main, static_cast<std::size_t>(slice));
             return tint != nullptr ? *tint : colors.selection;
         };
         if (room >= 38.0f) {

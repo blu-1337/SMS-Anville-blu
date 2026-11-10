@@ -706,4 +706,16 @@ bool MainSampleController::acceptAutoChopStatus(const std::string_view encoded)
     return true;
 }
 
+int MainSampleController::spreadColor(const std::size_t rank, const std::size_t paletteSize,
+                                      const std::size_t press) noexcept
+{
+    if (paletteSize == 0U)
+        return 0;
+    const std::size_t slot = (rank + press) % paletteSize;
+    const std::size_t half = (paletteSize + 1U) / 2U;
+    // 0, half, 1, half+1, ...: halves of the colour wheel alternate.
+    const std::size_t index = slot % 2U == 0U ? slot / 2U : half + slot / 2U;
+    return static_cast<int>(index) + 1;
+}
+
 } // namespace midichopper::ui

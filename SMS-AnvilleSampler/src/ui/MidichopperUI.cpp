@@ -277,6 +277,7 @@ protected:
             fSession.state().mainSampleMode, &fSession.mainSample(),
             fSession.canUndo(), fSession.canRedo(), fSession.dropdown(),
             fSpectrogramImage ? &*fSpectrogramImage : nullptr,
+            fInput.quickEditPad(), fInput.quickEditAxis(), fInput.quickEditVolume(), fInput.quickEditPan(),
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();

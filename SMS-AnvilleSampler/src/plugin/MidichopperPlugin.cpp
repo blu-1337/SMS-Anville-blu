@@ -13,6 +13,7 @@
 #include "PadWorkflows.hpp"
 #include "PadDirectionRequest.hpp"
 #include "StateKeys.hpp"
+#include "PadQuickEditCodec.hpp"
 #include "PadClipboardProtocol.hpp"
 #include "PadColorState.hpp"
 #include "PadFileActionProtocol.hpp"
@@ -458,6 +459,23 @@ protected:
         for (std::uint32_t pad = 0; pad < midichopper::kPadCount; ++pad) {
             if (std::strcmp(key, kPadMixerStateKeys[pad].c_str()) != 0)
                 continue;
+            midichopper::plugin::PadQuickEditDelta quick;
+            if (midichopper::plugin::isPadQuickEdit(value)) {
+                // Main-view drag gesture: a gain/pan delta on the live settings, one undo step.
+                if (midichopper::plugin::decodePadQuickEdit(value, quick)) {
+                    undo_.record(UndoKind::action, UndoClock::now(), [&] {
+                        const std::lock_guard lock(padWorkflows_.mutationMutex());
+                        sms::dsp::SamplePlaybackSettings playback;
+                        sms::dsp::SampleMixerSettings current;
+                        sampler_.snapshotPadSettings(pad, playback, current);
+                        const auto updated = midichopper::plugin::applyPadQuickEdit(current, quick);
+                        static_cast<void>(sampler_.restorePadMixerSettings(pad, updated));
+                        const std::string encoded = midichopper::plugin::encodeMixerSettings(updated);
+                        publishUiState(kPadMixerStateKeys[pad].c_str(), encoded.c_str());
+                    });
+                }
+                return;
+            }
             sms::dsp::SampleMixerSettings settings;
             if (midichopper::plugin::decodeMixerSettings(value, settings)) {
                 undo_.record(UndoKind::settings, UndoClock::now(), [&] {

@@ -849,6 +849,16 @@ void SamplerUiSession::updateLocalPlayhead(const Time now, const float effective
         fHost.repaintUi();
 }
 
+void SamplerUiSession::sendPadQuickEdit(const int pad, const PadQuickAxis axis, const float volume,
+                                        const float pan)
+{
+    if (!fCapabilities.stateTransport || pad < 0 || pad >= static_cast<int>(midichopper::kPadCount) ||
+        axis == PadQuickAxis::none)
+        return;
+    fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(pad)].c_str(),
+                      encodePadQuickEdit(axis, volume, pan).c_str());
+}
+
 void SamplerUiSession::releasePlaybackPad()
 {
     const int midiNote = fPadPress.release();

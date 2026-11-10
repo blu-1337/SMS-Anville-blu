@@ -455,7 +455,13 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }
         if (isTarget(clicked, InteractiveType::pad)) {
             if (s.armed) fSession.selectCaptureTarget(clicked.index);
-            else fSession.pressPlaybackPad(clicked.index);
+            else {
+                fSession.pressPlaybackPad(clicked.index);
+                // A press that turns into a drag edits volume (vertical) or pan (horizontal).
+                const auto grid = fSession.padLayout().grid(uiLayout::mainPadBounds, 10.0f);
+                fQuickEdit.begin(fSession.globalPad(clicked.index),
+                                 grid.cell(fSession.padLayout().visualIndex(clicked.index)), position);
+            }
             fHost.repaintSamplerInput();
             return true;
         }
@@ -528,6 +534,11 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         fMainSliderDrag = -1;
         return true;
     }
+    if (fQuickEdit.pending()) {
+        if (fQuickEdit.dragging())
+            fSession.sendPadQuickEdit(fQuickEdit.pad(), fQuickEdit.axis(), fQuickEdit.volume(), fQuickEdit.pan());
+        fQuickEdit.cancel();
+    }
     if (fSession.padPress().pad() >= 0) {
         fSession.releasePlaybackPad();
         fHost.repaintSamplerInput();
@@ -551,6 +562,10 @@ bool SamplerInputController::motion(const sms::ui::Point position)
     if ((s.editorMode && fMixer.sampleDragging()) || fMixer.globalDragging())
         return fMixer.motion(mixerContext(), position);
     if (fMainSliderDrag >= 0) { updateMainSliderDrag(position.x); return true; }
+    if (fQuickEdit.pending()) {
+        if (fQuickEdit.update(position)) fHost.repaintSamplerInput();
+        return true;
+    }
     const auto hovered = targetAt(position);
     fMenu.hover(fHost.applicationMenuContext(), hovered);
     auto& actions = fSession.padActions();

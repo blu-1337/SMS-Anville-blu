@@ -108,6 +108,10 @@ struct ViewState {
     bool canRedo = false;
     int editorDropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
     const DGL_NAMESPACE::NanoImage* spectrogramImage = nullptr; // Main Sample SPEC heatmap, or null
+    int quickEditPad = -1;      // global pad being dragged (volume/pan gesture), or -1
+    int quickEditAxis = 0;      // 1 = volume, 2 = pan
+    float quickEditVolume = 1.0f;
+    float quickEditPan = 0.0f;
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

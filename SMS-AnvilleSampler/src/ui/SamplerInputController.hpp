@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PadQuickEdit.hpp"
+
 #include "ApplicationMenuController.hpp"
 #include "MixerInteractionController.hpp"
 #include "SamplerUiSession.hpp"
@@ -48,6 +50,12 @@ public:
     [[nodiscard]] MixerInteractionContext mixerContext() const noexcept;
     [[nodiscard]] sms::ui::InteractiveTarget targetAt(sms::ui::Point position) const noexcept;
 
+    /** Live Main-view drag gesture for the renderer: pad (global) or -1, axis 0/1/2 = none/volume/pan. */
+    [[nodiscard]] int quickEditPad() const noexcept { return fQuickEdit.dragging() ? fQuickEdit.pad() : -1; }
+    [[nodiscard]] int quickEditAxis() const noexcept { return static_cast<int>(fQuickEdit.axis()); }
+    [[nodiscard]] float quickEditVolume() const noexcept { return fQuickEdit.volume(); }
+    [[nodiscard]] float quickEditPan() const noexcept { return fQuickEdit.pan(); }
+
 private:
     using EditTarget = sms::ui::waveform::EditTarget;
     [[nodiscard]] sms::ui::waveform::EnvelopeGeometry envelopeGeometry() const noexcept;
@@ -65,6 +73,7 @@ private:
     const int fColorCount;
     sms::ui::HoverState fHover;
     SpaceKeyTracker fSpaceKey;
+    PadQuickEdit fQuickEdit;
     bool fPadContextPointerCaptured = false;
     bool fResetPointerCaptured = false;
     bool fPlayButtonPressCaptured = false;

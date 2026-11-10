@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PadQuickEdit.hpp"
+
 #include "SamplerUiState.hpp"
 #include "ChopEditorController.hpp"
 #include "EditorSnapshotSession.hpp"
@@ -127,6 +129,8 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void fileBrowserSelected(const char *filename);
     void pressPlaybackPad(int localPad);
     void releasePlaybackPad();
+    /** Main-view pad drag: sends one gain or pan delta (one undo step) for that pad. */
+    void sendPadQuickEdit(int pad, PadQuickAxis axis, float volume, float pan);
     void captureSpace();
     void captureAction(const char *action);
     void stopEditorAudition();

@@ -16,7 +16,7 @@ Read [AGENTS.md](../../AGENTS.md), then the relevant row.
 | Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md), [Auto-chop](AUTO-CHOP.md), [Spectrogram](SPECTROGRAM.md) | [Common-Src](../../Common-Src/) |
 | Shared UI | [Common-UI map](../../Common-UI/README.md) | [Common-UI](../../Common-UI/) |
 | Product direction | [Vision](../../SMS-AnvilleSampler/Docs/VISION.md) | Intended scope |
-| Pad context menu and actions | [Context-menu design](PAD-CONTEXT-MENU.md) | Action contract |
+| Pad context menu and actions | [Context-menu design](PAD-CONTEXT-MENU.md), [Drag](PAD-QUICK-EDIT.md) | Action contract |
 | Cut Point Editor | [Cut Point Editor](CHOP-EDITOR.md) | Three-pad cuts, preview, limitations |
 | Pad storage and transfer concurrency | [Storage handoff](PAD-STORAGE.md), [Main sample](MAIN-SAMPLE.md), [workflows](MAIN-SAMPLE-WORKFLOWS.md), [preview](MAIN-SAMPLE-PREVIEW.md), [UI](MAIN-SAMPLE-UI.md), [guide](../../SMS-AnvilleSampler/Docs/MAIN-SAMPLE.md) | [Engine](../../SMS-AnvilleSampler/src/core/SamplerEngine.hpp) |
 | Pad WAV import/export, file drop | [WAV I/O design](PAD-WAV-IO.md), [File drop](FILE-DROP.md) | Formats, real-time boundary, dialogs |

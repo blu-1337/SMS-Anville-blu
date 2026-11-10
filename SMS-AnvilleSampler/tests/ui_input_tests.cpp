@@ -117,6 +117,74 @@ void padOwnershipAndSpace()
     check(f.input.keyboard(InputKey::escape, true) && !f.menu.open(), "Escape closes application menu");
 }
 
+void padQuickEditGestures()
+{
+    // Pure classification and value mapping.
+    const sms::ui::Rect cell{100.0f, 200.0f, 80.0f, 60.0f};
+    check(padQuickVolumeFromY(200.0f, cell) == 1.0f && padQuickVolumeFromY(260.0f, cell) == 0.0f &&
+          std::fabs(padQuickVolumeFromY(230.0f, cell) - 0.5f) < 1.0e-6f &&
+          padQuickVolumeFromY(100.0f, cell) == 1.0f && padQuickVolumeFromY(400.0f, cell) == 0.0f,
+          "pad top is full volume, bottom is muted, outside clamps");
+    check(padQuickGainDecibels(1.0f) == 0.0f && padQuickGainDecibels(0.0f) == sms::dsp::kMinimumSampleGainDecibels &&
+          std::fabs(padQuickGainDecibels(0.5f) + 6.02f) < 0.05f, "volume maps to decibels");
+    check(padQuickPanFromX(100.0f, cell) == -1.0f && padQuickPanFromX(180.0f, cell) == 1.0f &&
+          padQuickPanFromX(140.0f, cell) == 0.0f && padQuickPanFromX(141.0f, cell) == 0.0f &&
+          padQuickPanFromX(120.0f, cell) < -0.4f, "pan spans the pad width with a centre dead zone");
+    PadQuickEdit gesture;
+    gesture.begin(3, cell, {140.0f, 230.0f});
+    check(gesture.pending() && !gesture.dragging() && !gesture.update({143.0f, 233.0f}) && !gesture.dragging(),
+          "a small movement stays a click");
+    check(gesture.update({141.0f, 245.0f}) && gesture.axis() == PadQuickAxis::volume &&
+          gesture.volume() > 0.2f && gesture.volume() < 0.3f, "vertical drag locks volume");
+    check(gesture.update({175.0f, 245.0f}) && gesture.axis() == PadQuickAxis::volume && gesture.pan() == 0.0f,
+          "the axis stays locked for the rest of the drag");
+    gesture.begin(3, cell, {140.0f, 230.0f});
+    check(gesture.update({160.0f, 233.0f}) && gesture.axis() == PadQuickAxis::pan && gesture.pan() > 0.0f,
+          "horizontal drag locks pan");
+    const auto vol = encodePadQuickEdit(PadQuickAxis::volume, 0.5f, 0.0f);
+    PadQuickEditDelta decoded;
+    check(decodePadQuickEdit(vol.c_str(), decoded) && decoded.hasGain && !decoded.hasPan &&
+          std::fabs(decoded.gainDecibels + 6.02f) < 0.01f, "volume delta round-trips");
+    const auto panText = encodePadQuickEdit(PadQuickAxis::pan, 1.0f, -0.25f);
+    check(decodePadQuickEdit(panText.c_str(), decoded) && !decoded.hasGain && decoded.hasPan && decoded.pan == -0.25f,
+          "pan delta round-trips");
+    for (const char* bad : {"", "QE1;", "QE1;-;-", "QE1;nan;-", "QE1;1;2;3", "QE2;1;-", "QE1;x;-", "QE1;-;inf"})
+        check(!decodePadQuickEdit(bad, decoded), "malformed quick edit is refused");
+    sms::dsp::SampleMixerSettings base;
+    base.tuneSemitones = 3.0f;
+    PadQuickEditDelta loud; loud.hasGain = true; loud.gainDecibels = 99.0f;
+    const auto applied = applyPadQuickEdit(base, loud);
+    check(applied.gainDecibels == sms::dsp::kMaximumSampleGainDecibels && applied.tuneSemitones == 3.0f,
+          "a delta touches only its field and clamps");
+
+    // Through the controller: a click still plays, a drag sends exactly one delta on release.
+    Fixture f;
+    const auto grid = f.session.padLayout().grid(layout::mainPadBounds, 10.0f);
+    const auto padCell = grid.cell(f.session.padLayout().visualIndex(0));
+    const auto start = center(padCell);
+    const auto mixerKey = std::string(kPadMixerStateKeys[0]);
+    const auto quickWrites = [&] {
+        std::size_t n = 0;
+        for (const auto& [key, value] : f.states) if (key == mixerKey && isPadQuickEdit(value.c_str())) ++n;
+        return n;
+    };
+    check(f.input.mouse(start, InputButton::left, true) && f.notes.size() == 1, "press still plays");
+    f.input.motion({start.x + 2.0f, start.y + 2.0f});
+    f.input.mouse({start.x + 2.0f, start.y + 2.0f}, InputButton::left, false);
+    check(quickWrites() == 0 && f.notes.back().second == 0, "a click sends no mixer edit");
+    check(f.input.mouse(start, InputButton::left, true), "press again");
+    check(f.input.motion({start.x, start.y + 20.0f}) && f.input.quickEditPad() == 0 &&
+          f.input.quickEditAxis() == 1, "vertical drag is tracked as volume");
+    f.input.motion({start.x, start.y + 25.0f});
+    check(quickWrites() == 0, "nothing is sent mid-drag (one undo step per gesture)");
+    f.input.mouse({start.x, start.y + 25.0f}, InputButton::left, false);
+    check(quickWrites() == 1 && f.input.quickEditPad() == -1, "release sends exactly one delta");
+    check(f.input.mouse(start, InputButton::left, true), "press for pan");
+    f.input.motion({start.x + 30.0f, start.y + 1.0f});
+    f.input.mouse({start.x + 30.0f, start.y + 1.0f}, InputButton::left, false);
+    check(quickWrites() == 2, "horizontal drag sends one pan delta");
+}
+
 void overlaysAndFaderCapture()
 {
     Fixture f;
@@ -330,6 +398,7 @@ void undoRedoButtonsAndKeys()
 int main()
 {
     padOwnershipAndSpace();
+    padQuickEditGestures();
     undoRedoButtonsAndKeys();
     overlaysAndFaderCapture();
     editorWheelAndPointerRoutes();

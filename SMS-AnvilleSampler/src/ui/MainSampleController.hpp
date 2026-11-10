@@ -170,9 +170,15 @@ public:
     /** The nearest committed slice start/end within kSnapPixels (framesPerPixel * 8), else the frame. */
     [[nodiscard]] std::uint32_t snapFrame(std::uint32_t frame, double framesPerPixel) const noexcept;
     bool beginEdgeDrag(std::uint32_t frame, std::uint32_t toleranceFrames) noexcept;
+    /** Region drag (slice number badge): moves the whole slice, length unchanged, clamped to the source. */
+    bool beginRegionDrag(std::uint16_t sliceId, std::uint32_t grabFrame) noexcept;
+    /** Moves the grabbed region by (frame - grab frame); snaps its edges to other slices when SNAP is on. */
+    void dragRegionTo(std::uint32_t frame, double framesPerPixel) noexcept;
+    [[nodiscard]] bool regionDragging() const noexcept { return fRegion.has_value(); }
     bool endDrag();
     void cancelDrag() noexcept;
-    [[nodiscard]] bool dragging() const noexcept { return fDrag.has_value() || fSelectionEdge != 0; }
+    [[nodiscard]] bool dragging() const noexcept
+    { return fDrag.has_value() || fRegion.has_value() || fSelectionEdge != 0; }
 
     // Viewport over the source (wheel zoom, Shift+wheel or overview pan).
     bool zoom(float delta, float anchorX, sms::ui::Rect bounds, Time now) noexcept;
@@ -203,6 +209,13 @@ private:
         bool solo = false;
         std::uint32_t original = 0U;
         std::uint32_t frame = 0U;
+    };
+    struct Region {
+        std::uint16_t sliceId = 0U;
+        std::uint32_t start = 0U;  // original bounds
+        std::uint32_t end = 0U;
+        std::uint32_t grab = 0U;   // frame under the pointer at press
+        std::int64_t delta = 0;    // current shift, already clamped and snapped
     };
     struct PendingAssign {
         std::uint32_t pad = 0U;
@@ -244,6 +257,7 @@ private:
     std::uint64_t fArrangeSequence = 0U;
     std::vector<plugin::ArrangeMove> fArrangeConfirmed;
     std::optional<Drag> fDrag;
+    std::optional<Region> fRegion;
     int fSelectionEdge = 0; // 1 = start, 2 = end of the selection while right-dragging
     std::optional<PendingAssign> fConfirm;
     std::optional<PendingAssign> fLastAssign;

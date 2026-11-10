@@ -375,6 +375,62 @@ void sliceBadgesAreSmallAndComplete()
     check(mainSampleBadgeRect(slices, view, 10U).width == 0.0f, "a region out of view has none");
 }
 
+void regionDragMovesWholeSlice()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    controller.idle(now);
+    check(controller.acceptStatus(status(1U, MainSampleState::ready,
+          {{1U, 0U, 300U}, {2U, 300U, 500U}, {3U, 800U, 900U}}, {{0U, 1U}, {1U, 2U}, {2U, 3U}}), now),
+          "source arrives");
+    const auto count = host.requests().size();
+
+    // Badge hit-test: pressing a slice's badge targets that slice, ahead of the marker line.
+    InteractionContext context;
+    context.mainSampleMode = true;
+    context.mainSampleHasSource = true;
+    context.mainSampleSlices = controller.displaySlices();
+    context.mainSampleViewport = controller.viewport();
+    const auto badge = mainSampleBadgeRect(context.mainSampleSlices, context.mainSampleViewport, 1U);
+    const auto hit = interactiveTargetAt({badge.x + badge.width * 0.5f, badge.y + badge.height * 0.5f}, context);
+    check(isTarget(hit, InteractiveType::mainSampleBadge, 1), "the badge is a drag handle for its slice");
+
+    // Plain move, length unchanged (SNAP off so the numbers are exact).
+    controller.toggleSnap();
+    check(controller.beginRegionDrag(2U, 400U) && controller.dragging(), "region drag starts");
+    controller.dragRegionTo(450U, 1.0);
+    check(controller.displaySlices()[1] == MainSampleSlice{2U, 350U, 550U}, "shown moving, length 200 kept");
+    controller.dragRegionTo(100000U, 1.0);
+    check(controller.displaySlices()[1] == MainSampleSlice{2U, 800U, 1000U}, "clamped to the source end");
+    controller.dragRegionTo(0U, 1.0);
+    check(controller.displaySlices()[1] == MainSampleSlice{2U, 0U, 200U}, "clamped to the source start");
+    controller.dragRegionTo(400U, 1.0);
+    check(controller.displaySlices()[1] == MainSampleSlice{2U, 300U, 500U}, "back to the origin");
+    check(!controller.endDrag() && host.requests().size() == count, "no move, no edit");
+    controller.dragRegionTo(450U, 1.0);
+    controller.cancelDrag();
+    check(controller.displaySlices()[1] == MainSampleSlice{2U, 300U, 500U} && !controller.dragging(),
+          "cancel restores the slice");
+
+    controller.beginRegionDrag(2U, 400U);
+    controller.dragRegionTo(550U, 1.0);
+    check(controller.endDrag() && host.requests().size() == count + 1U, "release sends exactly one edit");
+    const auto edit = host.requests().back();
+    check(edit.verb == MainSampleVerb::edit && edit.editCount == 1U &&
+              edit.edits[0] == MainSampleSlice{2U, 450U, 650U},
+          "the edit carries the moved slice with the same length");
+
+    // SNAP on: the right edge lands on slice 3's start (800) when within 8 px.
+    controller.toggleSnap();
+    controller.acceptStatus(status(2U, MainSampleState::ready,
+          {{1U, 0U, 300U}, {2U, 300U, 500U}, {3U, 800U, 900U}}, {{0U, 1U}, {1U, 2U}, {2U, 3U}}), now);
+    controller.beginRegionDrag(2U, 400U);
+    controller.dragRegionTo(697U, 1.0); // right edge would be 797
+    check(controller.displaySlices()[1] == MainSampleSlice{2U, 600U, 800U}, "region snaps to a neighbour's edge");
+    controller.cancelDrag();
+}
+
 void editorHeaderChipsFit()
 {
     using namespace layout;
@@ -734,6 +790,7 @@ int main()
     sessionRouting();
     editorHeaderChipsFit();
     sliceBadgesAreSmallAndComplete();
+    regionDragMovesWholeSlice();
     countFieldEntry();
     snapToSliceBoundaries();
     layoutRects();

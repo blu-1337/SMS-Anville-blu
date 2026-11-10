@@ -566,11 +566,81 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
     fHost.repaintMainSample();
 }
 
+bool MainSampleController::beginRegionDrag(const std::uint16_t sliceId, const std::uint32_t grabFrame) noexcept
+{
+    const auto slice = std::find_if(fStatus.slices.begin(), fStatus.slices.end(),
+        [&](const MainSampleSlice& item) { return item.id == sliceId; });
+    if (slice == fStatus.slices.end())
+        return false;
+    fDrag.reset();
+    fSelectionEdge = 0;
+    fRegion = Region{sliceId, slice->start, slice->end, grabFrame, 0};
+    return true;
+}
+
+void MainSampleController::dragRegionTo(const std::uint32_t frame, const double framesPerPixel) noexcept
+{
+    if (!fRegion)
+        return;
+    const auto length = static_cast<std::int64_t>(fRegion->end) - static_cast<std::int64_t>(fRegion->start);
+    const auto minDelta = -static_cast<std::int64_t>(fRegion->start);
+    const auto maxDelta = static_cast<std::int64_t>(fStatus.frames) - static_cast<std::int64_t>(fRegion->end);
+    auto delta = std::clamp(static_cast<std::int64_t>(frame) - static_cast<std::int64_t>(fRegion->grab),
+                            minDelta, std::max(minDelta, maxDelta));
+    if (fSnap) {
+        // Snap whichever region edge is nearest to another slice's edge (never its own).
+        const double tolerance = framesPerPixel * static_cast<double>(kSnapPixels);
+        double best = tolerance;
+        std::int64_t snapped = delta;
+        for (const auto& other : fStatus.slices) {
+            if (other.id == fRegion->sliceId)
+                continue;
+            for (const std::uint32_t edge : {other.start, other.end}) {
+                for (const auto own : {static_cast<std::int64_t>(fRegion->start), static_cast<std::int64_t>(fRegion->start) + length}) {
+                    const auto shift = static_cast<std::int64_t>(edge) - own;
+                    const double distance = std::abs(static_cast<double>(shift - delta));
+                    if (distance <= best && shift >= minDelta && shift <= maxDelta) {
+                        best = distance;
+                        snapped = shift;
+                    }
+                }
+            }
+        }
+        delta = snapped;
+    }
+    fRegion->delta = delta;
+    rebuildDisplaySlices();
+    fHost.repaintMainSample();
+}
+
 bool MainSampleController::endDrag()
 {
     if (fSelectionEdge != 0) {
         fSelectionEdge = 0;
         return false;
+    }
+    if (fRegion) {
+        const auto region = *fRegion;
+        fRegion.reset();
+        if (region.delta == 0) {
+            rebuildDisplaySlices();
+            return false;
+        }
+        MainSampleRequest request;
+        request.verb = MainSampleVerb::edit;
+        for (auto& slice : fStatus.slices) {
+            if (slice.id != region.sliceId)
+                continue;
+            slice.start = static_cast<std::uint32_t>(static_cast<std::int64_t>(region.start) + region.delta);
+            slice.end = static_cast<std::uint32_t>(static_cast<std::int64_t>(region.end) + region.delta);
+            request.edits[request.editCount++] = slice; // optimistic until the reply; one S edit
+            break;
+        }
+        rebuildDisplaySlices();
+        if (request.editCount == 0U)
+            return false;
+        send(request);
+        return true;
     }
     if (!fDrag)
         return false;
@@ -608,6 +678,10 @@ bool MainSampleController::endDrag()
 void MainSampleController::cancelDrag() noexcept
 {
     fSelectionEdge = 0;
+    if (fRegion) {
+        fRegion.reset();
+        rebuildDisplaySlices();
+    }
     if (!fDrag)
         return;
     fDrag.reset();
@@ -617,6 +691,16 @@ void MainSampleController::cancelDrag() noexcept
 void MainSampleController::rebuildDisplaySlices()
 {
     fDisplaySlices = fStatus.slices;
+    if (fRegion) {
+        for (auto& slice : fDisplaySlices) {
+            if (slice.id != fRegion->sliceId)
+                continue;
+            slice.start = static_cast<std::uint32_t>(static_cast<std::int64_t>(fRegion->start) + fRegion->delta);
+            slice.end = static_cast<std::uint32_t>(static_cast<std::int64_t>(fRegion->end) + fRegion->delta);
+            break;
+        }
+        return;
+    }
     if (!fDrag)
         return;
     for (const bool own : {true, false}) {

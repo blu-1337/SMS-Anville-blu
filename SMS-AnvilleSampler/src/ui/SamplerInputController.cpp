@@ -372,6 +372,17 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 updateMainSampleDrag(position);
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::mainSampleBadge)) {
+                const auto& slices = main.displaySlices();
+                const auto index = static_cast<std::size_t>(clicked.index);
+                if (index >= slices.size()) return false;
+                main.selectSlice(slices[index].id);
+                if (main.beginRegionDrag(slices[index].id, static_cast<std::uint32_t>(
+                        main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform))))
+                    fMainSampleDrag = MainSampleDrag::marker;
+                fHost.repaintSamplerInput();
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::mainSampleMarker)) {
                 const auto& slices = main.displaySlices();
                 const auto index = static_cast<std::size_t>(clicked.index / 2);
@@ -791,6 +802,13 @@ std::uint32_t SamplerInputController::snappedFrame(const float x) const
 void SamplerInputController::updateMainSampleDrag(const sms::ui::Point position)
 {
     auto& main = fSession.mainSample();
+    if (fMainSampleDrag == MainSampleDrag::marker && main.regionDragging()) {
+        const auto& viewport = main.viewport();
+        main.dragRegionTo(static_cast<std::uint32_t>(viewport.frameAt(position.x, uiLayout::mainSampleWaveform)),
+                          static_cast<double>(viewport.end - viewport.start) /
+                              static_cast<double>(uiLayout::mainSampleWaveform.width));
+        return;
+    }
     const auto frame = snappedFrame(position.x);
     if (fMainSampleDrag == MainSampleDrag::marker) main.dragTo(frame);
     else if (fMainSampleDrag == MainSampleDrag::selecting) {

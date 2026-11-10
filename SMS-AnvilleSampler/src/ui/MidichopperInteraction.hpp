@@ -87,6 +87,7 @@ enum class InteractiveType : int {
     mainSampleClose,
     mainSampleWaveform,
     mainSampleMarker,
+    mainSampleBadge, // index = slice; press and drag moves the whole region
     mainSampleOverview,
     mainSamplePad,
     mainSampleLoad,
@@ -798,6 +799,10 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             if (uiLayout::mainSampleOverview.contains(point))
                 return target(InteractiveType::mainSampleOverview);
             if (uiLayout::mainSampleWaveform.contains(point)) {
+                for (std::size_t index = std::min<std::size_t>(context.mainSampleSlices.size(), 64U); index-- > 0U;) {
+                    if (mainSampleBadgeRect(context.mainSampleSlices, context.mainSampleViewport, index).contains(point))
+                        return target(InteractiveType::mainSampleBadge, static_cast<int>(index));
+                }
                 const int marker = mainSampleMarkerAt(point.x, context);
                 return marker >= 0 ? target(InteractiveType::mainSampleMarker, marker)
                                    : target(InteractiveType::mainSampleWaveform);

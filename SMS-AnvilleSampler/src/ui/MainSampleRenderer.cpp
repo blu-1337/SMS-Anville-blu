@@ -276,7 +276,8 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             continue;
         const auto* tint = zoneTint(ctx, main, index);
         drawSliceBadge(ctx, rect, static_cast<unsigned>(index + 1U), slices[index].id == main.selectedSlice(),
-                       false, tint != nullptr ? *tint : colors.selection);
+                       hovered(ctx, InteractiveType::mainSampleBadge, static_cast<int>(index)),
+                       tint != nullptr ? *tint : colors.selection);
     }
 
     if (const double frame = main.playheadFrame(); frame >= 0.0) {

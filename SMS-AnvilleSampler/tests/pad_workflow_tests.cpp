@@ -9,6 +9,7 @@
 #include "UndoController.hpp"
 #include "SamplerUiSession.hpp"
 
+#include <cstdio>
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -1084,8 +1085,9 @@ void mainSampleAssignEditAndDelete()
     status = fixture.send(remove);
     check(status.state == MainSampleState::ready && status.affectedMask == 2U &&
           status.slices.size() == 2U && status.links.size() == 1U &&
-          fixture.provenance(1U) == 0U && padHoldsSlice(fixture.engine, 1U, 400U, 500U),
-          "delete unlinks the pad and keeps its audio");
+          fixture.provenance(1U) == 0U && !fixture.engine.padMetadata(1U).occupied &&
+          fixture.engine.padMetadata(1U).frames == 0U,
+          "delete clears the linked pad (audio removed)");
     status = fixture.send(remove);
     check(status.state == MainSampleState::error && status.text == "Slice not found",
           "a deleted slice cannot be deleted twice");
@@ -1433,6 +1435,21 @@ void undoRedoRestoresState()
     undo.undo();
     undo.record(Kind::colors, now + std::chrono::seconds(20), [&] { colors[5].store(1); });
     check(undo.redoDepth() == 0U, "new edit truncates redo");
+    // Delete clears the linked pad in one step; undo restores slice, link and audio bit-exact.
+    {
+        const auto sliceId = fixture.main.session().slices[0].id;
+        auto del = mainRequest(MainSampleVerb::remove);
+        del.sliceId = sliceId;
+        std::string delText;
+        const auto depth = undo.undoDepth();
+        undo.record(Kind::action, now + std::chrono::seconds(25), [&] { delText = fixture.send(del).text; });
+        check(undo.undoDepth() == depth + 1U, (delText.empty() ? "delete is one undo step" : delText.c_str()));
+        check(!fixture.engine.padMetadata(2U).occupied, "delete empties the linked pad");
+        check(fixture.main.session().slices.empty(), "delete removes the slice");
+        undo.undo();
+        check(padHoldsSlice(fixture.engine, 2U, 100U, 300U) && fixture.main.session().slices.size() == 1U &&
+              (fixture.provenance(2U) >> 16U) != 0U, "undo of delete restores slice, link and pad audio");
+    }
     undo.hostRestored(now + std::chrono::seconds(30));
     check(undo.undoDepth() == 0U, "host restore clears the history");
     undo.record(Kind::colors, now + std::chrono::seconds(30), [&] { colors[6].store(1); });

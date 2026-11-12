@@ -517,14 +517,31 @@ void MainSampleWorkflows::remove(const MainSampleRequest& request)
         publishStatusLocked(request.sequence, MainSampleState::error, "Slice not found");
         return;
     }
-    // Linked pads keep their audio and settings; only the tag goes.
+    // Linked pads are cleared (audio removed, settings reset) in the same atomic transaction, so
+    // one undo step restores the slice and the pad audio together.
     const auto pads = snapshotPads();
     const auto removed = link(edited.sourceId, request.sliceId);
+    std::vector<PadImport> clears;
     std::uint64_t affected = 0U;
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
-        if (pads.provenance[pad] == removed &&
-            sampler_.setPadProvenance(pad, 0U, sampler_.padAudioFingerprint(pad)))
-            affected |= std::uint64_t{1} << pad;
+        if (pads.provenance[pad] != removed)
+            continue;
+        PadImport clear;
+        clear.pad = pad;
+        clears.push_back(clear);
+        affected |= std::uint64_t{1} << pad;
+    }
+    if (!clears.empty()) {
+        const auto settings = engineSettings();
+        if (settings.armed) {
+            publishStatusLocked(request.sequence, MainSampleState::error, "Disarm recording first");
+            return;
+        }
+        if (!sampler_.importPads(clears, &settings)) {
+            publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+            return;
+        }
+        publishPadSettings(affected, true);
     }
     session_ = std::move(edited);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);

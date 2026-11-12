@@ -1238,6 +1238,40 @@ void cutAndCropWorkflow()
     std::filesystem::remove(path);
 }
 
+void trimWorkflow()
+{
+    MainSampleFixture fixture(12.0);
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    const auto path = writeSourceWav("sms-trim.wav", 4000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    const auto oldId = fixture.send(load, 2U).sourceId;
+    check(fixture.send(assignRequest(0U, 1000U, 1500U)).state == MainSampleState::ready, "slice in range");
+    check(fixture.send(assignRequest(1U, 100U, 300U)).state == MainSampleState::ready, "slice outside range");
+    auto range = mainRequest(MainSampleVerb::range);
+    range.start = 800U;
+    range.end = 2800U;
+    check(fixture.send(range).state == MainSampleState::ready, "set range");
+    auto trim = mainRequest(MainSampleVerb::cut);
+    trim.crop = true;
+    trim.start = 800U;
+    trim.end = 2800U;
+    MainSampleStatus status;
+    undo.record(UndoController::Kind::action, now, [&] { status = fixture.send(trim); });
+    const auto trimmed = fixture.main.session();
+    check(status.state == MainSampleState::ready && trimmed.frames == 2000U && trimmed.sourceId != oldId &&
+          trimmed.rangeStart == 0U && trimmed.rangeEndFrame() == 2000U, "trim keeps the range; range becomes full");
+    check(trimmed.slices.size() == 1U && trimmed.slices[0].start == 200U && trimmed.slices[0].end == 700U &&
+          !fixture.engine.padMetadata(1U).occupied && fixture.engine.padMetadata(0U).occupied,
+          "slices rebase; outside pad cleared");
+    undo.undo();
+    check(fixture.main.session().sourceId == oldId && fixture.main.session().frames == 4000U &&
+          padHoldsSlice(fixture.engine, 1U, 100U, 300U), "undo restores the untrimmed source and pads");
+    std::filesystem::remove(path);
+}
+
 void sourceRangeWorkflow()
 {
     MainSampleFixture fixture(12.0);
@@ -1956,6 +1990,7 @@ int main()
     mainSampleAssignEditAndDelete();
     sourceRangeWorkflow();
     cutAndCropWorkflow();
+    trimWorkflow();
     autoChopWorkflow();
     mainSampleArrange();
     favoriteGuards();

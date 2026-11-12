@@ -315,6 +315,10 @@ inline constexpr int kMainSampleActionCount = 5; // 4: FAVORITE toggles the sele
     return {994.0f + static_cast<float>(index % 2) * 114.0f, 552.0f + static_cast<float>(index / 2) * 36.0f,
             106.0f, 26.0f};
 }
+// Destructive source edits in the header row, right of the transport: 0 CUT (remove the selection),
+// 1 CROP (keep only the selection), 2 TRIM (keep only the source range).
+inline constexpr std::array<sms::ui::Rect, 3> mainSampleEdit{{
+    {642.0f, 114.0f, 46.0f, 30.0f}, {694.0f, 114.0f, 46.0f, 30.0f}, {746.0f, 114.0f, 46.0f, 30.0f}}};
 inline constexpr sms::ui::Rect mainSampleModal{300.0f, 270.0f, 380.0f, 150.0f};
 inline constexpr sms::ui::Rect mainSampleConfirm{330.0f, 366.0f, 150.0f, 34.0f};
 inline constexpr sms::ui::Rect mainSampleCancel{500.0f, 366.0f, 150.0f, 34.0f};

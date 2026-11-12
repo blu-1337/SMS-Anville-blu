@@ -12,6 +12,8 @@ namespace midichopper::plugin {
 
 void UndoSnapshot::addUniqueBytes(std::unordered_set<const void*>& seen, std::size_t& total) const
 {
+    if (source && seen.insert(source.get()).second)
+        total += source->stereo.size() * sizeof(float);
     for (const auto& pad : pads)
         if (pad.audio && seen.insert(pad.audio.get()).second)
             total += pad.audio->stereo.size() * sizeof(float);
@@ -80,13 +82,24 @@ void UndoController::step(const bool undo)
 {
     const std::lock_guard lock(mutex_);
     auto current = capture();
+    const auto* const upcoming = undo ? history_.peekUndo() : history_.peekRedo();
+    if (upcoming != nullptr && current.session.sourceId != 0U &&
+        upcoming->session.sourceId != current.session.sourceId)
+        current.source = main_.sourceSnapshot(current.session.sourceId); // so the step can be redone/undone
     auto target = undo ? history_.undo(current) : history_.redo(current);
     if (!target) {
         publishLocked();
         return;
     }
+    if (target->session.sourceId != current.session.sourceId && !target->source) {
+        history_.putBackUndo(std::move(*target), undo); // the source was evicted: nothing can change
+        publishLocked();
+        return;
+    }
     MainSampleWorkflows::HistoryChange change;
     change.session = &target->session;
+    if (target->session.sourceId != current.session.sourceId)
+        change.source = target->source;
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
         const auto& t = target->pads[pad];
         const auto& c = current.pads[pad];

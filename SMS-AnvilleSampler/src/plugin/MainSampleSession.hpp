@@ -5,6 +5,7 @@
 
 #include "MainSampleProtocol.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
 #include <string>
@@ -39,6 +40,61 @@ struct MainSampleSession {
     { return rangeEnd == 0U || rangeEnd > frames ? frames : rangeEnd; }
     [[nodiscard]] bool rangeIsFull() const noexcept { return rangeStart == 0U && rangeEndFrame() == frames; }
 };
+
+/** Result of re-indexing the slices after a destructive cut or crop of the source. */
+struct SliceRemap {
+    std::vector<MainSampleSlice> slices;   // survivors, new positions, sorted
+    std::vector<std::uint16_t> removed;    // dropped (inside the cut, outside the crop, or too short)
+    std::vector<std::uint16_t> changed;    // survivors whose length changed
+};
+
+/**
+ * Remaps slices for removing [a, b) (crop = false) or keeping only [a, b) (crop = true).
+ * Cut: before stays, after shifts left by b-a, a straddling slice is shortened, inside is removed.
+ * A result shorter than minFrames is removed. Pure function; no I/O.
+ */
+[[nodiscard]] inline SliceRemap remapSlicesForCut(const std::vector<MainSampleSlice>& input,
+    const std::uint32_t a, const std::uint32_t b, const bool crop, const std::uint32_t minFrames)
+{
+    SliceRemap result;
+    const std::uint32_t cut = b - a;
+    for (const auto& slice : input) {
+        std::uint32_t start = slice.start;
+        std::uint32_t end = slice.end;
+        bool gone = false;
+        if (crop) {
+            start = std::max(slice.start, a);
+            end = std::min(slice.end, b);
+            gone = start >= end;
+            if (!gone) {
+                start -= a;
+                end -= a;
+            }
+        } else if (slice.end <= a) {
+            // before the cut: unchanged
+        } else if (slice.start >= b) {
+            start -= cut;
+            end -= cut;
+        } else if (slice.start >= a && slice.end <= b) {
+            gone = true;
+        } else if (slice.start < a && slice.end <= b) {
+            end = a;
+        } else if (slice.start >= a) { // straddles the cut end
+            start = a;
+            end = slice.end - cut;
+        } else {                        // spans the whole cut
+            end = slice.end - cut;
+        }
+        if (gone || end - start < minFrames) {
+            result.removed.push_back(slice.id);
+            continue;
+        }
+        if (end - start != slice.end - slice.start)
+            result.changed.push_back(slice.id);
+        result.slices.push_back({slice.id, start, end});
+    }
+    return result;
+}
 
 /** Pad link saved with a project: restored only onto audio with this fingerprint. */
 struct MainSampleLinkRecord {

@@ -163,14 +163,33 @@ void MainSampleWorkflows::restoreLinks(const char* const value)
 bool MainSampleWorkflows::applyHistory(const HistoryChange& change)
 {
     const std::lock_guard lock(mutationMutex_);
-    if (!change.imports.empty() && !sampler_.importPads(change.imports, nullptr))
+    // Undo/redo of a destructive cut reinstalls the other source first; a refused pad
+    // transaction puts the current one back, so a failed step changes nothing.
+    const bool swapSource = change.source != nullptr && change.session != nullptr &&
+                            change.session->sourceId != session_.sourceId;
+    PadData previousSource;
+    std::uint64_t previousId = 0U;
+    if (swapSource) {
+        if (!sampler_.exportSource(previousSource, &previousId))
+            previousId = 0U;
+        if (!sampler_.setSource(change.source.get(), change.session->sourceId))
+            return false;
+    }
+    if (!change.imports.empty() && !sampler_.importPads(change.imports, nullptr)) {
+        if (swapSource && previousId != 0U)
+            static_cast<void>(sampler_.setSource(&previousSource, previousId));
         return false;
+    }
     for (const auto& item : change.settings)
         sampler_.restorePadEditorSettings(item.pad, item.playback, item.mixer);
     for (const auto& item : change.links)
         static_cast<void>(sampler_.setPadProvenance(item.pad, item.provenance, item.fingerprint));
-    if (change.session != nullptr && !session_.empty() && change.session->sourceId == session_.sourceId)
+    if (change.session != nullptr && (swapSource || (!session_.empty() && change.session->sourceId == session_.sourceId)))
         session_ = *change.session;
+    if (swapSource) {
+        audioCache_ = {};
+        audioCacheId_ = 0U;
+    }
     publishStatusLocked(0U, MainSampleState::ready, {}, change.affected);
     return true;
 }
@@ -255,6 +274,7 @@ void MainSampleWorkflows::handleRequestImpl(const MainSampleRequest& request)
     case MainSampleVerb::spectrogram: spectrogram(request); return;
     case MainSampleVerb::arrange: arrange(request); return;
     case MainSampleVerb::range: setRange(request); return;
+    case MainSampleVerb::cut: cutSource(request); return;
     }
 }
 
@@ -499,6 +519,176 @@ void MainSampleWorkflows::assign(const MainSampleRequest& request)
     session_ = std::move(edited);
     publishPadSettings(bit, true);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, bit);
+}
+
+std::shared_ptr<const PadData> MainSampleWorkflows::sourceSnapshot(const std::uint64_t sourceId) const
+{
+    const std::lock_guard lock(mutationMutex_);
+    auto copy = std::make_shared<PadData>();
+    std::uint64_t id = 0U;
+    if (!sampler_.exportSource(*copy, &id) || id != sourceId)
+        return nullptr;
+    return copy;
+}
+
+std::shared_ptr<const PadData> MainSampleWorkflows::takeRetiredSource(const std::uint64_t sourceId)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (retiredSourceId_ != sourceId)
+        return nullptr;
+    retiredSourceId_ = 0U;
+    return std::move(retiredSource_);
+}
+
+void MainSampleWorkflows::cutSource(const MainSampleRequest& request)
+{
+    constexpr std::uint32_t kMinSliceFrames = 64U;
+    constexpr double kCrossfadeMilliseconds = 5.0;
+    const std::lock_guard lock(mutationMutex_);
+    const auto fail = [&](const char* text) {
+        publishStatusLocked(request.sequence, MainSampleState::error, text);
+    };
+    if (session_.empty())
+        return fail("Load a main sample first");
+    const auto settings = engineSettings();
+    if (settings.armed)
+        return fail("Disarm recording first");
+    std::uint32_t a = request.start;
+    std::uint32_t b = std::min(request.end, session_.frames);
+    if (a >= b)
+        return fail("Invalid region");
+    if (request.zeroCross) {
+        const auto snappedA = zeroCrossFrameLocked(a, {});
+        const auto snappedB = zeroCrossFrameLocked(b, {});
+        if (snappedA < snappedB) {
+            a = snappedA;
+            b = snappedB;
+        }
+    }
+    const bool crop = request.crop;
+    const std::uint32_t cutFrames = b - a;
+    if (!crop && cutFrames >= session_.frames)
+        return fail("Cannot cut the whole sample");
+    if (crop && cutFrames == session_.frames)
+        return fail("Nothing to crop");
+    const std::uint32_t newFrames = crop ? cutFrames : session_.frames - cutFrames;
+    if (newFrames < kMinSliceFrames)
+        return fail("Result would be too short");
+
+    const auto remap = remapSlicesForCut(session_.slices, a, b, crop, kMinSliceFrames);
+    for (const auto id : remap.removed)
+        if (sliceHasFavoritePad(id))
+            return fail(kFavoriteRefusal);
+    for (const auto id : remap.changed)
+        if (sliceHasFavoritePad(id))
+            return fail(kFavoriteRefusal);
+
+    PadData whole;
+    std::uint64_t oldId = 0U;
+    if (!sampler_.exportSource(whole, &oldId) || oldId != session_.sourceId)
+        return fail("Main sample unavailable");
+    if (whole.stereo.size() * sizeof(float) > undoByteLimit_)
+        return fail("Sample too large to undo: cut refused");
+
+    PadData next;
+    next.sampleRate = whole.sampleRate;
+    next.frames = newFrames;
+    next.stereo.resize(static_cast<std::size_t>(newFrames) * 2U);
+    const auto& src = whole.stereo;
+    if (crop) {
+        std::copy_n(src.begin() + static_cast<std::ptrdiff_t>(a) * 2, static_cast<std::size_t>(newFrames) * 2U,
+                    next.stereo.begin());
+    } else {
+        std::copy_n(src.begin(), static_cast<std::size_t>(a) * 2U, next.stereo.begin());
+        std::uint32_t fade = 0U;
+        if (a != 0U && b != whole.frames)
+            fade = std::min({static_cast<std::uint32_t>(whole.sampleRate * kCrossfadeMilliseconds / 1000.0),
+                             cutFrames, whole.frames - b});
+        // Equal-power join: the removed material fades out while the material after the cut fades in.
+        for (std::uint32_t i = 0; i < fade; ++i) {
+            const double theta = 1.5707963267948966 * (static_cast<double>(i) + 0.5) / fade;
+            const auto fadeOut = static_cast<float>(std::cos(theta));
+            const auto fadeIn = static_cast<float>(std::sin(theta));
+            for (std::size_t channel = 0; channel < 2U; ++channel)
+                next.stereo[(static_cast<std::size_t>(a) + i) * 2U + channel] =
+                    src[(static_cast<std::size_t>(a) + i) * 2U + channel] * fadeOut +
+                    src[(static_cast<std::size_t>(b) + i) * 2U + channel] * fadeIn;
+        }
+        std::copy(src.begin() + static_cast<std::ptrdiff_t>(b + fade) * 2, src.end(),
+                  next.stereo.begin() + static_cast<std::ptrdiff_t>(a + fade) * 2);
+    }
+    float peak = 0.0f;
+    double energy = 0.0;
+    for (const float sample : next.stereo) {
+        peak = std::max(peak, std::fabs(sample));
+        energy += static_cast<double>(sample) * sample;
+    }
+    next.peak = peak;
+    next.rms = static_cast<float>(std::sqrt(energy / static_cast<double>(next.stereo.size())));
+
+    const auto mapPoint = [&](const std::uint32_t frame) {
+        if (crop)
+            return std::clamp(frame, a, b) - a;
+        return frame <= a ? frame : frame < b ? a : frame - cutFrames;
+    };
+    auto edited = session_;
+    edited.sourceId = nextSourceId(session_.sourceId);
+    edited.frames = newFrames;
+    edited.slices = remap.slices;
+    {
+        const auto rangeStart = mapPoint(session_.rangeStart);
+        const auto rangeEnd = mapPoint(session_.rangeEndFrame());
+        edited.rangeStart = rangeStart < rangeEnd ? rangeStart : 0U;
+        edited.rangeEnd = rangeStart < rangeEnd ? rangeEnd : newFrames;
+    }
+
+    if (!sampler_.setSource(&next, edited.sourceId))
+        return fail("Main sample storage is unavailable");
+    const auto rollback = [&] { static_cast<void>(sampler_.setSource(&whole, oldId)); };
+
+    // Every pad linked to the old source moves to the new source id in ONE transaction:
+    // survivors are re-cut from the new audio, slices that no longer exist clear their pads.
+    const auto pads = snapshotPads();
+    std::array<PadData, kPadCount> padAudio;
+    std::vector<PadImport> imports;
+    std::uint64_t affected = 0U;
+    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
+        const auto provenance = pads.provenance[pad];
+        if (provenance == 0U || (provenance >> 16U) != oldId)
+            continue;
+        const auto sliceId = static_cast<std::uint16_t>(provenance & kSliceMask);
+        PadImport import;
+        import.pad = pad;
+        const auto* const slice = edited.find(sliceId);
+        if (slice != nullptr) {
+            if (!sampler_.copySourceRange(edited.sourceId, slice->start, slice->end - slice->start,
+                                          padAudio[pad])) {
+                rollback();
+                return fail("Main sample unavailable");
+            }
+            import.audio = &padAudio[pad];
+            import.playback = sampler_.padPlaybackSettings(pad);
+            if (std::find(remap.changed.begin(), remap.changed.end(), sliceId) != remap.changed.end()) {
+                import.playback.start = 0.0f;
+                import.playback.end = 1.0f;
+            }
+            import.mixer = sampler_.padMixerSettings(pad);
+            import.provenance = link(edited.sourceId, sliceId);
+        }
+        imports.push_back(import);
+        affected |= std::uint64_t{1} << pad;
+    }
+    if (!imports.empty() && !sampler_.importPads(imports, &settings)) {
+        rollback();
+        return fail("Pads changed, try again");
+    }
+    session_ = std::move(edited);
+    audioCache_ = {};
+    audioCacheId_ = 0U;
+    retiredSource_ = std::make_shared<const PadData>(std::move(whole));
+    retiredSourceId_ = oldId;
+    publishPadSettings(affected, true);
+    publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
 }
 
 void MainSampleWorkflows::remove(const MainSampleRequest& request)

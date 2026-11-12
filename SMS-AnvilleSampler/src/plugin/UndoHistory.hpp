@@ -66,6 +66,9 @@ public:
         }
     }
 
+    /** The step an undo/redo would restore, or nullptr. */
+    [[nodiscard]] const Snapshot* peekUndo() const noexcept { return undo_.empty() ? nullptr : &undo_.back(); }
+    [[nodiscard]] const Snapshot* peekRedo() const noexcept { return redo_.empty() ? nullptr : &redo_.back(); }
     void clear() noexcept { undo_.clear(); redo_.clear(); }
     [[nodiscard]] std::size_t undoDepth() const noexcept { return undo_.size(); }
     [[nodiscard]] std::size_t redoDepth() const noexcept { return redo_.size(); }

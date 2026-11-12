@@ -173,7 +173,7 @@ private:
 } // namespace main_sample_detail
 
 enum class MainSampleVerb : std::uint8_t {
-    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram, range };
+    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram, range, cut };
 
 /** One pad whose audio and settings move to another pad. */
 struct ArrangeMove {
@@ -232,6 +232,7 @@ struct MainSampleRequest {
     std::uint32_t start = 0U;               // assign, waveform
     std::uint32_t end = 0U;
     bool confirm = false;                   // assign
+    bool crop = false;                      // cut: keep the region instead of removing it
     std::uint16_t sliceId = 0U;             // remove
     std::uint32_t tiles = 0U;               // waveform; spectrogram: columns
     /** edit only: S = single step, B/U/E = live drag begin/update/end (one undo step). */
@@ -263,6 +264,9 @@ struct MainSampleRequest {
                (request.phase == 'S' && !request.zeroCross ? std::string()
                    : std::string(";") + (request.phase == 'S' ? std::string() : std::string(1, request.phase)) +
                          (request.zeroCross ? "Z" : ""));
+    case MainSampleVerb::cut:
+        return encoded + "X;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
+               ";" + (request.crop ? "P" : "C") + (request.zeroCross ? "Z" : "");
     case MainSampleVerb::remove: return encoded + "D;" + std::to_string(request.sliceId);
     case MainSampleVerb::spectrogram:
         return encoded + "G;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
@@ -364,6 +368,21 @@ struct MainSampleRequest {
                 decoded.phase = phase[0];
         }
         decoded.verb = MainSampleVerb::range;
+        break;
+    }
+    case 'X': {
+        std::string_view mode;
+        if (!fields.number(decoded.start) || !fields.number(decoded.end) || decoded.start >= decoded.end ||
+            !fields.next(mode) || !fields.finished() || mode.empty() || mode.size() > 2U)
+            return false;
+        if (mode.back() == 'Z') {
+            decoded.zeroCross = true;
+            mode.remove_suffix(1U);
+        }
+        if (mode.size() != 1U || (mode[0] != 'C' && mode[0] != 'P'))
+            return false;
+        decoded.crop = mode[0] == 'P';
+        decoded.verb = MainSampleVerb::cut;
         break;
     }
     case 'D':

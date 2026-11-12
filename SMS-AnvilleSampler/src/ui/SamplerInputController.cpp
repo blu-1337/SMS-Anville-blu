@@ -396,6 +396,13 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fHost.repaintSamplerInput();
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::mainSampleEdit)) {
+                if (clicked.index == 0) main.cutSelection();
+                else if (clicked.index == 1) main.cropSelection();
+                else main.trimToRange();
+                fHost.repaintSamplerInput();
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::mainSampleLoad)) { fSession.browseMainSample(); return true; }
             if (isTarget(clicked, InteractiveType::mainSampleClear)) { main.clear(); return true; }
             if (isTarget(clicked, InteractiveType::bank)) { fSession.selectBank(clicked.index); return true; }
@@ -745,6 +752,11 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
     if (fMixer.keyboard(mixerContext(), entryKey, press, backward)) return true;
     const auto& state = fSession.state();
     const bool mainSampleTop = state.mainSampleMode && !state.editorMode && !fSession.chopEditor().active();
+    if (mainSampleTop && press && key == InputKey::deleteText && !fSession.mainSample().confirmPending() &&
+        fSession.mainSample().hasSelection() && fSession.mainSample().cutSelection()) {
+        fHost.repaintSamplerInput(); // a region is selected: Delete cuts it out of the source
+        return true;
+    }
     if (mainSampleTop && press && key == InputKey::deleteText && !fSession.mainSample().confirmPending() &&
         fSession.mainSample().deleteSlice(fSession.mainSample().selectedSlice())) {
         fSession.mainSample().selectSlice(0U);

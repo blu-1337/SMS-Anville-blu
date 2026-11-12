@@ -261,6 +261,27 @@ void assignConfirmDeleteAndPreview()
           host.requests().back().pad == 5U && !controller.confirmPending(),
           "confirming resends A with confirm");
 
+    // CUT / CROP act on the selection, TRIM on the source range; each is one X request.
+    controller.clearSelection();
+    check(!controller.cutSelection() && !controller.cropSelection() && !controller.trimToRange(),
+          "cut, crop and trim need a selection or a range");
+    controller.beginSelection(100U);
+    controller.extendSelection(400U);
+    check(controller.cutSelection() && host.requests().back().verb == MainSampleVerb::cut &&
+          !host.requests().back().crop && host.requests().back().start == 100U &&
+          host.requests().back().end == 400U && !controller.hasSelection(), "CUT sends the selection");
+    controller.beginSelection(200U);
+    controller.extendSelection(300U);
+    check(controller.cropSelection() && host.requests().back().crop && host.requests().back().start == 200U &&
+          host.requests().back().end == 300U, "CROP keeps the selection");
+    check(controller.beginRangeDrag(false), "range drag starts");
+    controller.dragRangeTo(150U);
+    check(controller.endDrag(), "range drag ends");
+    check(controller.trimToRange() && host.requests().back().verb == MainSampleVerb::cut &&
+          host.requests().back().crop && host.requests().back().start == controller.rangeStart() &&
+          host.requests().back().end == controller.rangeEnd() && !host.requests().back().zeroCross,
+          "TRIM crops to the range without moving its edges");
+
     check(!controller.deleteSlice(9U) && controller.deleteSlice(2U) &&
           host.requests().back().verb == MainSampleVerb::remove &&
           host.requests().back().sliceId == 2U, "D only names a known slice");
@@ -738,6 +759,25 @@ void layoutRects()
     }
 }
 
+void editButtonRects()
+{
+    using namespace layout;
+    const auto disjoint = [](const sms::ui::Rect& r, const sms::ui::Rect& o) {
+        return r.x + r.width <= o.x || o.x + o.width <= r.x ||
+               r.y + r.height <= o.y || o.y + o.height <= r.y;
+    };
+    for (std::size_t index = 0; index < mainSampleEdit.size(); ++index) {
+        const auto& rect = mainSampleEdit[index];
+        check(rect.y == mainSampleTransport[0].y && rect.x >= mainSampleTransport[6].x + mainSampleTransport[6].width &&
+              rect.x + rect.width < historyUndo.x, "CUT, CROP and TRIM sit between SPEC and UNDO");
+        check(disjoint(rect, historyUndo) && disjoint(rect, historyRedo), "edit buttons clear UNDO and REDO");
+        for (const auto& transport : mainSampleTransport)
+            check(disjoint(rect, transport), "edit buttons clear the transport");
+        for (std::size_t second = index + 1U; second < mainSampleEdit.size(); ++second)
+            check(disjoint(rect, mainSampleEdit[second]), "edit buttons do not overlap each other");
+    }
+}
+
 void actionButtonSpacing()
 {
     using namespace layout;
@@ -1024,6 +1064,7 @@ int main()
     snapBypassWhileHeld();
     layoutRects();
     actionButtonSpacing();
+    editButtonRects();
     assignPicksFirstFreePad();
     zeroCrossFlagFollowsSnap();
     autoChopPanel();

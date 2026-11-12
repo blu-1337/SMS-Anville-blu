@@ -29,6 +29,8 @@ struct UndoSnapshot {
     std::array<UndoPad, kPadCount> pads{};
     MainSampleSession session;
     std::array<int, kPadCount> colors{};
+    /** The whole source, only on steps that straddle a destructive cut (a different source id). */
+    std::shared_ptr<const PadData> source;
     void addUniqueBytes(std::unordered_set<const void*>& seen, std::size_t& total) const;
 };
 
@@ -61,7 +63,10 @@ public:
         if (kind == Kind::action) {
             auto before = capture();
             apply();
-            if (!sameState(before, capture())) {
+            const auto after = capture();
+            if (!sameState(before, after)) {
+                if (before.session.sourceId != 0U && before.session.sourceId != after.session.sourceId)
+                    before.source = main_.takeRetiredSource(before.session.sourceId);
                 history_.push(std::move(before));
                 lastKind_ = Kind::action;
                 publishLocked();

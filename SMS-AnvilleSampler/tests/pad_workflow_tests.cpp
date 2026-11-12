@@ -1125,6 +1125,119 @@ std::size_t autoChopStatusCount(const MainSampleFixture& fixture)
         }));
 }
 
+void cutAndCropWorkflow()
+{
+    MainSampleFixture fixture(12.0);
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    const auto path = writeSourceWav("sms-cut-crop.wav", 4000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    const auto loaded = fixture.send(load, 2U);
+    const auto oldId = loaded.sourceId;
+    check(fixture.send(assignRequest(0U, 0U, 500U)).state == MainSampleState::ready, "slice 0");
+    check(fixture.send(assignRequest(1U, 800U, 1200U)).state == MainSampleState::ready, "slice 1");
+    check(fixture.send(assignRequest(2U, 1500U, 2500U)).state == MainSampleState::ready, "slice 2");
+    check(fixture.send(assignRequest(3U, 3000U, 3500U)).state == MainSampleState::ready, "slice 3");
+    auto range = mainRequest(MainSampleVerb::range);
+    range.start = 100U;
+    range.end = 3800U;
+    check(fixture.send(range).state == MainSampleState::ready, "set a source range");
+    const auto rangeStart = fixture.main.session().rangeStart;
+    const auto rangeEnd = fixture.main.session().rangeEndFrame();
+    PadData original;
+    std::uint64_t originalId = 0U;
+    check(fixture.engine.exportSource(original, &originalId) && originalId == oldId, "export the source");
+    const auto before = fixture.main.session();
+
+    // A cap that cannot hold the source refuses the cut (the decision: refuse, never an un-undoable step).
+    auto cut = mainRequest(MainSampleVerb::cut);
+    cut.start = 1000U;
+    cut.end = 2000U;
+    fixture.main.setUndoByteLimit(100U);
+    auto status = fixture.send(cut);
+    check(status.state == MainSampleState::error && status.text == "Sample too large to undo: cut refused" &&
+          fixture.main.session().sourceId == oldId, "a source larger than the undo cap refuses the cut");
+    fixture.main.setUndoByteLimit(256U * 1024U * 1024U);
+
+    // A favourite whose slice the cut shortens refuses the whole cut.
+    fixture.engine.setFavoriteMask(std::uint64_t{1} << 1U);
+    status = fixture.send(cut);
+    check(status.state == MainSampleState::error && status.text == midichopper::plugin::kFavoriteRefusal &&
+          fixture.main.session().sourceId == oldId, "cutting through a favourite slice is refused");
+    fixture.engine.setFavoriteMask(0U);
+
+    const auto depth = undo.undoDepth();
+    undo.record(UndoController::Kind::action, now, [&] { status = fixture.send(cut); });
+    check(status.state == MainSampleState::ready && undo.undoDepth() == depth + 1U, "cut is one undo step");
+    const auto after = fixture.main.session();
+    check(after.sourceId != oldId && after.frames == 3000U, "cut makes a new, shorter source");
+    check(after.slices.size() == 4U && after.slices[0].start == 0U && after.slices[0].end == 500U &&
+          after.slices[1].start == 800U && after.slices[1].end == 1000U &&
+          after.slices[2].start == 1000U && after.slices[2].end == 1500U &&
+          after.slices[3].start == 2000U && after.slices[3].end == 2500U,
+          "slices before stay, straddlers shorten, later ones shift left");
+    check(after.rangeStart == rangeStart && after.rangeEndFrame() == rangeEnd - 1000U,
+          "the source range follows the cut");
+    PadData cutSource;
+    std::uint64_t cutId = 0U;
+    check(fixture.engine.exportSource(cutSource, &cutId) && cutId == after.sourceId && cutSource.frames == 3000U,
+          "the engine holds the new source");
+    const auto sample = [](const PadData& data, const std::uint32_t frame) { return data.stereo[2U * frame]; };
+    bool identical = true;
+    for (std::uint32_t frame = 0; frame < 1000U; ++frame)
+        identical = identical && sample(cutSource, frame) == sample(original, frame);
+    for (std::uint32_t frame = 1240U; frame < 3000U; ++frame)
+        identical = identical && sample(cutSource, frame) == sample(original, frame + 1000U);
+    check(identical, "outside the 5 ms join (240 frames) the audio is bit-exact");
+    bool joined = false;
+    for (std::uint32_t frame = 1000U; frame < 1240U; ++frame)
+        joined = joined || sample(cutSource, frame) != sample(original, frame + 1000U);
+    check(joined, "the join is crossfaded");
+    for (std::uint32_t pad = 0; pad < 4U; ++pad) {
+        PadData padAudio;
+        const auto& slice = after.slices[pad];
+        bool same = fixture.engine.exportPublishedPad(pad, padAudio) && padAudio.frames == slice.end - slice.start &&
+                    (fixture.provenance(pad) >> 16U) == after.sourceId;
+        for (std::uint32_t frame = 0; same && frame < padAudio.frames; ++frame)
+            same = padAudio.stereo[2U * frame] == cutSource.stereo[2U * (slice.start + frame)];
+        check(same, "linked pads were re-cut from the new source and re-tagged");
+    }
+
+    undo.undo();
+    PadData restored;
+    std::uint64_t restoredId = 0U;
+    check(fixture.engine.exportSource(restored, &restoredId) && restoredId == oldId &&
+          restored.stereo == original.stereo && restored.frames == 4000U, "undo restores the source bit-exact");
+    check(fixture.main.session().slices == before.slices && fixture.main.session().rangeStart == before.rangeStart,
+          "undo restores the slices and the range");
+    check(padHoldsSlice(fixture.engine, 0U, 0U, 500U) && padHoldsSlice(fixture.engine, 1U, 800U, 1200U) &&
+          padHoldsSlice(fixture.engine, 2U, 1500U, 2500U) && padHoldsSlice(fixture.engine, 3U, 3000U, 3500U) &&
+          (fixture.provenance(1U) >> 16U) == oldId, "undo restores every linked pad and its link");
+    undo.redo();
+    check(fixture.main.session().sourceId == after.sourceId && fixture.main.session().frames == 3000U,
+          "redo cuts again");
+    undo.undo();
+
+    // CROP keeps only the region; slices outside it are removed and their pads cleared.
+    auto crop = mainRequest(MainSampleVerb::cut);
+    crop.start = 800U;
+    crop.end = 2600U;
+    crop.crop = true;
+    status = fixture.send(crop);
+    const auto cropped = fixture.main.session();
+    check(status.state == MainSampleState::ready && cropped.frames == 1800U && cropped.slices.size() == 2U &&
+          cropped.slices[0].start == 0U && cropped.slices[0].end == 400U &&
+          cropped.slices[1].start == 700U && cropped.slices[1].end == 1700U,
+          "crop keeps the region and re-indexes the slices");
+    check(!fixture.engine.padMetadata(3U).occupied && !fixture.engine.padMetadata(0U).occupied,
+          "pads of slices outside the crop are cleared");
+    check(fixture.engine.padMetadata(1U).occupied && (fixture.provenance(1U) >> 16U) == cropped.sourceId,
+          "surviving pads follow the cropped source");
+    std::filesystem::remove(path);
+}
+
 void sourceRangeWorkflow()
 {
     MainSampleFixture fixture(12.0);
@@ -1842,6 +1955,7 @@ int main()
     mainSampleLoadQueryWaveformAndClear();
     mainSampleAssignEditAndDelete();
     sourceRangeWorkflow();
+    cutAndCropWorkflow();
     autoChopWorkflow();
     mainSampleArrange();
     favoriteGuards();

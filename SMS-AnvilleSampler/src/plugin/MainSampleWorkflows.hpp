@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -81,10 +82,17 @@ public:
         struct Link { std::uint32_t pad = 0U; std::uint64_t provenance = 0U; std::uint64_t fingerprint = 0U; };
         std::vector<Link> links;        // link-only pads
         const MainSampleSession* session = nullptr; // adopted if the source id still matches
+        std::shared_ptr<const PadData> source;      // reinstalled when the session's source id differs
         std::uint64_t affected = 0U;
     };
     /** Republish the current status (links follow pad provenance); takes the mutation lock. */
     void republishStatus(std::uint64_t affected) { publishStatus(0U, MainSampleState::ready, {}, affected); }
+    /** Largest source a destructive cut may retire into the undo history; larger cuts are refused. */
+    void setUndoByteLimit(std::size_t bytes) noexcept { undoByteLimit_ = bytes; }
+    /** The current source as an immutable shared copy for undo/redo; null if the id does not match. */
+    [[nodiscard]] std::shared_ptr<const PadData> sourceSnapshot(std::uint64_t sourceId) const;
+    /** The source retired by the latest cut, once, if it has this id. */
+    [[nodiscard]] std::shared_ptr<const PadData> takeRetiredSource(std::uint64_t sourceId);
     /** False (nothing changed) when the pad transaction is refused, e.g. while armed. */
     [[nodiscard]] bool applyHistory(const HistoryChange& change);
     /** Restore pad audio (nullptr clears), with a staged link if its fingerprint matches. */
@@ -102,6 +110,8 @@ private:
     void edit(const MainSampleRequest& request);
     /** T: sets the non-destructive source range (one undo step per gesture); never re-cuts pads. */
     void setRange(const MainSampleRequest& request);
+    /** X: destructive CUT (remove the region) or CROP (keep it) of the source; one undo step. */
+    void cutSource(const MainSampleRequest& request);
     [[nodiscard]] bool sliceHasFavoritePad(std::uint16_t sliceId) const;
     void assign(const MainSampleRequest& request);
     void remove(const MainSampleRequest& request);
@@ -143,6 +153,9 @@ private:
     std::atomic<std::uint64_t> latestLoadSequence_{0U};
     std::uint64_t sourceCounter_ = 0U;  // guarded by mutationMutex_
     MainSampleSession session_;         // guarded by mutationMutex_
+    std::size_t undoByteLimit_ = 256U * 1024U * 1024U;
+    std::shared_ptr<const PadData> retiredSource_;  // guarded by mutationMutex_
+    std::uint64_t retiredSourceId_ = 0U;
 
     // Onset analysis of the current source, built on first use and never saved.
     struct AnalysisCache {

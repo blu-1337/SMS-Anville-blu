@@ -40,6 +40,7 @@ void MainSampleController::send(MainSampleRequest request)
 {
     request.sequence = ++fSequence;
     // Edges snap to a zero crossing on the worker when SNAP is on and Alt/Shift is not held.
+    if (request.verb != MainSampleVerb::cut) // a cut states its own snap (TRIM must not move the range edges)
     request.zeroCross = (request.verb == MainSampleVerb::edit || request.verb == MainSampleVerb::assign ||
                          request.verb == MainSampleVerb::range) &&
                         fSnap && !fSnapBypass;
@@ -368,6 +369,48 @@ bool MainSampleController::arrange()
 std::vector<plugin::ArrangeMove> MainSampleController::takeArrangedMoves()
 {
     return std::exchange(fArrangeConfirmed, {});
+}
+
+bool MainSampleController::cutSelection()
+{
+    if (!hasSource() || !hasSelection())
+        return false;
+    MainSampleRequest request;
+    request.verb = MainSampleVerb::cut;
+    request.start = fSelectionStart;
+    request.end = fSelectionEnd;
+    request.zeroCross = fSnap && !fSnapBypass;
+    send(request);
+    clearSelection();
+    return true;
+}
+
+bool MainSampleController::cropSelection()
+{
+    if (!hasSource() || !hasSelection())
+        return false;
+    MainSampleRequest request;
+    request.verb = MainSampleVerb::cut;
+    request.crop = true;
+    request.start = fSelectionStart;
+    request.end = fSelectionEnd;
+    request.zeroCross = fSnap && !fSnapBypass;
+    send(request);
+    clearSelection();
+    return true;
+}
+
+bool MainSampleController::trimToRange()
+{
+    if (!hasSource() || rangeFull())
+        return false;
+    MainSampleRequest request;
+    request.verb = MainSampleVerb::cut;
+    request.crop = true;
+    request.start = rangeStart();
+    request.end = rangeEnd();
+    send(request);
+    return true;
 }
 
 bool MainSampleController::deleteSlice(const std::uint16_t sliceId)

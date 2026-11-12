@@ -495,6 +495,13 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
             sms::ui::dpf::drawSegment(ctx.canvas, rect, label, false, colors.activityPlayback,
                                       hovered(ctx, InteractiveType::mainSampleAutoChop, index));
         };
+        static constexpr const char* kEditLabels[] = {"CUT", "CROP", "TRIM"};
+        for (int index = 0; index < 3; ++index) {
+            const bool usable = index == 2 ? !main.rangeFull() : main.hasSelection();
+            sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleEdit[static_cast<std::size_t>(index)],
+                                      kEditLabels[index], false, colors.intentDanger,
+                                      hovered(ctx, InteractiveType::mainSampleEdit, index), usable);
+        }
         static constexpr const char* kActionLabels[] = {"ASSIGN", "ARRANGE", "AUTO COLOR", "CLEAR COLORS", "FAVORITE"};
         for (int index = 0; index < uiLayout::kMainSampleActionCount; ++index)
             sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleAction(index), kActionLabels[index],

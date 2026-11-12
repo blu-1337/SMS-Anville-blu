@@ -82,6 +82,10 @@ public:
      * until takeArrangedMoves() so the session can carry pad colours along.
      */
     bool arrange();
+    /** Destructive source edits (one plug-in request each; false and nothing sent when not applicable). */
+    bool cutSelection();   // CUT: removes the selected region
+    bool cropSelection();  // CROP: keeps only the selected region
+    bool trimToRange();    // TRIM: keeps only the source range
     /**
      * Zone colour of slice number `rank` (0-based, time order) as a 1-based palette index:
      * an interleaved walk of the palette so neighbours contrast. `press` rotates the walk

@@ -281,6 +281,37 @@ void sessions()
                             "MSS1;1;100;48000;1;1:0:200;x", "MSS1;1;100;48000;1;", "MSS1;1;100"})
         check(!decodeMainSampleSession(bad, decoded), bad);
 
+    // Slice remapping for a destructive CUT [200,400) and a CROP of the same region.
+    const std::vector<MainSampleSlice> before{{1U, 0U, 100U}, {2U, 150U, 250U}, {3U, 250U, 350U},
+                                              {4U, 350U, 500U}, {5U, 500U, 700U}, {6U, 100U, 600U}};
+    const auto cutMap = remapSlicesForCut(before, 200U, 400U, false, 16U);
+    const std::vector<MainSampleSlice> cutExpected{{1U, 0U, 100U}, {2U, 150U, 200U}, {4U, 200U, 300U},
+                                                   {5U, 300U, 500U}, {6U, 100U, 400U}};
+    check(cutMap.slices == cutExpected && cutMap.removed == std::vector<std::uint16_t>{3U} &&
+          cutMap.changed == std::vector<std::uint16_t>{2U, 4U, 6U},
+          "cut: before stays, straddling start/end shorten, inside is removed, spanning shortens, after shifts");
+    check(remapSlicesForCut(before, 200U, 400U, false, 60U).removed ==
+          std::vector<std::uint16_t>{2U, 3U}, "cut: a straddler below the minimum length is dropped");
+    const auto cropMap = remapSlicesForCut(before, 200U, 400U, true, 16U);
+    const std::vector<MainSampleSlice> cropExpected{{2U, 0U, 50U}, {3U, 50U, 150U}, {4U, 150U, 200U},
+                                                    {6U, 0U, 200U}};
+    check(cropMap.slices == cropExpected && cropMap.removed == std::vector<std::uint16_t>{1U, 5U},
+          "crop: slices are clipped to the region and re-based; outside is removed");
+    MainSampleRequest cutRequest;
+    cutRequest.verb = MainSampleVerb::cut;
+    cutRequest.sequence = 4U;
+    cutRequest.start = 10U;
+    cutRequest.end = 90U;
+    cutRequest.crop = true;
+    cutRequest.zeroCross = true;
+    MainSampleRequest decodedCut;
+    check(encodeMainSampleRequest(cutRequest) == "MS1;4;X;10;90;PZ" &&
+          decodeMainSampleRequest(encodeMainSampleRequest(cutRequest), decodedCut) && decodedCut.crop &&
+          decodedCut.zeroCross && decodedCut.start == 10U && decodedCut.end == 90U,
+          "cut request round-trips");
+    for (const char* bad : {"MS1;4;X;10;10;C", "MS1;4;X;10;90", "MS1;4;X;10;90;Q", "MS1;4;X;10;90;CZZ"})
+        check(!decodeMainSampleRequest(bad, decodedCut), bad);
+
     MainSampleSession ranged;
     ranged.reset(0xbeefULL, 1000U, 48000U, "r");
     check(ranged.rangeIsFull() && encodeMainSampleSession(ranged).starts_with("MSS1;"),

@@ -1318,6 +1318,71 @@ void arrangeKeepsColours()
           "the audio is in time order");
 }
 
+void arrangeScenario()
+{
+    MainSampleFixture fixture;
+    std::array<int, kPadCount> colors{};
+    fixture.main.setArrangeHook([&](const std::vector<ArrangeMove>& moves) {
+        std::vector<int> values;
+        for (const auto& move : moves) values.push_back(colors[move.from]);
+        for (std::size_t i = 0; i < moves.size(); ++i) colors[moves[i].to] = values[i];
+    });
+    fixture.pads.setSwapHook([&](const std::uint32_t a, const std::uint32_t b) { std::swap(colors[a], colors[b]); });
+    fixture.pads.setSwapPublishedHook([&](const std::uint32_t a, const std::uint32_t b) {
+        fixture.main.republishStatus((1ULL << a) | (1ULL << b));
+    });
+    const auto path = writeSourceWav("sms-arrange-scenario.wav", 2000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    // Out of order, with gaps, across banks B-D (pads 16-31, 32-47, 48-63).
+    const std::array<std::array<std::uint32_t, 3U>, 5U> plan{{
+        {0U, 1400U, 1600U}, {5U, 0U, 200U}, {20U, 800U, 1000U}, {35U, 200U, 400U}, {50U, 1000U, 1200U}}};
+    for (const auto& item : plan)
+        check(fixture.send(assignRequest(item[0], item[1], item[2])).state == MainSampleState::ready, "assign");
+    // An unlinked pad with foreign audio, and a favourite in the middle (pad 20).
+    auto foreign = sample();
+    PadImport import;
+    import.pad = 7U;
+    import.audio = &foreign;
+    check(fixture.engine.importPads({&import, 1U}), "foreign audio on pad 7");
+    fixture.engine.setFavoriteMask(std::uint64_t{1} << 20U);
+    for (const auto& item : plan)
+        colors[item[0]] = 1 + static_cast<int>(fixture.provenance(item[0]) & 0xFFFFU);
+    colors[20] = colors[20] | 0x100; // favourite flag
+    const auto favouriteColour = colors[20];
+    const auto foreignTag = fixture.provenance(7U);
+    fixture.pads.handlePadStructureRequest("PS1;W;0;35"); // swap a bank-A pad with a bank-C pad
+    check(padHoldsSlice(fixture.engine, 0U, 200U, 400U) && padHoldsSlice(fixture.engine, 35U, 1400U, 1600U),
+          "swap moved the audio");
+
+    const auto arranged = fixture.send(mainRequest(MainSampleVerb::arrange));
+    check(arranged.state == MainSampleState::ready, "arrange succeeds");
+    // Non-favourite linked pads {0,5,35,50} take the slices in time order; others stay.
+    check(padHoldsSlice(fixture.engine, 5U, 200U, 400U) && padHoldsSlice(fixture.engine, 0U, 0U, 200U) &&
+          padHoldsSlice(fixture.engine, 35U, 1000U, 1200U) && padHoldsSlice(fixture.engine, 50U, 1400U, 1600U),
+          "linked pads follow slice time order inside their own slots");
+    check(padHoldsSlice(fixture.engine, 20U, 800U, 1000U) && colors[20] == favouriteColour,
+          "the favourite pad and its colour stay put");
+    check(fixture.provenance(7U) == foreignTag && fixture.engine.padMetadata(7U).occupied,
+          "unlinked pads are untouched");
+    for (const auto& item : plan) {
+        const auto pad = item[0];
+        const auto tag = fixture.provenance(pad);
+        check(colors[pad] == 1 + static_cast<int>(tag & 0xFFFFU) || pad == 20U,
+              "colours follow their slice");
+    }
+    // The published links agree with the engine for every pad.
+    MainSampleStatus status;
+    check(decodeMainSampleStatus(fixture.observer.latest(kMainSampleStatusKey), status), "status decodes");
+    check(status.links.size() == 5U, "five links published");
+    for (const auto& link : status.links)
+        check((fixture.provenance(link.pad) & 0xFFFFU) == link.sliceId, "published link matches the pad");
+    // Idempotent.
+    const auto again = fixture.send(mainRequest(MainSampleVerb::arrange));
+    check(again.state == MainSampleState::ready && again.affectedMask == 0U, "arrange is idempotent");
+}
+
 void zeroCrossSnap()
 {
     MainSampleFixture fixture;
@@ -1786,6 +1851,7 @@ int main()
     undoGestureCoalescesLiveUpdates();
     padSwap();
     arrangeKeepsColours();
+    arrangeScenario();
     zeroCrossSnap();
     std::cout << "Pad workflow tests passed\n";
 }

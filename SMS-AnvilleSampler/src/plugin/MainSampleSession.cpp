@@ -31,6 +31,8 @@ void MainSampleSession::reset(const std::uint64_t id, const std::uint32_t frameC
     sampleRate = sourceId != 0U ? rate : 0U;
     nextSliceId = 1U;
     slices.clear();
+    rangeStart = 0U;
+    rangeEnd = frames;
     name = sourceId != 0U ? main_sample_detail::truncateUtf8(sourceName, kMainSampleNameBytes)
                           : std::string{};
 }
@@ -86,13 +88,26 @@ bool MainSampleSession::removeSlice(const std::uint16_t id)
     return true;
 }
 
+bool MainSampleSession::setRange(const std::uint32_t start, const std::uint32_t end) noexcept
+{
+    if (empty() || start >= end || end > frames)
+        return false;
+    rangeStart = start;
+    rangeEnd = end;
+    return true;
+}
+
 std::string encodeMainSampleSession(const MainSampleSession& session)
 {
     if (session.empty())
         return {};
-    return "MSS1;" + main_sample_detail::hex(session.sourceId) + ";" +
+    // A full range keeps the original MSS1 text, so older projects and fixtures stay byte-identical.
+    const bool ranged = !session.rangeIsFull();
+    return std::string(ranged ? "MSS2;" : "MSS1;") + main_sample_detail::hex(session.sourceId) + ";" +
            std::to_string(session.frames) + ";" + std::to_string(session.sampleRate) + ";" +
            std::to_string(session.nextSliceId) + ";" +
+           (ranged ? std::to_string(session.rangeStart) + ";" + std::to_string(session.rangeEndFrame()) + ";"
+                   : std::string()) +
            main_sample_detail::encodeSlices(session.slices) + ";" +
            main_sample_detail::truncateUtf8(session.name, kMainSampleNameBytes);
 }
@@ -100,7 +115,8 @@ std::string encodeMainSampleSession(const MainSampleSession& session)
 bool decodeMainSampleSession(const std::string_view encoded, MainSampleSession& session)
 {
     using main_sample_detail::Fields;
-    if (!encoded.starts_with("MSS1;"))
+    const bool ranged = encoded.starts_with("MSS2;");
+    if (!ranged && !encoded.starts_with("MSS1;"))
         return false;
     Fields fields(encoded.substr(5U));
     MainSampleSession decoded;
@@ -108,13 +124,19 @@ bool decodeMainSampleSession(const std::string_view encoded, MainSampleSession& 
     std::string_view name;
     if (!fields.number(decoded.sourceId, 16) || !fields.number(decoded.frames) ||
         !fields.number(decoded.sampleRate) || !fields.number(decoded.nextSliceId) ||
+        (ranged && (!fields.number(decoded.rangeStart) || !fields.number(decoded.rangeEnd))) ||
         !fields.next(slices) || !fields.last(name) || decoded.sourceId == 0U ||
         decoded.sourceId > kMainSampleSourceIdMask || decoded.frames == 0U ||
         decoded.sampleRate < 2U || decoded.sampleRate > 768000U || decoded.nextSliceId == 0U ||
         name.size() > kMainSampleNameBytes ||
+        (ranged && (decoded.rangeStart >= decoded.rangeEnd || decoded.rangeEnd > decoded.frames)) ||
         !main_sample_detail::decodeSlices(slices, decoded.frames, decoded.slices) ||
         !sortedByStart(decoded.slices))
         return false;
+    if (!ranged) {
+        decoded.rangeStart = 0U;
+        decoded.rangeEnd = decoded.frames;
+    }
     decoded.name = std::string(name);
     session = std::move(decoded);
     return true;

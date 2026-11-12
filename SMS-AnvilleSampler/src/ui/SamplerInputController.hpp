@@ -92,7 +92,7 @@ private:
     int fViewportDrag = -1;
     float fViewportScrollGrabX = 0.0f;
     int fMainSliderDrag = -1;
-    enum class MainSampleDrag { none, selecting, marker, overview, pan };
+    enum class MainSampleDrag { none, selecting, marker, overview, pan, range };
     bool beginMainSampleWaveform(sms::ui::Point position);
     void updateMainSampleDrag(sms::ui::Point position);
     bool endMainSampleDrag(sms::ui::Point position);

@@ -254,6 +254,7 @@ void MainSampleWorkflows::handleRequestImpl(const MainSampleRequest& request)
     case MainSampleVerb::waveform: waveform(request); return;
     case MainSampleVerb::spectrogram: spectrogram(request); return;
     case MainSampleVerb::arrange: arrange(request); return;
+    case MainSampleVerb::range: setRange(request); return;
     }
 }
 
@@ -404,6 +405,33 @@ void MainSampleWorkflows::edit(const MainSampleRequest& request)
     session_ = std::move(edited);
     publishPadSettings(affected, false);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
+}
+
+void MainSampleWorkflows::setRange(const MainSampleRequest& request)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
+        return;
+    }
+    std::uint32_t start = request.start;
+    std::uint32_t end = request.end;
+    if (request.zeroCross) {
+        // Only an edge the drag moved is snapped, as with slice edges.
+        const auto snappedStart = start != session_.rangeStart ? zeroCrossFrameLocked(start, {}) : start;
+        const auto snappedEnd = end != session_.rangeEndFrame() ? zeroCrossFrameLocked(end, {}) : end;
+        if (snappedStart < snappedEnd) {
+            start = snappedStart;
+            end = snappedEnd;
+        }
+    }
+    auto edited = session_;
+    if (!edited.setRange(start, end)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Invalid source range");
+        return;
+    }
+    session_ = std::move(edited);
+    publishStatusLocked(request.sequence, MainSampleState::ready);
 }
 
 void MainSampleWorkflows::assign(const MainSampleRequest& request)
@@ -702,6 +730,8 @@ void MainSampleWorkflows::publishStatusLocked(const std::uint64_t sequence,
         status.frames = session_.frames;
         status.sampleRate = session_.sampleRate;
         status.slices = session_.slices;
+        status.rangeStart = session_.rangeStart;
+        status.rangeEnd = session_.rangeEndFrame();
         const auto pads = snapshotPads();
         for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
             const auto provenance = pads.provenance[pad];
@@ -797,9 +827,16 @@ void MainSampleWorkflows::autoChop(const AutoChopRequest& request)
         return;
     }
     const std::int64_t frames = session_.frames;
-    const std::int64_t rangeStart = std::min<std::int64_t>(request.rangeStart, frames);
-    const std::int64_t rangeEnd =
-        request.rangeEnd == 0U ? frames : std::min<std::int64_t>(request.rangeEnd, frames);
+    // The source range confines every mode; the request may narrow it further.
+    const std::int64_t rangeStart =
+        std::max<std::int64_t>(std::min<std::int64_t>(request.rangeStart, frames), session_.rangeStart);
+    const std::int64_t rangeEnd = std::min<std::int64_t>(
+        request.rangeEnd == 0U ? frames : std::min<std::int64_t>(request.rangeEnd, frames),
+        session_.rangeEndFrame());
+    if (rangeStart >= rangeEnd) {
+        fail("No slices found");
+        return;
+    }
     const std::int64_t minFrames =
         std::max<std::int64_t>(1, static_cast<std::int64_t>(0.01 * session_.sampleRate));
     const double contextBpm =

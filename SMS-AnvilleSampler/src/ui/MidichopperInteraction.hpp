@@ -103,6 +103,7 @@ enum class InteractiveType : int {
     dropdownItem,
     mainSampleModeItem,
     overviewWaveform,
+    mainSampleRangeHandle, // index 0 = range start, 1 = range end
 };
 
 class PadPressTracker {
@@ -483,6 +484,8 @@ struct InteractionContext {
     int dropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
     std::span<const plugin::MainSampleSlice> mainSampleSlices;
     sms::ui::waveform::Viewport mainSampleViewport;
+    std::uint32_t mainSampleRangeStart = 0U; // source range, same frames as the slices
+    std::uint32_t mainSampleRangeEnd = 0U;
     bool menuOpen = false;
     bool skinsAvailable = false;
     bool resetEnabled = true;
@@ -539,6 +542,24 @@ struct InteractionContext {
     const float row = narrow ? static_cast<float>(index % 3U) : 0.0f;
     const float left = std::min(x0 + 1.0f, bounds.x + bounds.width - width);
     return {left, bounds.y + 3.0f + row * (layout::sliceBadgeHeight + 1.0f), width, layout::sliceBadgeHeight};
+}
+
+/**
+ * Range handle: a small square on the bottom edge, the start one to the right of its line and the end
+ * one to the left. Zero-size when the edge is outside the viewport. It never reaches the badge rows
+ * at the top of the waveform.
+ */
+[[nodiscard]] inline sms::ui::Rect mainSampleRangeHandleRect(
+    const sms::ui::waveform::Viewport& viewport, const std::uint32_t frame, const bool endHandle) noexcept
+{
+    const auto bounds = layout::mainSampleWaveform;
+    if (viewport.total == 0U || frame < viewport.start || frame > viewport.end)
+        return {};
+    const float size = layout::rangeHandleSize;
+    const float x = std::clamp(viewport.xForFrame(static_cast<double>(frame), bounds), bounds.x,
+                               bounds.x + bounds.width);
+    const float left = endHandle ? std::max(bounds.x, x - size) : std::min(x, bounds.x + bounds.width - size);
+    return {left, bounds.y + bounds.height - size - 1.0f, size, size};
 }
 
 /** Marker index = slice * 2 + (end edge ? 1 : 0). A boundary shared with the next slice is
@@ -810,6 +831,12 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             if (uiLayout::mainSampleOverview.contains(point))
                 return target(InteractiveType::mainSampleOverview);
             if (uiLayout::mainSampleWaveform.contains(point)) {
+                for (int handle = 1; handle >= 0; --handle) {
+                    if (mainSampleRangeHandleRect(context.mainSampleViewport,
+                            handle == 0 ? context.mainSampleRangeStart : context.mainSampleRangeEnd,
+                            handle == 1).contains(point))
+                        return target(InteractiveType::mainSampleRangeHandle, handle);
+                }
                 for (std::size_t index = std::min<std::size_t>(context.mainSampleSlices.size(), 64U); index-- > 0U;) {
                     if (mainSampleBadgeRect(context.mainSampleSlices, context.mainSampleViewport, index).contains(point))
                         return target(InteractiveType::mainSampleBadge, static_cast<int>(index));

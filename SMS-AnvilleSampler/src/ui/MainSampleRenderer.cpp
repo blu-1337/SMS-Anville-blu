@@ -241,6 +241,18 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             ctx.canvas.fill();
         }
     }
+    if (!main.rangeFull()) {
+        // Outside the source range is dimmed: the tools and playback ignore it.
+        const float xs = std::clamp(viewport.xForFrame(static_cast<double>(main.rangeStart()), bounds),
+                                    bounds.x, bounds.x + bounds.width);
+        const float xe = std::clamp(viewport.xForFrame(static_cast<double>(main.rangeEnd()), bounds),
+                                    bounds.x, bounds.x + bounds.width);
+        ctx.canvas.beginPath();
+        ctx.canvas.rect(bounds.x, bounds.y, xs - bounds.x, bounds.height);
+        ctx.canvas.rect(xe, bounds.y, bounds.x + bounds.width - xe, bounds.height);
+        ctx.canvas.fillColor(colors.canvas.withAlpha(0.62f));
+        ctx.canvas.fill();
+    }
     ctx.canvas.resetScissor();
 
     // Markers: one per distinct boundary. Wide spacing gets the labelled handle; crowded
@@ -291,6 +303,30 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
         ctx.canvas.strokeColor(marker.edge == 1 ? darker(lineColor) : lineColor);
         ctx.canvas.strokeWidth(isHovered ? (room >= 38.0f ? 4.0f : 3.0f) : (room >= 38.0f ? 2.0f : 1.0f));
+        ctx.canvas.stroke();
+    }
+
+    // Source range: a line and a small square handle at the bottom edge for each end.
+    for (const bool endHandle : {false, true}) {
+        const auto frame = endHandle ? main.rangeEnd() : main.rangeStart();
+        const auto rect = mainSampleRangeHandleRect(viewport, frame, endHandle);
+        if (rect.width <= 0.0f)
+            continue;
+        const bool isHovered = hovered(ctx, InteractiveType::mainSampleRangeHandle, endHandle ? 1 : 0) ||
+                               main.rangeDragging();
+        const float x = endHandle ? rect.x + rect.width : rect.x;
+        ctx.canvas.beginPath();
+        ctx.canvas.moveTo(x, bounds.y + 36.0f);
+        ctx.canvas.lineTo(x, bounds.y + bounds.height);
+        ctx.canvas.strokeColor(colors.contentPrimary.withAlpha(isHovered ? 0.9f : 0.5f));
+        ctx.canvas.strokeWidth(1.0f);
+        ctx.canvas.stroke();
+        ctx.canvas.beginPath();
+        ctx.canvas.rect(rect.x, rect.y, rect.width, rect.height);
+        ctx.canvas.fillColor(colors.contentPrimary.withAlpha(isHovered ? 1.0f : 0.78f));
+        ctx.canvas.fill();
+        ctx.canvas.strokeColor(colors.canvas);
+        ctx.canvas.strokeWidth(1.0f);
         ctx.canvas.stroke();
     }
 

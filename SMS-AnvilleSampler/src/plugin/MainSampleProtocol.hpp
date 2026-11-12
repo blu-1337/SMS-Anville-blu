@@ -173,7 +173,7 @@ private:
 } // namespace main_sample_detail
 
 enum class MainSampleVerb : std::uint8_t {
-    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram };
+    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram, range };
 
 /** One pad whose audio and settings move to another pad. */
 struct ArrangeMove {
@@ -258,6 +258,11 @@ struct MainSampleRequest {
                ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0") +
                (request.zeroCross ? ";Z" : "");
     case MainSampleVerb::arrange: return encoded + "R";
+    case MainSampleVerb::range:
+        return encoded + "T;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
+               (request.phase == 'S' && !request.zeroCross ? std::string()
+                   : std::string(";") + (request.phase == 'S' ? std::string() : std::string(1, request.phase)) +
+                         (request.zeroCross ? "Z" : ""));
     case MainSampleVerb::remove: return encoded + "D;" + std::to_string(request.sliceId);
     case MainSampleVerb::spectrogram:
         return encoded + "G;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
@@ -341,6 +346,26 @@ struct MainSampleRequest {
         decoded.confirm = confirm == 1U;
         break;
     }
+    case 'T': {
+        if (!fields.number(decoded.start) || !fields.number(decoded.end) || decoded.start >= decoded.end)
+            return false;
+        if (!fields.finished()) {
+            std::string_view phase;
+            if (!fields.next(phase) || !fields.finished() || phase.empty() || phase.size() > 2U)
+                return false;
+            if (phase.back() == 'Z') {
+                decoded.zeroCross = true;
+                phase.remove_suffix(1U);
+            }
+            if (phase.size() > 1U ||
+                (phase.size() == 1U && phase[0] != 'B' && phase[0] != 'U' && phase[0] != 'E'))
+                return false;
+            if (!phase.empty())
+                decoded.phase = phase[0];
+        }
+        decoded.verb = MainSampleVerb::range;
+        break;
+    }
     case 'D':
         if (!fields.number(decoded.sliceId) || !fields.finished() || decoded.sliceId == 0U)
             return false;
@@ -378,6 +403,8 @@ struct MainSampleStatus {
     std::uint32_t sampleRate = 0U; // whole hertz
     std::vector<MainSampleSlice> slices;
     std::vector<MainSampleLink> links;
+    std::uint32_t rangeStart = 0U;   // source range [rangeStart, rangeEnd); the full source when unset
+    std::uint32_t rangeEnd = 0U;
     std::uint64_t affectedMask = 0U; // pads re-cut or unlinked by this operation
     std::string text;                // source name, or the error/confirm message
 };
@@ -400,6 +427,8 @@ inline constexpr std::array<std::string_view, 5> kStateNames{
            std::string(kStateNames[static_cast<std::size_t>(status.state)]) + ";" +
            hex(status.sourceId) + ";" + std::to_string(status.frames) + ";" +
            std::to_string(status.sampleRate) + ";" + encodeSlices(status.slices) + ";" + links +
+           ";" + std::to_string(status.rangeStart) + ";" +
+           std::to_string(status.rangeEnd == 0U ? status.frames : status.rangeEnd) +
            ";" + hex(status.affectedMask) + ";" + truncateUtf8(status.text, kMainSampleTextBytes);
 }
 
@@ -418,8 +447,11 @@ inline constexpr std::array<std::string_view, 5> kStateNames{
     if (!fields.number(decoded.sequence) || !fields.next(state) ||
         !fields.number(decoded.sourceId, 16) || !fields.number(decoded.frames) ||
         !fields.number(decoded.sampleRate) || !fields.next(slices) || !fields.next(links) ||
+        !fields.number(decoded.rangeStart) || !fields.number(decoded.rangeEnd) ||
         !fields.number(decoded.affectedMask, 16) || !fields.last(text) ||
         decoded.sourceId > kMainSampleSourceIdMask || text.size() > kMainSampleTextBytes ||
+        (decoded.frames != 0U ? (decoded.rangeStart >= decoded.rangeEnd || decoded.rangeEnd > decoded.frames)
+                              : (decoded.rangeStart != 0U || decoded.rangeEnd != 0U)) ||
         !decodeSlices(slices, decoded.frames, decoded.slices))
         return false;
     std::size_t stateIndex = 0U;

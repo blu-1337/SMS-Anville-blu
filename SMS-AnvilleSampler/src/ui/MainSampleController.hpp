@@ -194,10 +194,21 @@ public:
     /** Moves the grabbed region by (frame - grab frame); snaps its edges to other slices when SNAP is on. */
     void dragRegionTo(std::uint32_t frame, double framesPerPixel) noexcept;
     [[nodiscard]] bool regionDragging() const noexcept { return fRegion.has_value(); }
+    // Source range markers (bottom handles): a non-destructive [start, end) the tools are confined to.
+    /** Range as displayed, including a handle being dragged. */
+    [[nodiscard]] std::uint32_t rangeStart() const noexcept;
+    [[nodiscard]] std::uint32_t rangeEnd() const noexcept;
+    [[nodiscard]] bool rangeFull() const noexcept
+    { return rangeStart() == 0U && rangeEnd() == fStatus.frames; }
+    bool beginRangeDrag(bool endHandle) noexcept;
+    /** Moves the grabbed handle (snapped by the caller); keeps at least kMinRangeFrames. */
+    void dragRangeTo(std::uint32_t frame) noexcept;
+    [[nodiscard]] bool rangeDragging() const noexcept { return fRangeDrag.has_value(); }
+    static constexpr std::uint32_t kMinRangeFrames = 64U;
     bool endDrag();
     void cancelDrag() noexcept;
     [[nodiscard]] bool dragging() const noexcept
-    { return fDrag.has_value() || fRegion.has_value() || fSelectionEdge != 0; }
+    { return fDrag.has_value() || fRegion.has_value() || fSelectionEdge != 0 || fRangeDrag.has_value(); }
 
     // Viewport over the source (wheel zoom, Shift+wheel or overview pan).
     bool zoom(float delta, float anchorX, sms::ui::Rect bounds, Time now) noexcept;
@@ -291,6 +302,11 @@ private:
     std::int64_t fLiveSent = 0;
     std::optional<Drag> fDrag;
     std::optional<Region> fRegion;
+    struct RangeDrag {
+        bool endHandle = false;
+        std::uint32_t frame = 0U;
+    };
+    std::optional<RangeDrag> fRangeDrag;
     int fSelectionEdge = 0; // 1 = start, 2 = end of the selection while right-dragging
     std::optional<PendingAssign> fConfirm;
     std::optional<PendingAssign> fLastAssign;

@@ -190,11 +190,11 @@ void statuses()
           decoded.links.size() == 64U && decoded.text.size() == kMainSampleTextBytes,
           "the worst-case status decodes with its text cut to 512 bytes");
 
-    for (const char* bad : {"MS1;1;READY;1;100;1:0:50;3:2;0;x", // unknown slice
-                            "MS1;1;READY;1;100;1:0:50;3:1,3:1;0;x", // duplicate pad
-                            "MS1;1;READY;1;100;1:0:150;;0;x", // slice past the end
-                            "MS1;1;DONE;1;100;;;0;x", "MS1;1;READY;1;100;;;0",
-                            "MS1;1;READY;1000000000000;100;;;0;x", "MS1;1;READY;1;100;;64:1;0;x"})
+    for (const char* bad : {"MS1;1;READY;1;100;1:0:50;3:2;0;100;0;x", // unknown slice
+                            "MS1;1;READY;1;100;1:0:50;3:1,3:1;0;100;0;x", // duplicate pad
+                            "MS1;1;READY;1;100;1:0:150;;0;100;0;x", // slice past the end
+                            "MS1;1;DONE;1;100;;;0;100;0;x", "MS1;1;READY;1;100;;;0",
+                            "MS1;1;READY;1000000000000;100;;;0;100;0;x", "MS1;1;READY;1;100;;64:1;0;x"})
         check(!decodeMainSampleStatus(bad, decoded), bad);
 }
 
@@ -279,6 +279,19 @@ void sessions()
     for (const char* bad : {"MSS1;0;100;48000;1;;x", "MSS1;1;0;48000;1;;x", "MSS1;1;100;1;1;;x",
                             "MSS1;1;100;48000;0;;x", "MSS1;1;100;48000;1;2:50:60,1:0:10;x",
                             "MSS1;1;100;48000;1;1:0:200;x", "MSS1;1;100;48000;1;", "MSS1;1;100"})
+        check(!decodeMainSampleSession(bad, decoded), bad);
+
+    MainSampleSession ranged;
+    ranged.reset(0xbeefULL, 1000U, 48000U, "r");
+    check(ranged.rangeIsFull() && encodeMainSampleSession(ranged).starts_with("MSS1;"),
+          "a full range keeps MSS1 text");
+    check(!ranged.setRange(10U, 10U) && !ranged.setRange(0U, 1001U) && ranged.setRange(100U, 900U) &&
+          !ranged.rangeIsFull(), "range must be non-empty and inside the source");
+    check(decodeMainSampleSession(encodeMainSampleSession(ranged), decoded) &&
+          decoded.rangeStart == 100U && decoded.rangeEnd == 900U, "MSS2 round-trips the range");
+    check(decodeMainSampleSession("MSS1;1;100;48000;1;;x", decoded) && decoded.rangeStart == 0U &&
+          decoded.rangeEnd == 100U, "old MSS1 loads as the full range");
+    for (const char* bad : {"MSS2;1;100;48000;1;50;50;;x", "MSS2;1;100;48000;1;0;101;;x", "MSS2;1;100;48000;1;5;;x"})
         check(!decodeMainSampleSession(bad, decoded), bad);
 }
 

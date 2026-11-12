@@ -66,6 +66,8 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.mainSampleModeMenu = fSession.mainSample().modeMenuOpen();
     context.mainSampleSlices = fSession.mainSample().displaySlices();
     context.mainSampleViewport = fSession.mainSample().viewport();
+    context.mainSampleRangeStart = fSession.mainSample().rangeStart();
+    context.mainSampleRangeEnd = fSession.mainSample().rangeEnd();
     context.menuOpen = fMenu.open();
     context.resetEnabled = fSession.resetEnabled();
     context.skinsAvailable = menu.skinsSelectable;
@@ -401,6 +403,13 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             if (isTarget(clicked, InteractiveType::mainSampleOverview)) {
                 fMainSampleDrag = MainSampleDrag::overview;
                 updateMainSampleDrag(position);
+                return true;
+            }
+            if (isTarget(clicked, InteractiveType::mainSampleRangeHandle)) {
+                main.selectSlice(0U);
+                if (main.beginRangeDrag(clicked.index == 1))
+                    fMainSampleDrag = MainSampleDrag::range;
+                fHost.repaintSamplerInput();
                 return true;
             }
             if (isTarget(clicked, InteractiveType::mainSampleBadge)) {
@@ -936,6 +945,11 @@ void SamplerInputController::updateMainSampleDrag(const sms::ui::Point position)
                               static_cast<double>(uiLayout::mainSampleWaveform.width));
         return;
     }
+    if (fMainSampleDrag == MainSampleDrag::range) {
+        main.dragRangeTo(snappedFrame(position.x));
+        fHost.repaintSamplerInput();
+        return;
+    }
     const auto frame = snappedFrame(position.x);
     if (fMainSampleDrag == MainSampleDrag::marker) main.dragTo(frame);
     else if (fMainSampleDrag == MainSampleDrag::selecting) {
@@ -970,6 +984,7 @@ bool SamplerInputController::endMainSampleDrag(const sms::ui::Point position)
     const auto drag = fMainSampleDrag;
     fMainSampleDrag = MainSampleDrag::none;
     if (drag == MainSampleDrag::marker) main.endDrag();
+    else if (drag == MainSampleDrag::range) main.endDrag();
     else if (drag == MainSampleDrag::selecting) {
         const auto frame = static_cast<std::uint32_t>(
             main.viewport().frameAt(position.x, uiLayout::mainSampleWaveform));

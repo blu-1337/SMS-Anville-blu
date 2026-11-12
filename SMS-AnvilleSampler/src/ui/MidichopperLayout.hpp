@@ -290,6 +290,8 @@ inline constexpr sms::ui::Rect mainSampleWaveform{46.0f, 158.0f, 890.0f, 208.0f}
 inline constexpr float sliceBadgeWidth = 10.0f;
 inline constexpr float sliceBadgeWideWidth = 14.0f; // two-digit numbers
 inline constexpr float sliceBadgeHeight = 9.0f;
+// Source range handles: small squares on the bottom edge of the waveform (badges live at the top).
+inline constexpr float rangeHandleSize = 10.0f;
 inline constexpr sms::ui::Rect mainSampleOverview{46.0f, 374.0f, 890.0f, 20.0f};
 inline constexpr sms::ui::Rect mainSamplePads{46.0f, 402.0f, 890.0f, 264.0f};
 // A-D bank row at the foot of the side panel, below the slice tools (they end at y 650).

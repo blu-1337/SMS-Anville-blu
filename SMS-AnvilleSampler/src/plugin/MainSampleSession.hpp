@@ -18,6 +18,8 @@ struct MainSampleSession {
     std::uint32_t frames = 0U;
     std::uint32_t sampleRate = 0U; // whole hertz of the stored source
     std::uint16_t nextSliceId = 1U; // 1..65535
+    std::uint32_t rangeStart = 0U; // non-destructive source range [rangeStart, rangeEnd)
+    std::uint32_t rangeEnd = 0U;   // equals frames when the whole source is used
     std::vector<MainSampleSlice> slices; // at most 64, sorted by start
     std::string name; // at most 128 bytes, cut on a UTF-8 boundary
 
@@ -30,6 +32,12 @@ struct MainSampleSession {
     /** Applies one or two edits to existing slices together, or none of them. */
     [[nodiscard]] bool editSlices(std::span<const MainSampleSlice> edits);
     [[nodiscard]] bool removeSlice(std::uint16_t id);
+    /** Sets the working range; fails (unchanged) unless start < end <= frames. */
+    [[nodiscard]] bool setRange(std::uint32_t start, std::uint32_t end) noexcept;
+    /** rangeEnd 0 (a session built by hand) also means the whole source. */
+    [[nodiscard]] std::uint32_t rangeEndFrame() const noexcept
+    { return rangeEnd == 0U || rangeEnd > frames ? frames : rangeEnd; }
+    [[nodiscard]] bool rangeIsFull() const noexcept { return rangeStart == 0U && rangeEndFrame() == frames; }
 };
 
 /** Pad link saved with a project: restored only onto audio with this fingerprint. */

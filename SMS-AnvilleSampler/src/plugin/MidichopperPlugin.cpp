@@ -617,7 +617,7 @@ protected:
                 // A live slice drag sends B/U/E edits: one undo step for the whole drag.
                 midichopper::plugin::MainSampleRequest live;
                 const char phase = midichopper::plugin::decodeMainSampleRequest(value, live) &&
-                    live.verb == midichopper::plugin::MainSampleVerb::edit ? live.phase : 'S';
+                    (live.verb == midichopper::plugin::MainSampleVerb::edit || live.verb == midichopper::plugin::MainSampleVerb::range) ? live.phase : 'S';
                 undo_.recordGesture(phase, UndoClock::now(), [&] { mainSampleWorkflows_.handleRequest(value); });
             }
             return;

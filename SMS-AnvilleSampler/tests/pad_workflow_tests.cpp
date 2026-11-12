@@ -1123,6 +1123,35 @@ std::size_t autoChopStatusCount(const MainSampleFixture& fixture)
         }));
 }
 
+void sourceRangeWorkflow()
+{
+    MainSampleFixture fixture(12.0);
+    const auto path = writeSourceWav("sms-range-workflow.wav", 192000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    static_cast<void>(fixture.send(load, 2U));
+    auto range = mainRequest(MainSampleVerb::range);
+    range.start = 48000U;
+    range.end = 144000U;
+    auto status = fixture.send(range);
+    check(status.rangeStart <= 48000U + 144U && status.rangeEnd <= 144000U + 144U &&
+          status.rangeStart + 144U >= 48000U && fixture.main.session().rangeStart == status.rangeStart,
+          "range request is applied near the requested frames");
+    const auto rs = status.rangeStart;
+    const auto re = status.rangeEnd;
+    AutoChopRequest equal;
+    equal.mode = AutoChopMode::equal;
+    equal.count = 4U;
+    const auto chopped = autoChop(fixture, equal);
+    check(chopped.state == AutoChopState::ok, "chop inside range works");
+    for (const auto& slice : fixture.main.session().slices)
+        check(slice.start >= rs && slice.end <= re, "auto chop stays inside the source range");
+    range.start = 5U;
+    range.end = 5U;
+    status = fixture.send(range);
+    check(status.state == MainSampleState::error, "empty range is refused");
+}
+
 void autoChopWorkflow()
 {
     MainSampleFixture fixture(12.0);
@@ -1730,6 +1759,7 @@ int main()
     splitPlanCoversAllVisibleBanks();
     mainSampleLoadQueryWaveformAndClear();
     mainSampleAssignEditAndDelete();
+    sourceRangeWorkflow();
     autoChopWorkflow();
     mainSampleArrange();
     favoriteGuards();

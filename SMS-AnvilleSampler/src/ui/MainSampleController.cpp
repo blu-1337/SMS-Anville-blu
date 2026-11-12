@@ -40,7 +40,8 @@ void MainSampleController::send(MainSampleRequest request)
 {
     request.sequence = ++fSequence;
     // Edges snap to a zero crossing on the worker when SNAP is on and Alt/Shift is not held.
-    request.zeroCross = (request.verb == MainSampleVerb::edit || request.verb == MainSampleVerb::assign) &&
+    request.zeroCross = (request.verb == MainSampleVerb::edit || request.verb == MainSampleVerb::assign ||
+                         request.verb == MainSampleVerb::range) &&
                         fSnap && !fSnapBypass;
     fHost.sendMainSampleState(plugin::kMainSampleRequestKey,
                               plugin::encodeMainSampleRequest(request));
@@ -125,6 +126,7 @@ bool MainSampleController::acceptStatus(const std::string_view encoded, const Ti
 void MainSampleController::sourceChanged()
 {
     fDrag.reset();
+    fRangeDrag.reset();
     fConfirm.reset();
     fLastAssign.reset();
     fSelectedSlice = 0U;
@@ -380,10 +382,14 @@ bool MainSampleController::deleteSlice(const std::uint16_t sliceId)
     return true;
 }
 
-bool MainSampleController::preview(const std::uint32_t start, const std::uint32_t end,
-                                   const bool loop)
+bool MainSampleController::preview(std::uint32_t start, std::uint32_t end, const bool loop)
 {
     if (!hasSource() || start >= end || end > fStatus.frames)
+        return false;
+    // Playback stays inside the source range: never starts before it, stops at its end.
+    start = std::max(start, rangeStart());
+    end = std::min(end, rangeEnd());
+    if (start >= end)
         return false;
     fPlayStart = start;
     fPlayEnd = end;
@@ -400,7 +406,7 @@ void MainSampleController::stopPreview()
 
 bool MainSampleController::previewFrom(const std::uint32_t frame)
 {
-    std::uint32_t end = fStatus.frames;
+    std::uint32_t end = rangeEnd();
     for (const auto& slice : fStatus.slices)
         if (slice.start <= frame && frame < slice.end)
             end = std::min(end, slice.end);
@@ -415,8 +421,8 @@ bool MainSampleController::togglePlay()
     }
     if (!hasSource())
         return false;
-    std::uint32_t start = 0U;
-    std::uint32_t end = fStatus.frames;
+    std::uint32_t start = rangeStart();
+    std::uint32_t end = rangeEnd();
     if (hasSelection()) {
         start = fSelectionStart;
         end = fSelectionEnd;
@@ -750,8 +756,67 @@ void MainSampleController::liveDragUpdate(const Time now)
     send(request); // the pad is re-cut now, so a note played mid-drag sounds the dragged range
 }
 
+std::uint32_t MainSampleController::rangeStart() const noexcept
+{
+    if (fRangeDrag && !fRangeDrag->endHandle)
+        return fRangeDrag->frame;
+    return fStatus.frames == 0U ? 0U : std::min(fStatus.rangeStart, fStatus.frames - 1U);
+}
+
+std::uint32_t MainSampleController::rangeEnd() const noexcept
+{
+    if (fRangeDrag && fRangeDrag->endHandle)
+        return fRangeDrag->frame;
+    return fStatus.rangeEnd == 0U ? fStatus.frames : std::min(fStatus.rangeEnd, fStatus.frames);
+}
+
+bool MainSampleController::beginRangeDrag(const bool endHandle) noexcept
+{
+    if (!hasSource())
+        return false;
+    fDrag.reset();
+    fRegion.reset();
+    fSelectionEdge = 0;
+    fRangeDrag = RangeDrag{endHandle, endHandle ? rangeEnd() : rangeStart()};
+    return true;
+}
+
+void MainSampleController::dragRangeTo(const std::uint32_t frame) noexcept
+{
+    if (!fRangeDrag)
+        return;
+    const auto minimum = std::min(kMinRangeFrames, fStatus.frames);
+    if (fRangeDrag->endHandle) {
+        const auto low = std::min(fStatus.frames, fStatus.rangeStart + minimum);
+        fRangeDrag->frame = std::clamp(frame, low, fStatus.frames);
+    } else {
+        const auto high = (fStatus.rangeEnd == 0U ? fStatus.frames : fStatus.rangeEnd) > minimum ? (fStatus.rangeEnd == 0U ? fStatus.frames : fStatus.rangeEnd) - minimum : 0U;
+        fRangeDrag->frame = std::min(frame, high);
+    }
+    fHost.repaintMainSample();
+}
+
 bool MainSampleController::endDrag()
 {
+    if (fRangeDrag) {
+        const auto drag = *fRangeDrag;
+        fRangeDrag.reset();
+        const auto storedStart = rangeStart();
+        const auto storedEnd = rangeEnd();
+        const auto start = drag.endHandle ? storedStart : drag.frame;
+        const auto end = drag.endHandle ? drag.frame : storedEnd;
+        if (start == storedStart && end == storedEnd)
+            return false;
+        MainSampleRequest request;
+        request.verb = MainSampleVerb::range;
+        request.start = start;
+        request.end = end;
+        fStatus.rangeStart = start; // optimistic until the reply
+        fStatus.rangeEnd = end;
+        send(request);
+        fHost.repaintMainSample();
+        return true;
+    }
     if (fSelectionEdge != 0) {
         fSelectionEdge = 0;
         return false;
@@ -784,6 +849,7 @@ bool MainSampleController::endDrag()
 
 void MainSampleController::cancelDrag() noexcept
 {
+    fRangeDrag.reset();
     fSelectionEdge = 0;
     if (fLiveBegun) {
         // Live edits already reached the plugin: send the original range back and close the gesture.
@@ -1015,6 +1081,8 @@ bool MainSampleController::autoChop(const bool confirm)
     request.bpmCenti = 0U; // host tempo
     request.beatsMilli = 1000U;
     request.snap = true;
+    request.rangeStart = rangeStart(); // the plug-in also confines the chop to its stored range
+    request.rangeEnd = rangeEnd();
     fAutoSequence = request.sequence;
     fAutoConfirm = false;
     fAutoMessage = "Chopping...";

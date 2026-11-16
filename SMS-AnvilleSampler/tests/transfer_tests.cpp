@@ -16,10 +16,12 @@
 #include <new>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
 #include <malloc.h>
+#endif
 
 // These tests were written when pads looped in Hold mode by default. The product default is now
 // "play once" (LOOP off), so engine imports and mixer settings opt back in explicitly.
@@ -34,8 +36,6 @@ inline bool importLooping(midichopper::SamplerEngine& engine, const std::uint32_
     }
     return imported;
 }
-
-#endif
 
 // Count destruction as well as allocation: retiring a retained sample on the
 // callback thread is just as unsuitable as allocating its replacement there.

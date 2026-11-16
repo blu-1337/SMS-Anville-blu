@@ -168,8 +168,9 @@ void metadata()
     std::uint32_t lastGlobal = plugin.getStateCount();
     for (std::uint32_t state = 0; state < plugin.getStateCount(); ++state)
         if (plugin.getStateKey(state) == kGlobalControlStateKeys.back()) lastGlobal = state;
-    check(lastGlobal + 1U + mainSampleStates.size() == plugin.getStateCount(),
-          "main-sample keys follow the global keys and end the table");
+    // Later features (auto-chop, undo, spectrogram) append after these keys.
+    check(lastGlobal + 1U + mainSampleStates.size() <= plugin.getStateCount(),
+          "main-sample keys follow the global keys");
     for (std::uint32_t i = 0; i < mainSampleStates.size(); ++i) {
         const auto state = lastGlobal + 1U + i;
         check(plugin.getStateKey(state) == mainSampleStates[i].first &&

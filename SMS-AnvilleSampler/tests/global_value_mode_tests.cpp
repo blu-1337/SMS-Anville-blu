@@ -335,16 +335,19 @@ using Audio = std::array<std::array<float, kFrames>, 2>;
 Audio render(PluginExporter& plugin, const bool trigger = false)
 {
     const Audio input{};
-    Audio output{};
+    // The plug-in writes every port: the main pair plus the auxiliary pairs.
+    std::array<std::array<float, kFrames>, DISTRHO_PLUGIN_NUM_OUTPUTS> ports{};
     const float* inputs[]{input[0].data(), input[1].data()};
-    float* outputs[]{output[0].data(), output[1].data()};
+    std::array<float*, DISTRHO_PLUGIN_NUM_OUTPUTS> outputs{};
+    for (std::size_t port = 0; port < outputs.size(); ++port)
+        outputs[port] = ports[port].data();
     DISTRHO::MidiEvent note{};
     note.size = 3U;
     note.data[0] = 0x90U;
     note.data[1] = midichopper::kDefaultBaseMidiNote;
     note.data[2] = 127U;
-    plugin.run(inputs, outputs, kFrames, trigger ? &note : nullptr, trigger ? 1U : 0U);
-    return output;
+    plugin.run(inputs, outputs.data(), kFrames, trigger ? &note : nullptr, trigger ? 1U : 0U);
+    return Audio{ports[0], ports[1]};
 }
 
 float difference(const Audio& left, const Audio& right)

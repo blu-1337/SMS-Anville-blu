@@ -21,6 +21,8 @@ AI_REFERENCES = {
 }
 LIMITS = {
     "AGENTS.md": 600,
+    # Root README carries the fork overview.
+    "README.md": 1500,
     # The plugin README is also its user manual.
     "SMS-AnvilleSampler/README.md": 1800,
     "Docs/AI/INDEX.md": 350,

@@ -599,8 +599,9 @@ void interactionTargets()
     check(interaction::isTarget(
               interaction::interactiveTargetAt(center(layout::monitor), context),
               interaction::InteractiveType::monitor) &&
-          !interaction::interactiveTargetAt(center(layout::finalizeAction), context).valid(),
-          "play mode keeps the bottom monitor and hides chop actions");
+          !interaction::isTarget(interaction::interactiveTargetAt(center(layout::finalizeAction), context),
+                                interaction::InteractiveType::finalizeAction),
+          "play mode keeps the bottom monitor and hides chop actions (CHOKE ALL may use the spot)");
     for (int knob = 1; knob < 7; ++knob) {
         check(interaction::isTarget(
                   interaction::interactiveTargetAt(center(layout::globalMixerKnob(knob)), context),

@@ -420,6 +420,8 @@ void drawGlobalMixer(const ViewRenderContext& ctx)
                   ctx.state.globalValueSettings[4].maximum, high);
     drawSlopeSlider(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
                     ctx.state.globalFilterSlope);
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::chokeAll, "CHOKE ALL", ctx.state.chokeAllOn,
+                              colors.controlAccent, hovered(ctx, InteractiveType::chokeAll), true);
 }
 
 void drawControlPanelBacking(const ViewRenderContext& ctx)

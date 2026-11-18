@@ -123,6 +123,11 @@ public:
      * False when the text is too short.
      */
     bool applyColorBatch(std::string_view digits, Clock::time_point now);
+    /**
+     * CHOKE ALL: every pad that has audio (favourites included) gets choke group 1, or Off when all
+     * of them already are. A settings change only (no audio touched), ONE undo step.
+     */
+    bool toggleChokeAll(Clock::time_point now);
     void undo() { step(true); }
     void redo() { step(false); }
     /** Host restored durable state: history no longer describes it. */
@@ -136,6 +141,9 @@ private:
     [[nodiscard]] static bool sameState(const UndoSnapshot& a, const UndoSnapshot& b);
     void step(bool undo);
     void publishLocked();
+    /** 1 when at least one pad has audio and every such pad is in choke group 1. */
+    [[nodiscard]] bool allChoked() const;
+    [[nodiscard]] int chokeOf(std::uint32_t pad) const;
 
     struct CacheEntry {
         std::uint64_t generation = 0U;

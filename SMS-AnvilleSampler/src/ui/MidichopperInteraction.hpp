@@ -74,6 +74,7 @@ enum class InteractiveType : int {
     skinGetMore,
     padDirection,
     globalDirection,
+    chokeAll,
     padGlobalMixer,
     padChoke,
     padLoop,
@@ -906,6 +907,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
     }
     if (uiLayout::monitor.contains(point))
         return target(InteractiveType::monitor);
+    if (!context.armed && uiLayout::chokeAll.contains(point))
+        return target(InteractiveType::chokeAll);
     if (!context.armed && uiLayout::globalDirection.contains(point))
         return target(InteractiveType::globalDirection);
     for (int knob = 1; !context.armed && knob < 7; ++knob) {

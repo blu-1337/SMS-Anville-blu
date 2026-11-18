@@ -411,6 +411,10 @@ protected:
                 undo_.applyColorBatch(std::string_view(value + 7), UndoClock::now());
                 return;
             }
+            if (value != nullptr && std::strcmp(value, "chokeall") == 0) {
+                undo_.toggleChokeAll(UndoClock::now()); // one batched settings edit, one undo step
+                return;
+            }
             if (value != nullptr && std::strcmp(value, "undo") == 0) undo_.undo();
             else if (value != nullptr && std::strcmp(value, "redo") == 0) undo_.redo();
             return;

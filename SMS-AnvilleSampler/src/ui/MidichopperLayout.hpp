@@ -166,6 +166,8 @@ inline constexpr sms::ui::Rect mainPlayStop{1049.0f, 342.0f, 112.0f, 32.0f};
     return {994.0f, fixedCapture ? 352.0f : 298.0f, 222.0f, 28.0f};
 }
 
+// CHOKE ALL, under the global mixer's slope slider (full panel width: x 994..1216).
+inline constexpr sms::ui::Rect chokeAll{994.0f, 608.0f, 222.0f, 32.0f};
 inline constexpr sms::ui::Rect monitor{994.0f, 651.0f, 222.0f, 34.0f};
 inline constexpr float globalMixerLabelY = 386.0f;
 inline constexpr sms::ui::Rect padMixerSeparator{354.0f, 586.0f, 1.0f, 77.0f};

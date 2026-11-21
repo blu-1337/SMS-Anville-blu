@@ -355,14 +355,12 @@ bool MainSampleController::arrange()
 {
     if (!hasSource())
         return false;
-    auto moves = plugin::arrangeMoves(fStatus.slices, fStatus.links);
-    if (moves.empty())
+    if (fStatus.slices.empty())
         return false;
     MainSampleRequest request;
     request.verb = MainSampleVerb::arrange;
+    request.pad = fAutoFirstPad; // pad k from here holds slice k; the plug-in says "Pads already in order"
     send(request);
-    fArrangeMoves = std::move(moves);
-    fArrangeSequence = fSequence;
     return true;
 }
 

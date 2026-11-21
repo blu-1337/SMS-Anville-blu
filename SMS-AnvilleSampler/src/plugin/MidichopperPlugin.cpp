@@ -96,7 +96,8 @@ public:
           mainSampleWorkflows_(sampler_, controlDispatcher_, *this, padWorkflows_.mutationMutex())
     {
         mainSampleWorkflows_.setHostBpm(&hostBpm_);
-        mainSampleWorkflows_.setArrangeHook([this](const std::vector<midichopper::plugin::ArrangeMove>& moves) {
+        mainSampleWorkflows_.setArrangeHook([this](const std::vector<midichopper::plugin::ArrangeMove>& moves,
+                                            const std::vector<std::uint32_t>& vacated) {
             // The colour (and favourite flag) is stored per pad, so it travels with the moved audio.
             std::vector<int> values;
             for (const auto& move : moves)
@@ -105,6 +106,10 @@ public:
                 padColors_[moves[index].to].store(values[index], std::memory_order_relaxed);
                 publishUiState(kPadColorStateKeys[moves[index].to].c_str(),
                     std::to_string(values[index]).c_str());
+            }
+            for (const auto pad : vacated) { // emptied pads lose their colour
+                padColors_[pad].store(0, std::memory_order_relaxed);
+                publishUiState(kPadColorStateKeys[pad].c_str(), "0");
             }
             sampler_.setFavoriteMask(midichopper::plugin::favoriteMaskOf(padColors_));
         });

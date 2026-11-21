@@ -132,6 +132,9 @@ void requests()
     MainSampleRequest arrange;
     arrange.verb = MainSampleVerb::arrange;
     check(roundTrip(arrange).verb == MainSampleVerb::arrange, "arrange round-trips");
+    arrange.pad = 7U;
+    check(roundTrip(arrange).pad == 7U && encodeMainSampleRequest(arrange).ends_with(";7"), "arrange carries its first pad");
+    check(!decodeMainSampleRequest("MS1;1;R;64", arrange), "arrange refuses a pad out of range");
 
     MainSampleRequest ignored;
     for (const char* bad : {"MS1;99999999999999999999;Q", "MS1;1;Q;x", "MS1;1;C;", "MS1;1;D;5;",

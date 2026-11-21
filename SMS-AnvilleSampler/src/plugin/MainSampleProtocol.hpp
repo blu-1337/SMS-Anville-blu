@@ -222,6 +222,77 @@ struct ArrangeMove {
     return moves;
 }
 
+/** A slice that has no pad yet gets one. */
+struct ArrangeFill {
+    std::uint32_t pad = 0U;
+    std::uint16_t sliceId = 0U;
+    friend bool operator==(const ArrangeFill&, const ArrangeFill&) = default;
+};
+
+/** What ARRANGE changes: pads that move, pads filled from the source, pads emptied. */
+struct ArrangePlan {
+    std::vector<ArrangeMove> moves;
+    std::vector<ArrangeFill> fills;
+    std::vector<std::uint32_t> vacated; // moved from and not refilled: cleared
+    bool enough = true;                 // false: more slices than free pads, nothing is planned
+    [[nodiscard]] bool empty() const noexcept { return moves.empty() && fills.empty() && vacated.empty(); }
+};
+
+/**
+ * ARRANGE (compact): the slices that are not held by a favourite pad, in time order (start, then id),
+ * take the consecutive `candidates` pads (the visible sequence from the first pad). Favourites keep
+ * their slice and pad. `candidates` must already exclude favourites and pads holding other audio.
+ * A slice linked to several pads keeps its lowest pad as the one that moves; the copies stay put
+ * and are never overwritten. Slices without a pad are filled from the source. Pure; no I/O.
+ */
+[[nodiscard]] inline ArrangePlan planArrange(
+    const std::vector<MainSampleSlice>& slices, const std::vector<MainSampleLink>& links,
+    const std::vector<std::uint16_t>& favouriteSlices, const std::vector<std::uint32_t>& candidates)
+{
+    std::vector<MainSampleSlice> free;
+    for (const auto& slice : slices)
+        if (std::find(favouriteSlices.begin(), favouriteSlices.end(), slice.id) == favouriteSlices.end())
+            free.push_back(slice);
+    std::sort(free.begin(), free.end(), [](const MainSampleSlice& a, const MainSampleSlice& b) {
+        return a.start != b.start ? a.start < b.start : a.id < b.id;
+    });
+    const auto representative = [&](const std::uint16_t id) {
+        std::uint32_t best = UINT32_MAX;
+        for (const auto& link : links)
+            if (link.sliceId == id && link.pad < best)
+                best = link.pad;
+        return best;
+    };
+    std::vector<std::uint32_t> usable;
+    for (const auto pad : candidates) {
+        bool copy = false;
+        for (const auto& link : links)
+            copy = copy || (link.pad == pad && representative(link.sliceId) != pad);
+        if (!copy)
+            usable.push_back(pad);
+    }
+    ArrangePlan plan;
+    if (free.size() > usable.size()) {
+        plan.enough = false;
+        return plan;
+    }
+    std::vector<std::uint32_t> targets(usable.begin(), usable.begin() + static_cast<std::ptrdiff_t>(free.size()));
+    std::vector<std::uint32_t> moved;
+    for (std::size_t index = 0; index < free.size(); ++index) {
+        const auto rep = representative(free[index].id);
+        if (rep == UINT32_MAX)
+            plan.fills.push_back({targets[index], free[index].id});
+        else if (rep != targets[index]) {
+            plan.moves.push_back({rep, targets[index]});
+            moved.push_back(rep);
+        }
+    }
+    for (const auto pad : moved)
+        if (std::find(targets.begin(), targets.end(), pad) == targets.end())
+            plan.vacated.push_back(pad);
+    return plan;
+}
+
 struct MainSampleRequest {
     std::uint64_t sequence = 0U;
     MainSampleVerb verb = MainSampleVerb::query;
@@ -258,7 +329,7 @@ struct MainSampleRequest {
         return encoded + "A;" + std::to_string(request.pad) + ";" + std::to_string(request.start) +
                ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0") +
                (request.zeroCross ? ";Z" : "");
-    case MainSampleVerb::arrange: return encoded + "R";
+    case MainSampleVerb::arrange: return encoded + "R" + (request.pad != 0U ? ";" + std::to_string(request.pad) : std::string());
     case MainSampleVerb::range:
         return encoded + "T;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
                (request.phase == 'S' && !request.zeroCross ? std::string()
@@ -300,11 +371,14 @@ struct MainSampleRequest {
     }
     case 'C':
     case 'Q':
-    case 'R':
         if (!fields.finished())
             return false;
-        decoded.verb = verb[0] == 'C' ? MainSampleVerb::clear
-            : verb[0] == 'Q' ? MainSampleVerb::query : MainSampleVerb::arrange;
+        decoded.verb = verb[0] == 'C' ? MainSampleVerb::clear : MainSampleVerb::query;
+        break;
+    case 'R': // optionally the first pad of the arranged run
+        if (!fields.finished() && (!fields.number(decoded.pad) || !fields.finished() || decoded.pad >= kPadCount))
+            return false;
+        decoded.verb = MainSampleVerb::arrange;
         break;
     case 'S': {
         std::string_view list;

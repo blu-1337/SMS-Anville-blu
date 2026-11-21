@@ -46,7 +46,7 @@ public:
     /** Host tempo in BPM (0 = unknown), read for mode B/R with bpm 0. Outlives this. */
     void setHostBpm(const std::atomic<double>* bpm) noexcept { hostBpm_ = bpm; }
     /** Called under the mutation lock after Arrange moved pads, so colours (kept per pad) move with them. */
-    void setArrangeHook(std::function<void(const std::vector<ArrangeMove>&)> hook) { arrangeHook_ = std::move(hook); }
+    void setArrangeHook(std::function<void(const std::vector<ArrangeMove>&, const std::vector<std::uint32_t>&)> hook) { arrangeHook_ = std::move(hook); }
     /** Number of full analyses run since construction (cache tests). */
     [[nodiscard]] std::uint32_t analysisRuns() const noexcept { return analysisRuns_; }
     /** A copy taken under the mutation mutex. */
@@ -166,7 +166,7 @@ private:
     AnalysisCache analysisCache_;       // guarded by mutationMutex_
     std::uint32_t analysisRuns_ = 0U;   // guarded by mutationMutex_
     const std::atomic<double>* hostBpm_ = nullptr;
-    std::function<void(const std::vector<ArrangeMove>&)> arrangeHook_;
+    std::function<void(const std::vector<ArrangeMove>&, const std::vector<std::uint32_t>&)> arrangeHook_;
 
     // Restore staging and the save cache, all guarded by mutationMutex_.
     struct StagedAudio {

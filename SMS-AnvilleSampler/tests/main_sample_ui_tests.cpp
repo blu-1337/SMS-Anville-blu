@@ -951,15 +951,10 @@ void arrangeSendsOneRequestAndKeepsMoves()
     const auto count = host.requests().size();
     check(controller.arrange() && host.requests().size() == count + 1U &&
           host.requests().back().verb == MainSampleVerb::arrange, "arrange sends one request");
-    check(controller.takeArrangedMoves().empty(), "moves are not confirmed before the reply");
-    const auto sequence = controller.lastSentSequence();
-    check(controller.acceptStatus(status(sequence, MainSampleState::ready, {{1U, 0U, 400U}, {2U, 400U, 1000U}},
-          {{3U, 1U}, {5U, 2U}}), now), "reply arrives");
-    const auto moves = controller.takeArrangedMoves();
-    check(moves.size() == 2U && moves[0] == ArrangeMove{5U, 3U} && moves[1] == ArrangeMove{3U, 5U},
-          "the confirmed moves carry pad colours");
-    check(controller.takeArrangedMoves().empty(), "moves are consumed once");
-    check(!controller.arrange() && host.requests().size() == count + 1U, "ordered pads send nothing");
+    check(host.requests().back().pad == controller.autoChopFirstPad(), "arrange starts at the first pad");
+    controller.adjustAutoChopFirstPad(4);
+    check(controller.arrange() && host.requests().back().pad == controller.autoChopFirstPad(),
+          "arrange follows FIRST PAD; the plug-in decides when pads are already in order");
 }
 
 void spreadColorsContrast()

@@ -1461,12 +1461,12 @@ void mainSampleArrange()
     const auto lateProvenance = fixture.provenance(0U);
 
     auto status = fixture.send(mainRequest(MainSampleVerb::arrange));
-    check(status.state == MainSampleState::ready && status.affectedMask == 0xBU &&
+    check(status.state == MainSampleState::ready && status.affectedMask == 0xFU &&
           padHoldsSlice(fixture.engine, 0U, 0U, 300U) && padHoldsSlice(fixture.engine, 1U, 300U, 600U) &&
-          padHoldsSlice(fixture.engine, 3U, 600U, 800U),
-          "arrange moves the audio so pad order follows time order in one transaction");
-    check(fixture.provenance(3U) == lateProvenance && (fixture.provenance(0U) >> 16U) == sourceId &&
-          sameMixer(fixture.engine.padMixerSettings(3U), mixer),
+          padHoldsSlice(fixture.engine, 2U, 600U, 800U) && !fixture.engine.padMetadata(3U).occupied,
+          "arrange compacts the audio into consecutive pads in time order in one transaction");
+    check(fixture.provenance(2U) == lateProvenance && (fixture.provenance(0U) >> 16U) == sourceId &&
+          sameMixer(fixture.engine.padMixerSettings(2U), mixer),
           "links and mixer settings travel with the audio");
     status = fixture.send(mainRequest(MainSampleVerb::arrange));
     check(status.state == MainSampleState::ready && status.affectedMask == 0U, "a second arrange changes nothing");
@@ -1476,10 +1476,11 @@ void arrangeKeepsColours()
 {
     MainSampleFixture fixture;
     std::array<int, kPadCount> colors{};
-    fixture.main.setArrangeHook([&](const std::vector<ArrangeMove>& moves) {
+    fixture.main.setArrangeHook([&](const std::vector<ArrangeMove>& moves, const std::vector<std::uint32_t>& vacated) {
         std::vector<int> values;
         for (const auto& move : moves) values.push_back(colors[move.from]);
         for (std::size_t i = 0; i < moves.size(); ++i) colors[moves[i].to] = values[i];
+        for (const auto pad : vacated) colors[pad] = 0;
     });
     const auto path = writeSourceWav("sms-arrange-colours.wav", 1000U);
     auto load = mainRequest(MainSampleVerb::load);
@@ -1510,10 +1511,11 @@ void arrangeScenario()
 {
     MainSampleFixture fixture;
     std::array<int, kPadCount> colors{};
-    fixture.main.setArrangeHook([&](const std::vector<ArrangeMove>& moves) {
+    fixture.main.setArrangeHook([&](const std::vector<ArrangeMove>& moves, const std::vector<std::uint32_t>& vacated) {
         std::vector<int> values;
         for (const auto& move : moves) values.push_back(colors[move.from]);
         for (std::size_t i = 0; i < moves.size(); ++i) colors[moves[i].to] = values[i];
+        for (const auto pad : vacated) colors[pad] = 0;
     });
     fixture.pads.setSwapHook([&](const std::uint32_t a, const std::uint32_t b) { std::swap(colors[a], colors[b]); });
     fixture.pads.setSwapPublishedHook([&](const std::uint32_t a, const std::uint32_t b) {
@@ -1546,29 +1548,89 @@ void arrangeScenario()
 
     const auto arranged = fixture.send(mainRequest(MainSampleVerb::arrange));
     check(arranged.state == MainSampleState::ready, "arrange succeeds");
-    // Non-favourite linked pads {0,5,35,50} take the slices in time order; others stay.
-    check(padHoldsSlice(fixture.engine, 5U, 200U, 400U) && padHoldsSlice(fixture.engine, 0U, 0U, 200U) &&
-          padHoldsSlice(fixture.engine, 35U, 1000U, 1200U) && padHoldsSlice(fixture.engine, 50U, 1400U, 1600U),
-          "linked pads follow slice time order inside their own slots");
+    // The four free slices take consecutive pads from pad 0 (skipping the favourite 20 and foreign 7).
+    check(padHoldsSlice(fixture.engine, 0U, 0U, 200U) && padHoldsSlice(fixture.engine, 1U, 200U, 400U) &&
+          padHoldsSlice(fixture.engine, 2U, 1000U, 1200U) && padHoldsSlice(fixture.engine, 3U, 1400U, 1600U),
+          "slices in time order fill consecutive pads");
+    check(!fixture.engine.padMetadata(5U).occupied && !fixture.engine.padMetadata(35U).occupied &&
+          !fixture.engine.padMetadata(50U).occupied && colors[5] == 0 && colors[35] == 0 && colors[50] == 0,
+          "vacated pads are emptied and lose their colour");
     check(padHoldsSlice(fixture.engine, 20U, 800U, 1000U) && colors[20] == favouriteColour,
           "the favourite pad and its colour stay put");
     check(fixture.provenance(7U) == foreignTag && fixture.engine.padMetadata(7U).occupied,
           "unlinked pads are untouched");
-    for (const auto& item : plan) {
-        const auto pad = item[0];
+    for (const std::uint32_t pad : {0U, 1U, 2U, 3U}) {
         const auto tag = fixture.provenance(pad);
-        check(colors[pad] == 1 + static_cast<int>(tag & 0xFFFFU) || pad == 20U,
-              "colours follow their slice");
+        check(colors[pad] == 1 + static_cast<int>(tag & 0xFFFFU), "colours follow their slice");
     }
     // The published links agree with the engine for every pad.
     MainSampleStatus status;
     check(decodeMainSampleStatus(fixture.observer.latest(kMainSampleStatusKey), status), "status decodes");
-    check(status.links.size() == 5U, "five links published");
+    check(status.links.size() == 5U, "five links published (four arranged plus the favourite)");
     for (const auto& link : status.links)
         check((fixture.provenance(link.pad) & 0xFFFFU) == link.sliceId, "published link matches the pad");
     // Idempotent.
     const auto again = fixture.send(mainRequest(MainSampleVerb::arrange));
     check(again.state == MainSampleState::ready && again.affectedMask == 0U, "arrange is idempotent");
+}
+
+void arrangeCompactsSlices()
+{
+    MainSampleFixture fixture(12.0);
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    const auto path = writeSourceWav("sms-arrange-compact.wav", 192000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    AutoChopRequest chop;
+    chop.mode = AutoChopMode::equal;
+    chop.count = 8U;
+    check(autoChop(fixture, chop).state == AutoChopState::ok, "chop eight slices");
+    auto expect = [&](const std::vector<std::uint32_t>& pads, const char* message) {
+        const auto session = fixture.main.session();
+        bool same = session.slices.size() >= pads.size();
+        for (std::size_t index = 0; same && index < pads.size(); ++index)
+            same = padHoldsSlice(fixture.engine, pads[index], session.slices[index].start, session.slices[index].end) &&
+                   (fixture.provenance(pads[index]) & 0xffffU) == session.slices[index].id;
+        check(same, message);
+    };
+    expect({0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U}, "after an auto-chop pad k holds slice k");
+
+    // Holes: slices 2 and 6 lose their pads (the reported symptom: labels 1,3,4,5,7).
+    for (const std::uint32_t pad : {1U, 5U}) {
+        PadImport clear;
+        clear.pad = pad;
+        check(fixture.engine.importPads({&clear, 1U}), "clear a pad");
+    }
+    auto arrange = mainRequest(MainSampleVerb::arrange);
+    const auto depth = undo.undoDepth();
+    MainSampleStatus status;
+    undo.record(UndoController::Kind::action, now, [&] { status = fixture.send(arrange); });
+    check(status.state == MainSampleState::ready && undo.undoDepth() == depth + 1U, "arrange is one undo step");
+    expect({0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U}, "arrange fills the holes: pad k holds slice k");
+    const auto again = fixture.send(arrange);
+    check(again.state == MainSampleState::ready && again.affectedMask == 0U, "arrange is idempotent");
+    undo.undo();
+    check(!fixture.engine.padMetadata(1U).occupied && !fixture.engine.padMetadata(5U).occupied &&
+          fixture.engine.padMetadata(0U).occupied, "undo restores the holes");
+    fixture.send(arrange);
+    expect({0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U}, "arrange again after undo");
+
+    // A favourite in the middle keeps its slice; the others fill around it; a first pad shifts the run.
+    fixture.engine.setFavoriteMask(std::uint64_t{1} << 3U);
+    arrange.pad = 2U;
+    status = fixture.send(arrange);
+    const auto session = fixture.main.session();
+    check(status.state == MainSampleState::ready && padHoldsSlice(fixture.engine, 3U, session.slices[3].start,
+          session.slices[3].end), "the favourite keeps its pad and slice");
+    check(padHoldsSlice(fixture.engine, 2U, session.slices[0].start, session.slices[0].end) &&
+          padHoldsSlice(fixture.engine, 4U, session.slices[1].start, session.slices[1].end) &&
+          padHoldsSlice(fixture.engine, 5U, session.slices[2].start, session.slices[2].end),
+          "the other slices run from the first pad around the favourite");
+    fixture.engine.setFavoriteMask(0U);
+    std::filesystem::remove(path);
 }
 
 void zeroCrossSnap()
@@ -2044,6 +2106,7 @@ int main()
     padSwap();
     arrangeKeepsColours();
     arrangeScenario();
+    arrangeCompactsSlices();
     zeroCrossSnap();
     std::cout << "Pad workflow tests passed\n";
 }

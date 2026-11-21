@@ -750,46 +750,97 @@ void MainSampleWorkflows::arrange(const MainSampleRequest& request)
         return;
     }
     const auto pads = snapshotPads();
+    // Favourite pads keep their slice and their place; everything else is arranged around them.
     std::vector<MainSampleLink> links;
+    std::vector<std::uint16_t> favouriteSlices;
+    std::uint64_t blocked = 0U; // favourites and pads holding audio that is not a slice of this source
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
         const auto provenance = pads.provenance[pad];
-        if (provenance != 0U && (provenance >> 16U) == session_.sourceId && !sampler_.isFavorite(pad))
+        const bool own = provenance != 0U && (provenance >> 16U) == session_.sourceId &&
+            session_.find(static_cast<std::uint16_t>(provenance & kSliceMask)) != nullptr;
+        if (sampler_.isFavorite(pad)) {
+            blocked |= std::uint64_t{1} << pad;
+            if (own)
+                favouriteSlices.push_back(static_cast<std::uint16_t>(provenance & kSliceMask));
+        } else if (own) {
             links.push_back({pad, static_cast<std::uint16_t>(provenance & kSliceMask)});
-    }
-    const auto moves = arrangeMoves(session_.slices, links);
-    for (const auto& move : moves)
-        if (sampler_.isFavorite(move.to)) { // never move a pad onto a favorite
-            publishStatusLocked(request.sequence, MainSampleState::error, kFavoriteRefusal);
-            return;
+        } else {
+            PadMetadata metadata;
+            controlDispatcher_.invoke([&]() noexcept { metadata = sampler_.padMetadata(pad); });
+            if (metadata.recording) {
+                publishStatusLocked(request.sequence, MainSampleState::error, "Disarm recording first");
+                return;
+            }
+            if (metadata.occupied)
+                blocked |= std::uint64_t{1} << pad;
         }
-    if (moves.empty()) {
+    }
+    // Consecutive visible pads from the first pad, skipping the blocked ones.
+    std::vector<std::uint32_t> candidates;
+    const std::uint32_t firstPad = request.pad < kPadCount ? request.pad : 0U;
+    for (std::uint32_t step = 0; step < kPadCount; ++step) {
+        const auto pad = advanceVisiblePad(firstPad, step, settings.padsPerBank, settings.midiBankMode);
+        if (pad >= kPadCount)
+            break;
+        if ((blocked & (std::uint64_t{1} << pad)) == 0U)
+            candidates.push_back(pad);
+    }
+    const auto plan = planArrange(session_.slices, links, favouriteSlices, candidates);
+    if (!plan.enough) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Not enough free pads to arrange every slice");
+        return;
+    }
+    if (plan.empty()) {
         publishStatusLocked(request.sequence, MainSampleState::ready, "Pads already in order");
         return;
     }
     // Every moved pad is both a source and a destination, so one transaction replaces them all.
-    std::vector<PadData> audio(moves.size());
-    std::vector<PadImport> imports(moves.size());
+    const std::size_t total = plan.moves.size() + plan.fills.size() + plan.vacated.size();
+    std::vector<PadData> audio(total);
+    std::vector<PadImport> imports(total);
     std::uint64_t affected = 0U;
-    for (std::size_t index = 0; index < moves.size(); ++index) {
-        const auto from = moves[index].from;
-        const auto to = moves[index].to;
+    std::size_t index = 0U;
+    for (const auto& move : plan.moves) {
         auto& import = imports[index];
-        import.pad = to;
+        import.pad = move.to;
         import.audio = &audio[index];
-        if (!sampler_.exportPad(from, audio[index], &import.playback, &import.mixer)) {
+        if (!sampler_.exportPad(move.from, audio[index], &import.playback, &import.mixer)) {
             publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
             return;
         }
-        import.provenance = pads.provenance[from];
-        import.expectedGeneration = pads.generations[to];
-        affected |= std::uint64_t{1} << to;
+        import.provenance = pads.provenance[move.from];
+        import.expectedGeneration = pads.generations[move.to];
+        affected |= std::uint64_t{1} << move.to;
+        ++index;
+    }
+    for (const auto& fill : plan.fills) {
+        const auto* slice = session_.find(fill.sliceId);
+        auto& import = imports[index];
+        import.pad = fill.pad;
+        import.audio = &audio[index];
+        if (slice == nullptr ||
+            !sampler_.copySourceRange(session_.sourceId, slice->start, slice->end - slice->start, audio[index])) {
+            publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+            return;
+        }
+        import.provenance = link(session_.sourceId, fill.sliceId);
+        import.expectedGeneration = pads.generations[fill.pad];
+        affected |= std::uint64_t{1} << fill.pad;
+        ++index;
+    }
+    for (const auto pad : plan.vacated) {
+        auto& import = imports[index];
+        import.pad = pad; // audio stays nullptr: the pad is cleared
+        import.expectedGeneration = pads.generations[pad];
+        affected |= std::uint64_t{1} << pad;
+        ++index;
     }
     if (!sampler_.importPads(imports, &settings)) {
         publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
         return;
     }
     if (arrangeHook_)
-        arrangeHook_(moves);
+        arrangeHook_(plan.moves, plan.vacated);
     publishPadSettings(affected, true);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
 }

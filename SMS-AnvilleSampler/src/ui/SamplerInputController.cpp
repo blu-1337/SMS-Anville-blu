@@ -368,6 +368,9 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 case 3: main.adjustAutoChopFirstPad(-1); break;
                 case 4: main.adjustAutoChopFirstPad(1); break;
                 case 6: main.clickCountField(Clock::now()); break;
+                case 7: main.setAutoChopCount(16U); break;
+                case 8: main.setAutoChopCount(32U); break;
+                case 9: main.setAutoChopCount(64U); break;
                 default: main.autoChop(); break;
                 }
                 return true;

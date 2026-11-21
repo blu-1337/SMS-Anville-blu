@@ -778,6 +778,27 @@ void editButtonRects()
     }
 }
 
+void autoChopPresetRects()
+{
+    using namespace layout;
+    const auto disjoint = [](const sms::ui::Rect& r, const sms::ui::Rect& o) {
+        return r.x + r.width <= o.x || o.x + o.width <= r.x || r.y + r.height <= o.y || o.y + o.height <= r.y;
+    };
+    for (int index = 0; index < kAutoChopPresetCount; ++index) {
+        const auto rect = autoChopPreset(index);
+        check(rect.x >= sidePanel.x && rect.x + rect.width <= sidePanel.x + sidePanel.width,
+              "count presets stay in the side panel");
+        check(rect.y >= autoChopCountMinus.y + autoChopCountMinus.height && rect.y + rect.height <= autoChopPadMinus.y,
+              "count presets sit between the count and first-pad rows");
+        for (const auto& other : {autoChopMode, autoChopCountMinus, autoChopCountPlus, autoChopCountField, autoChopPadMinus,
+                                  autoChopPadPlus, autoChopApply, autoChopMessage, mainSampleInfo})
+            check(disjoint(rect, other), "count presets clear the other auto-chop controls");
+        for (int second = index + 1; second < kAutoChopPresetCount; ++second)
+            check(disjoint(rect, autoChopPreset(second)), "count presets do not overlap");
+    }
+    check(autoChopMessage.y + autoChopMessage.height <= mainSampleInfo.y, "the chop message ends above the info box");
+}
+
 void actionButtonSpacing()
 {
     using namespace layout;
@@ -821,6 +842,27 @@ void autoChopPanel()
           decodeAutoChopRequest(host.sent[0].second, request) &&
           request.mode == AutoChopMode::findSamples && request.count == 13U &&
           request.firstPad == 4U && !request.confirm, "request carries the panel settings");
+    // Range: the whole sample without a selection, the left-drag selection with one; the zoom never matters.
+    check(std::string(controller.autoChopLabel()) == "CHOP ALL" && request.rangeStart == controller.rangeStart() &&
+          request.rangeEnd == controller.rangeEnd(), "no selection chops the whole sample");
+    controller.beginSelection(100U);
+    controller.extendSelection(300U);
+    host.sent.clear();
+    check(std::string(controller.autoChopLabel()) == "CHOP SELECTION" && controller.autoChop() &&
+          decodeAutoChopRequest(host.sent[0].second, request) && request.rangeStart == 100U &&
+          request.rangeEnd == 300U, "a left-drag selection is the chop range");
+    controller.clearSelection();
+    host.sent.clear();
+    check(controller.autoChop() && decodeAutoChopRequest(host.sent[0].second, request) &&
+          request.rangeStart == controller.rangeStart() && request.rangeEnd == controller.rangeEnd(),
+          "clearing the selection returns to the whole sample");
+    for (const std::uint32_t preset : {32U, 64U, 16U}) {
+        controller.setAutoChopCount(preset);
+        check(controller.autoChopCount() == preset, "count preset sets the count in one click");
+    }
+    controller.setAutoChopCount(500U);
+    check(controller.autoChopCount() == 64U, "presets clamp to the maximum");
+    controller.setAutoChopCount(13U);
     AutoChopStatus reply;
     reply.sequence = request.sequence + 5U;
     reply.state = AutoChopState::ok;
@@ -1065,6 +1107,7 @@ int main()
     layoutRects();
     actionButtonSpacing();
     editButtonRects();
+    autoChopPresetRects();
     assignPicksFirstFreePad();
     zeroCrossFlagFollowsSnap();
     autoChopPanel();

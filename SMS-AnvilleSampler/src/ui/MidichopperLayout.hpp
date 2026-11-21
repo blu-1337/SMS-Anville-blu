@@ -343,10 +343,16 @@ inline constexpr sms::ui::Rect autoChopCountMinus{994.0f, 202.0f, 44.0f, 28.0f};
 // Double-click the count between - and + to type it.
 inline constexpr sms::ui::Rect autoChopCountField{1042.0f, 202.0f, 126.0f, 28.0f};
 inline constexpr sms::ui::Rect autoChopCountPlus{1172.0f, 202.0f, 44.0f, 28.0f};
-inline constexpr sms::ui::Rect autoChopPadMinus{994.0f, 238.0f, 44.0f, 28.0f};
-inline constexpr sms::ui::Rect autoChopPadPlus{1172.0f, 238.0f, 44.0f, 28.0f};
-inline constexpr sms::ui::Rect autoChopApply{994.0f, 274.0f, 222.0f, 32.0f};
-inline constexpr sms::ui::Rect autoChopMessage{994.0f, 312.0f, 222.0f, 48.0f};
+// Count presets 16 / 32 / 64 in one row under the count (three 70-wide buttons, 6 apart, panel width).
+inline constexpr int kAutoChopPresetCount = 3;
+[[nodiscard]] constexpr sms::ui::Rect autoChopPreset(const int index) noexcept
+{
+    return {994.0f + static_cast<float>(index) * 76.0f, 238.0f, 70.0f, 28.0f};
+}
+inline constexpr sms::ui::Rect autoChopPadMinus{994.0f, 274.0f, 44.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopPadPlus{1172.0f, 274.0f, 44.0f, 28.0f};
+inline constexpr sms::ui::Rect autoChopApply{994.0f, 310.0f, 222.0f, 32.0f};
+inline constexpr sms::ui::Rect autoChopMessage{994.0f, 348.0f, 222.0f, 40.0f};
 inline constexpr std::array<sms::ui::Rect, 8> mainSampleRects{
     mainSampleWaveform, mainSampleOverview, mainSamplePads, mainSampleClose,
     mainSampleInfo, mainSampleLoad, mainSampleClear, mainSampleStatus};

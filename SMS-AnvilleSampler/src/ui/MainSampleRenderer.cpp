@@ -512,7 +512,14 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
         drawButton(uiLayout::autoChopCountPlus, "+", 2);
         drawButton(uiLayout::autoChopPadMinus, "-", 3);
         drawButton(uiLayout::autoChopPadPlus, "+", 4);
-        drawButton(uiLayout::autoChopApply, "AUTO CHOP", 5);
+        drawButton(uiLayout::autoChopApply, main.autoChopLabel(), 5);
+        for (int preset = 0; preset < uiLayout::kAutoChopPresetCount; ++preset) {
+            static constexpr unsigned kPresets[] = {16U, 32U, 64U};
+            std::snprintf(line, sizeof(line), "%u", kPresets[preset]);
+            sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::autoChopPreset(preset), line,
+                                      main.autoChopCount() == kPresets[preset], colors.activityPlayback,
+                                      hovered(ctx, InteractiveType::mainSampleAutoChop, 7 + preset));
+        }
         ctx.canvas.fontSize(10.0f);
         ctx.canvas.fillColor(colors.contentSecondary);
         if (main.countEditing())

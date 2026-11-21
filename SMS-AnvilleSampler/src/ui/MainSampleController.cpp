@@ -1052,6 +1052,13 @@ void MainSampleController::adjustAutoChopCount(const int delta) noexcept
     fHost.repaintMainSample();
 }
 
+void MainSampleController::setAutoChopCount(const std::uint32_t count) noexcept
+{
+    fCountEditing = false;
+    fAutoCount = std::clamp<std::uint32_t>(count, 1U, plugin::kAutoChopMaxCount);
+    fHost.repaintMainSample();
+}
+
 void MainSampleController::clickCountField(const Time now) noexcept
 {
     if (!fCountEditing && fCountClick != Time{} && now - fCountClick <= std::chrono::milliseconds(400)) {
@@ -1124,8 +1131,10 @@ bool MainSampleController::autoChop(const bool confirm)
     request.bpmCenti = 0U; // host tempo
     request.beatsMilli = 1000U;
     request.snap = true;
-    request.rangeStart = rangeStart(); // the plug-in also confines the chop to its stored range
-    request.rangeEnd = rangeEnd();
+    // A left-drag selection is the range; without one the whole sample (its stored range, the whole
+    // source unless A/B markers were set). The view zoom never matters. The plug-in confines it to its range.
+    request.rangeStart = hasSelection() ? selectionStart() : rangeStart();
+    request.rangeEnd = hasSelection() ? selectionEnd() : rangeEnd();
     fAutoSequence = request.sequence;
     fAutoConfirm = false;
     fAutoMessage = "Chopping...";

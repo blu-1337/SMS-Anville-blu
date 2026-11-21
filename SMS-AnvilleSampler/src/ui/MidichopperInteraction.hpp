@@ -824,6 +824,10 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
                 if (autoChopRects[index].contains(point))
                     return target(InteractiveType::mainSampleAutoChop, index);
             }
+            for (int preset = 0; preset < uiLayout::kAutoChopPresetCount; ++preset) {
+                if (uiLayout::autoChopPreset(preset).contains(point))
+                    return target(InteractiveType::mainSampleAutoChop, 7 + preset);
+            }
         }
         for (int bank = 0; bank < static_cast<int>(kBankCount); ++bank) {
             if (uiLayout::mainSampleBank(bank).contains(point))

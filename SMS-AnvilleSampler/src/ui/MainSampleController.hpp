@@ -121,6 +121,10 @@ public:
     [[nodiscard]] static const char* autoChopModeLabel(int index) noexcept;
     [[nodiscard]] static plugin::AutoChopMode autoChopModeAt(int index) noexcept;
     void adjustAutoChopCount(int delta) noexcept;
+    /** Count preset button: sets the count in one click (clamped), ends any typing. */
+    void setAutoChopCount(std::uint32_t count) noexcept;
+    /** AUTO CHOP chops the left-drag selection when there is one, otherwise the whole sample (its range). */
+    [[nodiscard]] const char* autoChopLabel() const noexcept { return hasSelection() ? "CHOP SELECTION" : "CHOP ALL"; }
     void adjustAutoChopFirstPad(int delta) noexcept;
     /** Click on the count field; the second click within 400 ms starts typing the count. */
     void clickCountField(Time now) noexcept;

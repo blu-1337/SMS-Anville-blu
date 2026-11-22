@@ -236,9 +236,14 @@ void previews()
     check(decodeSourcePreviewRequest(encodeSourcePreviewRequest(play), decoded) && decoded.play &&
           decoded.loop && decoded.sourceId == play.sourceId && decoded.start == 10U &&
           decoded.end == 4000U, "a play request round-trips");
+    SourcePreviewRequest retarget = play;
+    retarget.update = true;
+    check(decodeSourcePreviewRequest(encodeSourcePreviewRequest(retarget), decoded) && decoded.play &&
+          decoded.update && decoded.start == 10U && decoded.end == 4000U, "a preview update round-trips");
+    check(!decodeSourcePreviewRequest("MP1;3;0;1;1;2", decoded), "a play flag past 2 is refused");
     check(decodeSourcePreviewRequest(encodeSourcePreviewRequest({}), decoded) && !decoded.play,
           "a stop needs no range");
-    for (const char* bad : {"MP1;1;0;0;0;10", "MP1;1;0;5;10;10", "MP1;2;0;5;0;10",
+    for (const char* bad : {"MP1;1;0;0;0;10", "MP1;1;0;5;10;10", "MP1;3;0;5;0;10",
                             "MP1;0;0;0;0;0;", "MP1;0;0;0;0", "MP1;0;0;1000000000000;0;0"})
         check(!decodeSourcePreviewRequest(bad, decoded), bad);
 }

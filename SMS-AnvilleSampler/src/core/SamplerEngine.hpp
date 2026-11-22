@@ -350,6 +350,9 @@ public:
     void startSourcePreview(std::uint64_t sourceId, std::uint32_t start, std::uint32_t end,
                             bool loop) noexcept;
     void stopSourcePreview() noexcept;
+    /** Retargets a running preview of the same source without a restart; false when idle. */
+    bool updateSourcePreview(std::uint64_t sourceId, std::uint32_t start, std::uint32_t end,
+                             bool loop) noexcept;
     [[nodiscard]] bool sourcePreviewActive() const noexcept { return sourcePreviewActive_; }
     /** Zero when stopped; otherwise 1 plus the playing frame / source frames. */
     [[nodiscard]] double sourcePreviewPosition() const noexcept;

@@ -459,6 +459,19 @@ void source_preview()
     engine.stopAllPlayback();
     check(!engine.sourcePreviewActive(), "stopAllPlayback stops the preview");
 
+    // Live retarget: the voice keeps its place inside the new range, wraps at the new end, and jumps outside it.
+    check(!engine.updateSourcePreview(9U, 10U, 20U, true), "updating an idle preview does nothing");
+    engine.startSourcePreview(9U, 10U, 30U, true);
+    render(engine, 5U); // position 15
+    check(engine.updateSourcePreview(9U, 12U, 18U, true) && engine.sourcePreviewActive() &&
+          engine.sourcePreviewPosition() == 1.0 + 15.0 / 100.0, "a position inside the new range is kept");
+    out = render(engine, 4U); // 15,16,17 then wraps to 12
+    check(out.left[0] == at(15U) && out.left[2] == at(17U) && out.left[3] == at(12U), "the loop wraps at the new end");
+    check(engine.updateSourcePreview(9U, 40U, 50U, true) && engine.sourcePreviewPosition() == 1.0 + 40.0 / 100.0,
+          "a position outside the new range jumps to its start");
+    check(!engine.updateSourcePreview(8U, 40U, 50U, true) && !engine.updateSourcePreview(9U, 50U, 50U, true),
+          "a stale source or empty range is refused");
+    engine.stopAllPlayback();
     engine.startSourcePreview(8U, 0U, 10U, false);
     check(!engine.sourcePreviewActive(), "a stale source id starts nothing");
     engine.startSourcePreview(9U, 10U, 10U, false);

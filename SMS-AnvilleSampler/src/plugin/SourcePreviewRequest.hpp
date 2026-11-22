@@ -12,6 +12,7 @@ struct SourcePreviewRequest {
     std::uint64_t sourceId = 0U;
     std::uint32_t start = 0U;
     std::uint32_t end = 0U;
+    bool update = false; // Retarget a running preview in place (starts one if idle).
 };
 
 static_assert(std::is_trivially_copyable_v<SourcePreviewRequest>);

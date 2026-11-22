@@ -339,6 +339,56 @@ void transportPlaysSelectedSlice()
     check(controller.sliceIndexAt(399U) == 0 && controller.sliceIndexAt(400U) == 1, "slice lookup by frame");
 }
 
+void selectionPreviewFollowsEdits()
+{
+    Host host;
+    MainSampleController controller(host);
+    controller.acceptStatus(status(1U), Clock::now());
+    SourcePreviewRequest preview;
+    auto last = [&] { return decodeSourcePreviewRequest(host.sent.back().second, preview); };
+    controller.toggleLoop();
+    controller.beginSelection(100U);
+    controller.extendSelection(300U);
+    controller.togglePlay();
+    controller.acceptPreviewPosition(1.1f);
+    check(controller.beginSelectionHalfDrag(290U), "grab the selection end");
+    const auto count = host.sent.size();
+    controller.dragTo(500U);
+    check(host.sent.size() == count + 1U && last() && preview.update && preview.loop && preview.start == 100U &&
+          preview.end == 500U, "dragging the end retargets the loop live");
+    controller.dragTo(500U);
+    check(host.sent.size() == count + 1U, "an unchanged edge sends nothing");
+    controller.dragTo(600U);
+    check(last() && preview.update && preview.end == 600U, "the next move follows again");
+    controller.endDrag();
+
+    // Not following: a stopped preview and a preview of something else are left alone.
+    controller.acceptPreviewPosition(0.0f);
+    controller.beginSelectionHalfDrag(590U);
+    const auto idle = host.sent.size();
+    controller.dragTo(700U);
+    check(host.sent.size() == idle, "a stopped preview is not restarted by editing");
+    controller.endDrag();
+
+    // A successful auto-chop consumes the selection, so a pad click plays instead of assigning.
+    controller.beginSelection(100U);
+    controller.extendSelection(300U);
+    check(controller.hasSelection() && controller.autoChop(true), "chop the selection");
+    AutoChopStatus reply;
+    reply.sequence = controller.lastSentSequence();
+    reply.state = AutoChopState::confirm;
+    controller.acceptAutoChopStatus(encodeAutoChopStatus(reply));
+    check(controller.hasSelection(), "a confirm prompt keeps the selection");
+    reply.state = AutoChopState::ok;
+    reply.found = 4U;
+    reply.requested = 4U;
+    controller.acceptAutoChopStatus(encodeAutoChopStatus(reply));
+    check(!controller.hasSelection(), "a successful chop clears the selection");
+    const auto before = host.sent.size();
+    check(!controller.assignSelection(0U), "a pad click with no selection never assigns");
+    check(host.sent.size() == before, "and sends nothing");
+}
+
 void zoomHelpers()
 {
     Host host;
@@ -1087,6 +1137,7 @@ int main()
     arrangeSendsOneRequestAndKeepsMoves();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();
+    selectionPreviewFollowsEdits();
     zoomHelpers();
     padChangesRequery();
     swapLinksRefreshLabels();

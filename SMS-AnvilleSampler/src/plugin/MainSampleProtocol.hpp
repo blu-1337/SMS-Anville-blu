@@ -733,7 +733,7 @@ inline void appendBase64(std::string& out, const std::vector<std::uint8_t>& data
 
 [[nodiscard]] inline std::string encodeSourcePreviewRequest(const SourcePreviewRequest& request)
 {
-    return std::string("MP1;") + (request.play ? "1;" : "0;") + (request.loop ? "1;" : "0;") +
+    return std::string("MP1;") + (request.update ? "2;" : request.play ? "1;" : "0;") + (request.loop ? "1;" : "0;") +
            main_sample_detail::hex(request.sourceId) + ";" + std::to_string(request.start) + ";" +
            std::to_string(request.end);
 }
@@ -751,10 +751,11 @@ inline void appendBase64(std::string& out, const std::vector<std::uint8_t>& data
     SourcePreviewRequest decoded;
     if (!fields.number(play) || !fields.number(loop) || !fields.number(decoded.sourceId, 16) ||
         !fields.number(decoded.start) || !fields.number(decoded.end) || !fields.finished() ||
-        play > 1U || loop > 1U || decoded.sourceId > kMainSampleSourceIdMask ||
-        (play == 1U && (decoded.sourceId == 0U || decoded.start >= decoded.end)))
+        play > 2U || loop > 1U || decoded.sourceId > kMainSampleSourceIdMask ||
+        (play >= 1U && (decoded.sourceId == 0U || decoded.start >= decoded.end)))
         return false;
-    decoded.play = play == 1U;
+    decoded.play = play >= 1U;
+    decoded.update = play == 2U;
     decoded.loop = loop == 1U;
     request = decoded;
     return true;

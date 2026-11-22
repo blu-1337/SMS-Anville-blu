@@ -2002,6 +2002,21 @@ void SamplerEngine::startSourcePreview(const std::uint64_t sourceId, const std::
     sourcePreviewActive_ = true;
 }
 
+bool SamplerEngine::updateSourcePreview(const std::uint64_t sourceId, const std::uint32_t start,
+    const std::uint32_t end, const bool loop) noexcept {
+    const auto* source = source_.load(std::memory_order_relaxed);
+    if (!sourcePreviewActive_ || settings_.armed || !source ||
+        sourceId != sourceId_.load(std::memory_order_relaxed) || start >= end || end > source->frames)
+        return false;
+    sourcePreviewStart_ = start;
+    sourcePreviewEnd_ = end;
+    sourcePreviewLoop_ = loop;
+    // Inside the new range the voice keeps going and wraps at the new end; outside it jumps to the start.
+    if (sourcePreviewFrame_ < static_cast<double>(start) || sourcePreviewFrame_ >= static_cast<double>(end))
+        sourcePreviewFrame_ = static_cast<double>(start);
+    return true;
+}
+
 void SamplerEngine::stopSourcePreview() noexcept {
     sourcePreviewActive_ = false;
     sourcePreviewFrame_ = 0.0;

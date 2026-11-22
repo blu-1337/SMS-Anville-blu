@@ -439,6 +439,22 @@ bool MainSampleController::preview(std::uint32_t start, std::uint32_t end, const
     return true;
 }
 
+bool MainSampleController::retargetPreview(const std::uint32_t oldStart, const std::uint32_t oldEnd)
+{
+    // Only a preview that is playing exactly the selection follows it; the voice keeps going.
+    if (!playing() || !fLoop || fPlayStart != oldStart || fPlayEnd != oldEnd || !hasSelection())
+        return false;
+    const auto start = std::max(fSelectionStart, rangeStart());
+    const auto end = std::min(fSelectionEnd, rangeEnd());
+    if (start >= end || (start == fPlayStart && end == fPlayEnd))
+        return false;
+    fPlayStart = start;
+    fPlayEnd = end;
+    auto request = plugin::SourcePreviewRequest{true, true, fStatus.sourceId, start, end, true};
+    fHost.sendMainSampleState(plugin::kMainPreviewRequestKey, plugin::encodeSourcePreviewRequest(request));
+    return true;
+}
+
 void MainSampleController::stopPreview()
 {
     fHost.sendMainSampleState(plugin::kMainPreviewRequestKey,
@@ -649,10 +665,13 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
 {
     if (fSelectionEdge != 0) {
         const auto clamped = clampFrame(frame);
+        const auto oldStart = fSelectionStart;
+        const auto oldEnd = fSelectionEnd;
         if (fSelectionEdge == 1)
             fSelectionStart = std::min(clamped, fSelectionEnd - 1U);
         else
             fSelectionEnd = std::max(clamped, fSelectionStart + 1U);
+        retargetPreview(oldStart, oldEnd);
         fHost.repaintMainSample();
         return;
     }
@@ -1149,6 +1168,7 @@ bool MainSampleController::acceptAutoChopStatus(const std::string_view encoded)
     fAutoConfirm = false;
     switch (status.state) {
     case plugin::AutoChopState::ok:
+        clearSelection(); // The chop consumed it: a pad click must only play, never re-assign.
         fAutoMessage = status.found < status.requested
             ? "Found " + std::to_string(status.found) + " of " + std::to_string(status.requested)
             : "Chopped " + std::to_string(status.found) + " slices";

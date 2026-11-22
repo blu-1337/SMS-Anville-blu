@@ -256,6 +256,9 @@ void PluginControls::applyCommandTriggers(midichopper::SamplerEngine& sampler) n
     midichopper::plugin::SourcePreviewRequest sourcePreview;
     if (sourcePreviewMailbox_.tryConsume(sourcePreview)) {
         if (sourcePreview.play) {
+            if (sourcePreview.update && sampler.updateSourcePreview(sourcePreview.sourceId,
+                    sourcePreview.start, sourcePreview.end, sourcePreview.loop))
+                return;
             sampler.startSourcePreview(sourcePreview.sourceId, sourcePreview.start,
                 sourcePreview.end, sourcePreview.loop);
         } else {

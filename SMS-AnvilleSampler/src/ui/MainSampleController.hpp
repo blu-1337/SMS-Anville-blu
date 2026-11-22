@@ -108,6 +108,8 @@ public:
     bool deleteSlice(std::uint16_t sliceId);
     bool preview(std::uint32_t start, std::uint32_t end, bool loop);
     void stopPreview();
+    /** Moves a looping selection preview to the edited selection without restarting it. */
+    bool retargetPreview(std::uint32_t oldStart, std::uint32_t oldEnd);
     bool previewFrom(std::uint32_t frame);
 
     // Auto chop (AC1): panel settings, request and reply. Pad and slice effects

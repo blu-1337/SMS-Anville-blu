@@ -7,7 +7,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -99,6 +101,25 @@ inline std::size_t cleanDragDirectory(const std::filesystem::path& directory,
         if (std::filesystem::remove(it->path(), entryError)) ++removed;
     }
     return removed;
+}
+
+/** True when `path` holds a complete WAV: the RIFF size matches the file size and the size did not
+ * change since `previousSize` (the previous poll). Replaces waiting for a worker reply. */
+[[nodiscard]] inline bool dragExportFileReady(const std::filesystem::path& path, std::uintmax_t& previousSize)
+{
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    if (error || size < 44U) { previousSize = 0U; return false; }
+    const bool stable = size == previousSize;
+    previousSize = size;
+    if (!stable) return false;
+    std::ifstream in(path, std::ios::binary);
+    unsigned char head[12]{};
+    if (!in.read(reinterpret_cast<char*>(head), sizeof head)) return false;
+    const std::uint32_t riff = static_cast<std::uint32_t>(head[4]) | (static_cast<std::uint32_t>(head[5]) << 8U) |
+        (static_cast<std::uint32_t>(head[6]) << 16U) | (static_cast<std::uint32_t>(head[7]) << 24U);
+    return std::memcmp(head, "RIFF", 4U) == 0 && std::memcmp(head + 8, "WAVE", 4U) == 0 &&
+           static_cast<std::uintmax_t>(riff) + 8U == size;
 }
 
 /** Gesture: armed on a pad press; once the pointer leaves the window the export is requested,

@@ -26,6 +26,7 @@ public:
     /** Pad drag-out of the window (Windows only; the defaults make it a no-op). */
     [[nodiscard]] virtual bool pointerOutsideWindow() { return false; }
     [[nodiscard]] virtual bool primaryButtonDown() { return false; }
+    [[nodiscard]] virtual std::string pointerDebug() { return {}; }
     virtual void dragLog(const std::string& message) { static_cast<void>(message); }
     virtual bool startFileDrag(const std::string& utf8Path) { static_cast<void>(utf8Path); return false; }
 };
@@ -112,6 +113,9 @@ private:
     void servicePadDragOut();
     midichopper::plugin::PadDragOutGesture fDragOut;
     bool fDragLogOutside = false;
+    int fDragOutsidePolls = 0;
+    std::uintmax_t fDragFileSize = 0U;
+    Clock::time_point fDragRequestedAt{};
     std::string fDragOutPath;
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;

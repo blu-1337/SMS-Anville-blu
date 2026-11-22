@@ -201,6 +201,23 @@ bool FileDragSource::pointerOutsideWindow(const std::uintptr_t nativeWindow) noe
            cursor.y >= client.bottom;
 }
 
+std::string FileDragSource::pointerDebug(const std::uintptr_t nativeWindow)
+{
+    const auto window = reinterpret_cast<HWND>(nativeWindow);
+    POINT cursor{};
+    POINT screen{};
+    RECT client{};
+    RECT outer{};
+    if (window == nullptr || !GetCursorPos(&screen)) return "no window/cursor";
+    cursor = screen;
+    GetClientRect(window, &client);
+    GetWindowRect(window, &outer);
+    ScreenToClient(window, &cursor);
+    return "screen(" + std::to_string(screen.x) + "," + std::to_string(screen.y) + ") client(" + std::to_string(cursor.x) +
+           "," + std::to_string(cursor.y) + ") rect(" + std::to_string(client.right) + "x" + std::to_string(client.bottom) +
+           ") dpi=" + std::to_string(GetDpiForWindow(window));
+}
+
 bool FileDragSource::primaryButtonDown() noexcept
 {
     return (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000) != 0;

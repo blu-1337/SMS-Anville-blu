@@ -2143,6 +2143,24 @@ void padDragCleanupAndGesture()
     fs::remove_all(dir);
     check(cleanDragDirectory(dir, now) == 0U, "a missing folder is fine");
 
+    {
+        sms::audio::WavAudio wav;
+        wav.sampleRate = 48000U;
+        wav.frames = 100U;
+        wav.stereo.assign(200U, 0.25f);
+        const auto file = fs::temp_directory_path() / "sms-drag-ready.wav";
+        fs::remove(file);
+        std::uintmax_t seen = 0U;
+        check(!dragExportFileReady(file, seen), "a missing file is not ready");
+        check(writePadWavFloat32(file, wav).empty(), "write a float32 WAV");
+        check(!dragExportFileReady(file, seen) && dragExportFileReady(file, seen), "ready once the size is stable");
+        std::vector<char> bytes(static_cast<std::size_t>(fs::file_size(file)));
+        { std::ifstream in(file, std::ios::binary); in.read(bytes.data(), static_cast<std::streamsize>(bytes.size())); }
+        { std::ofstream out(file, std::ios::binary | std::ios::trunc); out.write(bytes.data(), static_cast<std::streamsize>(bytes.size() - 17U)); }
+        seen = 0U;
+        check(!dragExportFileReady(file, seen) && !dragExportFileReady(file, seen), "a truncated WAV is never ready");
+        fs::remove(file);
+    }
     using Gesture = PadDragOutGesture;
     Gesture g;
     check(g.poll(true, true) == Gesture::Action::none && !g.active(), "idle does nothing");

@@ -856,6 +856,13 @@ void SamplerInputController::armPadDragOut(const int pad)
 // The pointer leaving the window while a pad is held starts an export, then the OS drag.
 // Polled from idle with the real cursor position, so it works whether or not the host keeps
 // delivering mouse events outside the window.
+namespace {
+std::filesystem::path dragPathFromUtf8(const std::string& text)
+{
+    return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+}
+} // namespace
+
 void SamplerInputController::servicePadDragOut()
 {
     if (!fDragOut.active()) return;
@@ -864,11 +871,24 @@ void SamplerInputController::servicePadDragOut()
         fHost.dragLog(std::string("export result ") + (*done ? "ok" : "failed"));
         fDragOut.exported(*done);
     }
-    const bool outside = fHost.pointerOutsideWindow();
+    // Outside only after two consecutive polls, so a one-poll flicker at the edge never starts an export.
+    fDragOutsidePolls = fHost.pointerOutsideWindow() ? fDragOutsidePolls + 1 : 0;
+    const bool outside = fDragOutsidePolls >= 2;
     const bool down = fHost.primaryButtonDown();
     if (outside != fDragLogOutside) {
         fDragLogOutside = outside;
-        fHost.dragLog(std::string("pointer ") + (outside ? "left" : "entered") + " the window, button " + (down ? "down" : "up"));
+        fHost.dragLog(std::string("pointer ") + (outside ? "left" : "entered") + " the window, button " + (down ? "down" : "up") + " [" + fHost.pointerDebug() + "]");
+    }
+    // The worker's reply is not relied on: the export is ready once the WAV is complete and stable on disk.
+    if (fDragOut.state() == midichopper::plugin::PadDragOutGesture::State::requested) {
+        const auto now = Clock::now();
+        if (midichopper::plugin::dragExportFileReady(dragPathFromUtf8(fDragOutPath), fDragFileSize)) {
+            fHost.dragLog("export file ready (" + std::to_string(fDragFileSize) + " bytes)");
+            fDragOut.exported(true);
+        } else if (now - fDragRequestedAt > std::chrono::seconds(10)) {
+            fHost.dragLog("export file never completed; giving up");
+            fDragOut.exported(false);
+        }
     }
     const auto before = fDragOut.state();
     const auto action = fDragOut.poll(outside, down);
@@ -885,10 +905,13 @@ void SamplerInputController::servicePadDragOut()
             const auto text = (directory / name).generic_u8string();
             fDragOutPath.assign(reinterpret_cast<const char*>(text.data()), text.size());
         }
+        { std::error_code ignored; std::filesystem::remove(dragPathFromUtf8(fDragOutPath), ignored); } // never mistake an old export for the new one
         const bool sent = !fDragOutPath.empty() && actions.requestDragExport(fDragOut.pad(), fDragOutPath);
         fHost.dragLog(std::string("export request ") + (sent ? "sent: " : "REFUSED: ") + fDragOutPath);
         if (!sent) fDragOut.release();
         else {
+            fDragFileSize = 0U;
+            fDragRequestedAt = Clock::now();
             // The press is now an export, not a volume/pan/swap edit.
             fQuickEdit.cancel();
             fSwapTarget = -1;

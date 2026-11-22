@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace sms::ui {
@@ -10,6 +11,8 @@ class FileDragSource {
 public:
     /** True when the cursor is outside the window's client area (false when unknown). */
     [[nodiscard]] static bool pointerOutsideWindow(std::uintptr_t nativeWindow) noexcept;
+    /** TEMPORARY diagnostics: cursor and client rectangle in the window's coordinates. */
+    [[nodiscard]] static std::string pointerDebug(std::uintptr_t nativeWindow);
     /** True while the left mouse button is held. */
     [[nodiscard]] static bool primaryButtonDown() noexcept;
     /** Blocks in the OS drag loop until the drop or cancel. True when a target accepted the copy. */

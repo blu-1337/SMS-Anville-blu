@@ -120,7 +120,7 @@ public:
         if (fState == State::idle || fState == State::dragging) return Action::none;
         if (!buttonDown) { release(); return Action::none; }
         if (fState == State::armed && outside) { fState = State::requested; return Action::request; }
-        if (fState == State::ready && outside) { fState = State::dragging; return Action::startDrag; }
+        if (fState == State::ready) { fState = State::dragging; return Action::startDrag; }
         return Action::none;
     }
     /** The plug-in answered the export request. */

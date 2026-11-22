@@ -850,6 +850,7 @@ void SamplerInputController::idle(const Clock::time_point now)
 void SamplerInputController::armPadDragOut(const int pad)
 {
     fDragOut.arm(pad);
+    fHost.dragLog("armed pad " + std::to_string(pad));
 }
 
 // The pointer leaving the window while a pad is held starts an export, then the OS drag.
@@ -859,8 +860,21 @@ void SamplerInputController::servicePadDragOut()
 {
     if (!fDragOut.active()) return;
     auto& actions = fSession.padActions();
-    if (const auto done = actions.takeDragExportResult()) fDragOut.exported(*done);
-    switch (fDragOut.poll(fHost.pointerOutsideWindow(), fHost.primaryButtonDown())) {
+    if (const auto done = actions.takeDragExportResult()) {
+        fHost.dragLog(std::string("export result ") + (*done ? "ok" : "failed"));
+        fDragOut.exported(*done);
+    }
+    const bool outside = fHost.pointerOutsideWindow();
+    const bool down = fHost.primaryButtonDown();
+    if (outside != fDragLogOutside) {
+        fDragLogOutside = outside;
+        fHost.dragLog(std::string("pointer ") + (outside ? "left" : "entered") + " the window, button " + (down ? "down" : "up"));
+    }
+    const auto before = fDragOut.state();
+    const auto action = fDragOut.poll(outside, down);
+    if (action == midichopper::plugin::PadDragOutGesture::Action::none && !fDragOut.active() && before != fDragOut.state())
+        fHost.dragLog("disarmed: button released");
+    switch (action) {
     case midichopper::plugin::PadDragOutGesture::Action::request: {
         const auto& main = fSession.mainSample();
         const auto directory = midichopper::plugin::dragExportDirectory();
@@ -871,7 +885,9 @@ void SamplerInputController::servicePadDragOut()
             const auto text = (directory / name).generic_u8string();
             fDragOutPath.assign(reinterpret_cast<const char*>(text.data()), text.size());
         }
-        if (fDragOutPath.empty() || !actions.requestDragExport(fDragOut.pad(), fDragOutPath)) fDragOut.release();
+        const bool sent = !fDragOutPath.empty() && actions.requestDragExport(fDragOut.pad(), fDragOutPath);
+        fHost.dragLog(std::string("export request ") + (sent ? "sent: " : "REFUSED: ") + fDragOutPath);
+        if (!sent) fDragOut.release();
         else {
             // The press is now an export, not a volume/pan/swap edit.
             fQuickEdit.cancel();
@@ -880,7 +896,8 @@ void SamplerInputController::servicePadDragOut()
         break;
     }
     case midichopper::plugin::PadDragOutGesture::Action::startDrag:
-        fHost.startFileDrag(fDragOutPath);
+        fHost.dragLog("calling DoDragDrop for " + fDragOutPath);
+        fHost.dragLog(fHost.startFileDrag(fDragOutPath) ? "drag dropped" : "drag cancelled or refused");
         fDragOut.dragFinished();
         fSession.releasePlaybackPad();
         fHost.repaintSamplerInput();

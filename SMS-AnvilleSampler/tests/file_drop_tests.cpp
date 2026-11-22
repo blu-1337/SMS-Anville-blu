@@ -3,6 +3,7 @@
 
 #if defined(_WIN32)
 # include "FileDropWin32.hpp"
+# include "FileDragWin32.hpp"
 # include <shlobj.h>
 
 # include <chrono>
@@ -334,6 +335,56 @@ void windowRegistration()
 
 } // namespace
 
+#if defined(_WIN32)
+void dragDataObject()
+{
+    const std::wstring path = L"C:\\Temp\\SMS-Anville\\drag\\\u97F3 Kick_pad05.wav";
+    IDataObject* data = win32::createFileDataObject(path);
+    check(data != nullptr, "the drag data object is created");
+    FORMATETC hdrop{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    check(data->QueryGetData(&hdrop) == S_OK, "CF_HDROP is offered");
+    FORMATETC text{CF_UNICODETEXT, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    check(data->QueryGetData(&text) != S_OK, "other formats are refused");
+    STGMEDIUM medium{};
+    check(data->GetData(&hdrop, &medium) == S_OK && medium.tymed == TYMED_HGLOBAL, "CF_HDROP comes as an HGLOBAL");
+    HDROP drop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
+    check(drop != nullptr && DragQueryFileW(drop, 0xFFFFFFFFU, nullptr, 0U) == 1U, "exactly one file");
+    std::wstring back(DragQueryFileW(drop, 0U, nullptr, 0U) + 1U, L'\0');
+    const UINT length = DragQueryFileW(drop, 0U, back.data(), static_cast<UINT>(back.size()));
+    back.resize(length);
+    check(back == path, "DragQueryFileW returns the exact path");
+    const auto* header = reinterpret_cast<const DROPFILES*>(drop);
+    const auto* tail = reinterpret_cast<const wchar_t*>(reinterpret_cast<const char*>(drop) + header->pFiles) + path.size();
+    check(header->fWide != FALSE && tail[0] == L'\0' && tail[1] == L'\0', "wide list with the double terminator");
+    GlobalUnlock(medium.hGlobal);
+    ReleaseStgMedium(&medium);
+
+    IEnumFORMATETC* formats = nullptr;
+    check(data->EnumFormatEtc(DATADIR_GET, &formats) == S_OK && formats != nullptr, "formats can be enumerated");
+    FORMATETC listed{};
+    ULONG fetched = 0U;
+    bool sawHdrop = false;
+    while (formats->Next(1U, &listed, &fetched) == S_OK && fetched == 1U) sawHdrop = sawHdrop || listed.cfFormat == CF_HDROP;
+    check(sawHdrop, "CF_HDROP is among the enumerated formats");
+    formats->Release();
+    FORMATETC effectFormat{static_cast<CLIPFORMAT>(RegisterClipboardFormatA(CFSTR_PREFERREDDROPEFFECT)), nullptr,
+                           DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    check(data->GetData(&effectFormat, &medium) == S_OK, "the preferred drop effect is offered");
+    const auto* effect = static_cast<const DWORD*>(GlobalLock(medium.hGlobal));
+    check(effect != nullptr && *effect == DROPEFFECT_COPY, "and it is COPY");
+    GlobalUnlock(medium.hGlobal);
+    ReleaseStgMedium(&medium);
+    // The OLE clipboard accepts the object: this is the same path a drop target's IDataObject proxy uses.
+    check(OleSetClipboard(data) == S_OK, "OLE accepts the data object");
+    IDataObject* fetchedBack = nullptr;
+    check(OleGetClipboard(&fetchedBack) == S_OK && fetchedBack != nullptr && fetchedBack->QueryGetData(&hdrop) == S_OK,
+          "OleGetClipboard sees CF_HDROP");
+    if (fetchedBack != nullptr) fetchedBack->Release();
+    OleSetClipboard(nullptr);
+    data->Release();
+}
+#endif
+
 int main()
 {
     effectChooser();
@@ -343,6 +394,7 @@ int main()
     check(SUCCEEDED(OleInitialize(nullptr)), "the test thread joins a single-threaded apartment");
     textConversion();
     oleDropTarget();
+    dragDataObject();
     windowRegistration();
     OleUninitialize();
 #endif

@@ -14,6 +14,8 @@ public:
     [[nodiscard]] static bool primaryButtonDown() noexcept;
     /** Blocks in the OS drag loop until the drop or cancel. True when a target accepted the copy. */
     static bool start(std::string_view utf8Path) noexcept;
+    /** TEMPORARY diagnostics: appends a timestamped line to %TEMP%\SMS-Anville\drag\drag.log. */
+    static void log(std::string_view message) noexcept;
     /** True while start() runs; drop targets in this process ignore such a drag. */
     [[nodiscard]] static bool active() noexcept;
 };

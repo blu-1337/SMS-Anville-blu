@@ -2151,8 +2151,7 @@ void padDragCleanupAndGesture()
     check(g.poll(true, true) == Gesture::Action::request && g.state() == Gesture::State::requested, "leaving requests the export");
     check(g.poll(true, true) == Gesture::Action::none, "the request is sent once");
     g.exported(true);
-    check(g.poll(false, true) == Gesture::Action::none && g.state() == Gesture::State::ready, "no drag while back inside");
-    check(g.poll(true, true) == Gesture::Action::startDrag && g.state() == Gesture::State::dragging, "ready and outside starts the drag");
+    check(g.poll(false, true) == Gesture::Action::startDrag && g.state() == Gesture::State::dragging, "a ready export starts the drag while the button is held, wherever the pointer is");
     g.dragFinished();
     check(!g.active(), "the gesture ends with the drag");
     g.arm(3);

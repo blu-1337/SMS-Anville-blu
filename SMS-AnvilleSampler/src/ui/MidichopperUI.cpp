@@ -386,6 +386,7 @@ private:
     bool pointerOutsideWindow() override
     { return sms::ui::FileDragSource::pointerOutsideWindow(getWindow().getNativeWindowHandle()); }
     bool primaryButtonDown() override { return sms::ui::FileDragSource::primaryButtonDown(); }
+    void dragLog(const std::string& message) override { sms::ui::FileDragSource::log(message); }
     bool startFileDrag(const std::string& utf8Path) override { return sms::ui::FileDragSource::start(utf8Path); }
     void invalidateUiInteraction(const UiInteractionInvalidation reason) override { fInput.invalidate(reason); }
     void editMixerParameter(const std::uint32_t parameter, const bool begin) override { editParameter(parameter, begin); }

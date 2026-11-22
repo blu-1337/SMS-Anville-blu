@@ -170,7 +170,7 @@ IDataObject* win32::createFileDataObject(const std::wstring& path) noexcept
     return new (std::nothrow) FileDataObject(path);
 }
 
-void FileDragSource::log(const std::string_view message) noexcept
+void FileDragSource::log(const std::string_view file, const std::string_view message) noexcept
 {
     try {
         std::error_code error;
@@ -178,7 +178,7 @@ void FileDragSource::log(const std::string_view message) noexcept
         if (error) return;
         const auto directory = base / "SMS-Anville" / "drag";
         std::filesystem::create_directories(directory, error);
-        std::ofstream out(directory / "drag.log", std::ios::app);
+        std::ofstream out(directory / std::string(file), std::ios::app);
         const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         char stamp[32]{};
         std::tm local{};
@@ -201,23 +201,6 @@ bool FileDragSource::pointerOutsideWindow(const std::uintptr_t nativeWindow) noe
            cursor.y >= client.bottom;
 }
 
-std::string FileDragSource::pointerDebug(const std::uintptr_t nativeWindow)
-{
-    const auto window = reinterpret_cast<HWND>(nativeWindow);
-    POINT cursor{};
-    POINT screen{};
-    RECT client{};
-    RECT outer{};
-    if (window == nullptr || !GetCursorPos(&screen)) return "no window/cursor";
-    cursor = screen;
-    GetClientRect(window, &client);
-    GetWindowRect(window, &outer);
-    ScreenToClient(window, &cursor);
-    return "screen(" + std::to_string(screen.x) + "," + std::to_string(screen.y) + ") client(" + std::to_string(cursor.x) +
-           "," + std::to_string(cursor.y) + ") rect(" + std::to_string(client.right) + "x" + std::to_string(client.bottom) +
-           ") dpi=" + std::to_string(GetDpiForWindow(window));
-}
-
 bool FileDragSource::primaryButtonDown() noexcept
 {
     return (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000) != 0;
@@ -231,7 +214,6 @@ bool FileDragSource::start(const std::string_view utf8Path) noexcept
         std::wstring path;
         if (gActive.load() || !wideFromUtf8(utf8Path, path)) return false;
         const HRESULT initialized = OleInitialize(nullptr);
-        log("start: OleInitialize hr=0x" + hex(static_cast<unsigned long>(initialized)));
         if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE) return false;
         auto* const data = new (std::nothrow) FileDataObject(std::move(path));
         auto* const source = new (std::nothrow) DragSource();
@@ -242,7 +224,6 @@ bool FileDragSource::start(const std::string_view utf8Path) noexcept
             DWORD effect = DROPEFFECT_NONE;
             const HRESULT result = DoDragDrop(data, source, DROPEFFECT_COPY, &effect);
             gActive.store(false);
-            log("start: DoDragDrop hr=0x" + hex(static_cast<unsigned long>(result)) + " effect=" + std::to_string(effect));
             dropped = result == DRAGDROP_S_DROP && (effect & DROPEFFECT_COPY) != 0U;
         }
         if (data != nullptr) data->Release();

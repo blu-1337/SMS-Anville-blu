@@ -13,7 +13,7 @@ namespace midichopper::ui {
 
 enum class InputButton { left, middle, right, other };
 enum class InputKey { other, space, escape, commit, tab, backspace, deleteText,
-                      digit1, digit2, digit3, digit4, digit5, digit6, digit7, digit8, digit9 };
+                      digit1, digit2, digit3, digit4, digit5, digit6, digit7, digit8, digit9, undo, redo };
 
 class SamplerInputHost {
 public:
@@ -26,8 +26,6 @@ public:
     /** Pad drag-out of the window (Windows only; the defaults make it a no-op). */
     [[nodiscard]] virtual bool pointerOutsideWindow() { return false; }
     [[nodiscard]] virtual bool primaryButtonDown() { return false; }
-    [[nodiscard]] virtual std::string pointerDebug() { return {}; }
-    virtual void dragLog(const std::string& message) { static_cast<void>(message); }
     virtual bool startFileDrag(const std::string& utf8Path) { static_cast<void>(utf8Path); return false; }
 };
 
@@ -112,7 +110,6 @@ private:
     void armPadDragOut(int pad);
     void servicePadDragOut();
     midichopper::plugin::PadDragOutGesture fDragOut;
-    bool fDragLogOutside = false;
     int fDragOutsidePolls = 0;
     std::uintmax_t fDragFileSize = 0U;
     Clock::time_point fDragRequestedAt{};

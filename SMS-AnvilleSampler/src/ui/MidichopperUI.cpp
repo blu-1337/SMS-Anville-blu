@@ -320,6 +320,22 @@ protected:
     }
     bool onKeyboard(const KeyboardEvent& ev) override
     {
+        // Ctrl+Z undo, Ctrl+Shift+Z and Ctrl+Y redo. Ctrl can arrive as a control character (Z = 26, Y = 25).
+        const bool ctrl = (ev.mod & DGL_NAMESPACE::kModifierControl) != 0U;
+        const bool shiftHeld = (ev.mod & DGL_NAMESPACE::kModifierShift) != 0U;
+        const bool isZ = ev.key == 'z' || ev.key == 'Z' || ev.key == 26U;
+        const bool isY = ev.key == 'y' || ev.key == 'Y' || ev.key == 25U;
+        const auto history = ctrl && isZ ? (shiftHeld ? InputKey::redo : InputKey::undo)
+                           : ctrl && isY ? InputKey::redo : InputKey::other;
+        if (history != InputKey::other) {
+            const bool handled = fInput.keyboard(history, ev.press, false);
+            sms::ui::FileDragSource::log("key.log", std::string("TEMP key ") + (ev.press ? "down" : "up") + " key=" + std::to_string(ev.key) +
+                " keycode=" + std::to_string(ev.keycode) + " mod=" + std::to_string(ev.mod) + " -> " +
+                (history == InputKey::undo ? "undo" : "redo") + (handled ? " handled" : " ignored (text entry)"));
+            return handled;
+        }
+        sms::ui::FileDragSource::log("key.log", std::string("TEMP key ") + (ev.press ? "down" : "up") + " key=" + std::to_string(ev.key) +
+            " keycode=" + std::to_string(ev.keycode) + " mod=" + std::to_string(ev.mod));
         const auto key = ev.key == ' ' ? InputKey::space
             : ev.key == DGL_NAMESPACE::kKeyEscape ? InputKey::escape
             : isMixerValueCommitKey(ev.key) ? InputKey::commit
@@ -333,7 +349,11 @@ protected:
         return fInput.keyboard(key, ev.press, (ev.mod & DGL_NAMESPACE::kModifierShift) != 0U);
     }
     bool onCharacterInput(const CharacterInputEvent& ev) override { return fInput.character(ev.character); }
-    void uiFocus(const bool focus, DGL_NAMESPACE::CrossingMode) override { fInput.focus(focus); }
+    void uiFocus(const bool focus, DGL_NAMESPACE::CrossingMode) override
+    {
+        sms::ui::FileDragSource::log("key.log", std::string("TEMP focus ") + (focus ? "gained" : "lost"));
+        fInput.focus(focus);
+    }
 #if DISTRHO_UI_FILE_BROWSER
     void uiFileBrowserSelected(const char* filename) override { fSession.fileBrowserSelected(filename); }
 #endif
@@ -386,9 +406,6 @@ private:
     bool pointerOutsideWindow() override
     { return sms::ui::FileDragSource::pointerOutsideWindow(getWindow().getNativeWindowHandle()); }
     bool primaryButtonDown() override { return sms::ui::FileDragSource::primaryButtonDown(); }
-    std::string pointerDebug() override
-    { return sms::ui::FileDragSource::pointerDebug(getWindow().getNativeWindowHandle()); }
-    void dragLog(const std::string& message) override { sms::ui::FileDragSource::log(message); }
     bool startFileDrag(const std::string& utf8Path) override { return sms::ui::FileDragSource::start(utf8Path); }
     void invalidateUiInteraction(const UiInteractionInvalidation reason) override { fInput.invalidate(reason); }
     void editMixerParameter(const std::uint32_t parameter, const bool begin) override { editParameter(parameter, begin); }

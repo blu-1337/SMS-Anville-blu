@@ -604,7 +604,18 @@ void undoRedoButtonsAndKeys()
     f.click(center(L::historyUndo));
     check(!f.states.empty() && f.states.back().first == "undo_request" && f.states.back().second == "undo",
           "UNDO button sends the undo request");
-    check(!f.input.keyboard(InputKey::other, true), "Ctrl+Z is no longer consumed by the plugin");
+    check(!f.input.keyboard(InputKey::other, true), "other keys are not consumed");
+    f.states.clear();
+    check(f.input.keyboard(InputKey::undo, true) && f.states.back().second == "undo", "Ctrl+Z sends undo and is handled");
+    f.states.clear();
+    check(f.input.keyboard(InputKey::undo, false) && f.states.empty(), "its key-up is handled but sends nothing");
+    check(f.input.keyboard(InputKey::redo, true) && f.states.back().second == "redo", "Ctrl+Shift+Z / Ctrl+Y send redo");
+    // While a value is being typed the shortcut belongs to the text field.
+    f.session.acceptState("undo_status", "UD1;5;2;1;0102000000000000000000000000000000000000000000000000000000000000");
+    f.states.clear();
+    { const auto t = std::chrono::steady_clock::now(); f.session.mainSample().clickCountField(t); f.session.mainSample().clickCountField(t + std::chrono::milliseconds(100)); }
+    check(f.session.mainSample().countEditing(), "the count field is being typed");
+    check(f.input.keyboard(InputKey::undo, true) && f.states.empty(), "undo does not fire while typing a count");
     f.click(center(L::historyRedo));
     check(f.states.back().second == "redo", "REDO button sends the redo request");
     f.session.acceptState("undo_status", "UD1;2;0;0;0000000000000000000000000000000000000000000000000000000000000000");

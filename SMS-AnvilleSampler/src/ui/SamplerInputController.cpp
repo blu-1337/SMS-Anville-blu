@@ -741,6 +741,15 @@ bool SamplerInputController::keyboard(const InputKey key, const bool press, cons
         fHost.repaintSamplerInput();
         return true; // typing owns the keyboard; digits arrive through character()
     }
+    if (key == InputKey::undo || key == InputKey::redo) {
+        // Typing into a value field keeps its own text editing; nothing else steals the shortcut.
+        if (fMixer.entry().target().valid()) return false;
+        if (press) {
+            fSession.requestHistory(key == InputKey::undo);
+            fHost.repaintSamplerInput();
+        }
+        return true; // handled: the host must not also undo
+    }
     if (key == InputKey::space) {
         fHost.ignoreSamplerKeyRepeat(press);
         const bool blocked = fMixer.entry().target().valid() || fMenu.open() ||
@@ -850,7 +859,6 @@ void SamplerInputController::idle(const Clock::time_point now)
 void SamplerInputController::armPadDragOut(const int pad)
 {
     fDragOut.arm(pad);
-    fHost.dragLog("armed pad " + std::to_string(pad));
 }
 
 // The pointer leaving the window while a pad is held starts an export, then the OS drag.
@@ -867,33 +875,21 @@ void SamplerInputController::servicePadDragOut()
 {
     if (!fDragOut.active()) return;
     auto& actions = fSession.padActions();
-    if (const auto done = actions.takeDragExportResult()) {
-        fHost.dragLog(std::string("export result ") + (*done ? "ok" : "failed"));
-        fDragOut.exported(*done);
-    }
+    if (const auto done = actions.takeDragExportResult()) fDragOut.exported(*done);
     // Outside only after two consecutive polls, so a one-poll flicker at the edge never starts an export.
     fDragOutsidePolls = fHost.pointerOutsideWindow() ? fDragOutsidePolls + 1 : 0;
     const bool outside = fDragOutsidePolls >= 2;
     const bool down = fHost.primaryButtonDown();
-    if (outside != fDragLogOutside) {
-        fDragLogOutside = outside;
-        fHost.dragLog(std::string("pointer ") + (outside ? "left" : "entered") + " the window, button " + (down ? "down" : "up") + " [" + fHost.pointerDebug() + "]");
-    }
     // The worker's reply is not relied on: the export is ready once the WAV is complete and stable on disk.
     if (fDragOut.state() == midichopper::plugin::PadDragOutGesture::State::requested) {
         const auto now = Clock::now();
         if (midichopper::plugin::dragExportFileReady(dragPathFromUtf8(fDragOutPath), fDragFileSize)) {
-            fHost.dragLog("export file ready (" + std::to_string(fDragFileSize) + " bytes)");
             fDragOut.exported(true);
         } else if (now - fDragRequestedAt > std::chrono::seconds(10)) {
-            fHost.dragLog("export file never completed; giving up");
             fDragOut.exported(false);
         }
     }
-    const auto before = fDragOut.state();
     const auto action = fDragOut.poll(outside, down);
-    if (action == midichopper::plugin::PadDragOutGesture::Action::none && !fDragOut.active() && before != fDragOut.state())
-        fHost.dragLog("disarmed: button released");
     switch (action) {
     case midichopper::plugin::PadDragOutGesture::Action::request: {
         const auto& main = fSession.mainSample();
@@ -907,7 +903,6 @@ void SamplerInputController::servicePadDragOut()
         }
         { std::error_code ignored; std::filesystem::remove(dragPathFromUtf8(fDragOutPath), ignored); } // never mistake an old export for the new one
         const bool sent = !fDragOutPath.empty() && actions.requestDragExport(fDragOut.pad(), fDragOutPath);
-        fHost.dragLog(std::string("export request ") + (sent ? "sent: " : "REFUSED: ") + fDragOutPath);
         if (!sent) fDragOut.release();
         else {
             fDragFileSize = 0U;
@@ -919,8 +914,7 @@ void SamplerInputController::servicePadDragOut()
         break;
     }
     case midichopper::plugin::PadDragOutGesture::Action::startDrag:
-        fHost.dragLog("calling DoDragDrop for " + fDragOutPath);
-        fHost.dragLog(fHost.startFileDrag(fDragOutPath) ? "drag dropped" : "drag cancelled or refused");
+        fHost.startFileDrag(fDragOutPath);
         fDragOut.dragFinished();
         fSession.releasePlaybackPad();
         fHost.repaintSamplerInput();

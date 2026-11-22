@@ -46,7 +46,7 @@ Pick any branch or patch series; later branches depend on earlier ones.
   - A MIDI note can assign a selection to a pad.
   - The display follows the bank being played.
   - The playhead follows MIDI playback.
-- **Defaults**: Max Voices 16 for new instances.
+- **Defaults**: Max Voices 1 for new instances (saved projects keep their value).
 
 ## Engineering rules followed
 - The audio thread never allocates, locks or does I/O. All heavy work runs on the control worker.

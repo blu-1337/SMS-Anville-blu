@@ -504,6 +504,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 const auto grid = fSession.padLayout().grid(uiLayout::mainPadBounds, 10.0f);
                 fQuickEdit.begin(fSession.globalPad(clicked.index),
                                  grid.cell(fSession.padLayout().visualIndex(clicked.index)), position, true);
+                armPadDragOut(fSession.globalPad(clicked.index));
             }
             fHost.repaintSamplerInput();
             return true;
@@ -843,6 +844,49 @@ void SamplerInputController::idle(const Clock::time_point now)
     }
     fMenu.idle(now);
     fMixer.idle(now);
+    servicePadDragOut();
+}
+
+void SamplerInputController::armPadDragOut(const int pad)
+{
+    fDragOut.arm(pad);
+}
+
+// The pointer leaving the window while a pad is held starts an export, then the OS drag.
+// Polled from idle with the real cursor position, so it works whether or not the host keeps
+// delivering mouse events outside the window.
+void SamplerInputController::servicePadDragOut()
+{
+    if (!fDragOut.active()) return;
+    auto& actions = fSession.padActions();
+    if (const auto done = actions.takeDragExportResult()) fDragOut.exported(*done);
+    switch (fDragOut.poll(fHost.pointerOutsideWindow(), fHost.primaryButtonDown())) {
+    case midichopper::plugin::PadDragOutGesture::Action::request: {
+        const auto& main = fSession.mainSample();
+        const auto directory = midichopper::plugin::dragExportDirectory();
+        const auto name = midichopper::plugin::dragFileName(
+            main.hasSource() ? main.status().text : std::string{}, static_cast<std::uint32_t>(fDragOut.pad()));
+        fDragOutPath.clear();
+        if (!directory.empty()) {
+            const auto text = (directory / name).generic_u8string();
+            fDragOutPath.assign(reinterpret_cast<const char*>(text.data()), text.size());
+        }
+        if (fDragOutPath.empty() || !actions.requestDragExport(fDragOut.pad(), fDragOutPath)) fDragOut.release();
+        else {
+            // The press is now an export, not a volume/pan/swap edit.
+            fQuickEdit.cancel();
+            fSwapTarget = -1;
+        }
+        break;
+    }
+    case midichopper::plugin::PadDragOutGesture::Action::startDrag:
+        fHost.startFileDrag(fDragOutPath);
+        fDragOut.dragFinished();
+        fSession.releasePlaybackPad();
+        fHost.repaintSamplerInput();
+        break;
+    case midichopper::plugin::PadDragOutGesture::Action::none: break;
+    }
 }
 
 void SamplerInputController::invalidate(const UiInteractionInvalidation reason)
@@ -892,6 +936,7 @@ bool SamplerInputController::pressMainSamplePad(const int localPad, const sms::u
     // A press that turns into a drag edits volume (vertical) or pan (horizontal), as in the main view.
     const auto grid = fSession.padLayout().grid(uiLayout::mainSamplePads, 8.0f);
     fQuickEdit.begin(pad, grid.cell(fSession.padLayout().visualIndex(localPad)), position, true);
+    armPadDragOut(pad);
     fHost.repaintSamplerInput();
     return true;
 }

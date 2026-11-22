@@ -72,4 +72,22 @@ std::string writePadWav(const std::filesystem::path& path,
     return output ? std::string{} : "Could not finish writing WAV file";
 }
 
+std::string writePadWavFloat32(const std::filesystem::path& path,
+                               const sms::audio::WavAudio& audio)
+{
+    std::vector<std::uint8_t> bytes;
+    if (!sms::audio::encodeStereoFloat32Wav(audio, bytes))
+        return "Could not encode WAV file";
+    std::error_code ignored;
+    std::filesystem::create_directories(path.parent_path(), ignored);
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output)
+        return "Could not create WAV file";
+    if (!output.write(reinterpret_cast<const char*>(bytes.data()),
+                      static_cast<std::streamsize>(bytes.size())))
+        return "Could not write WAV file";
+    output.close();
+    return output ? std::string{} : "Could not finish writing WAV file";
+}
+
 } // namespace midichopper::plugin

@@ -16,6 +16,8 @@
 #include "FileDropController.hpp"
 #include "SpectrogramPixels.hpp"
 #include "FileDropTarget.hpp"
+#include "FileDragSource.hpp"
+#include "../plugin/PadDragExport.hpp"
 #include "MidichopperView.hpp"
 #include "BrowserLauncher.hpp"
 #include "KnobPreference.hpp"
@@ -381,6 +383,10 @@ private:
         static_cast<void>(saving); static_cast<void>(defaultName); return false;
 #endif
     }
+    bool pointerOutsideWindow() override
+    { return sms::ui::FileDragSource::pointerOutsideWindow(getWindow().getNativeWindowHandle()); }
+    bool primaryButtonDown() override { return sms::ui::FileDragSource::primaryButtonDown(); }
+    bool startFileDrag(const std::string& utf8Path) override { return sms::ui::FileDragSource::start(utf8Path); }
     void invalidateUiInteraction(const UiInteractionInvalidation reason) override { fInput.invalidate(reason); }
     void editMixerParameter(const std::uint32_t parameter, const bool begin) override { editParameter(parameter, begin); }
     void setMixerParameter(const std::uint32_t parameter, const float value) override { fSession.setControlValue(parameter, value); }
@@ -431,6 +437,9 @@ private:
         const auto window = fDropAttached ? 0U : getWindow().getNativeWindowHandle();
         if (window == 0U) return; // Retried from onUiIdle until the window exists.
         fDropAttached = true;
+        // Old drag-out exports are removed here, once per editor, never while a drag runs.
+        midichopper::plugin::cleanDragDirectory(midichopper::plugin::dragExportDirectory(),
+                                                std::filesystem::file_time_type::clock::now());
         fDropTarget = sms::ui::FileDropTarget::attach(window, *this);
     }
     DropTarget dropTarget(const sms::ui::FileDropPoint point) const

@@ -9,7 +9,10 @@
 #include "UndoController.hpp"
 #include "SamplerUiSession.hpp"
 
+#include "PadDragExport.hpp"
 #include <cstdio>
+#include <chrono>
+#include <fstream>
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -2077,6 +2080,94 @@ void favoriteGuards()
     std::filesystem::remove(path);
 }
 
+void padDragExportWorkflow()
+{
+    using namespace midichopper::plugin;
+    // Naming: stem from the source, 1-based zero-padded pad, no reserved characters.
+    check(dragFileName("Break.wav", 4U) == "Break_pad05.wav", "drag name from sample and pad");
+    check(dragFileName("a/b\\c:d*.flac", 11U) == "c_d__pad12.wav" || dragFileName("a/b\\c:d*.flac", 11U) == "c_d_pad12.wav",
+          "path parts and reserved characters are removed");
+    check(dragFileName("", 0U) == "Pad_pad01.wav" && dragFileName("  ..", 63U) == "Pad_pad64.wav", "empty names fall back");
+
+    MainSampleFixture fixture(12.0);
+    const auto path = writeSourceWav("sms-drag-export.wav", 4800U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    check(fixture.send(assignRequest(4U, 1000U, 2000U)).state == MainSampleState::ready, "assign a slice");
+    auto settings = fixture.engine.padPlaybackSettings(4U);
+    settings.start = 0.25f;
+    settings.end = 0.75f;
+    fixture.engine.setPadPlaybackSettings(4U, settings);
+
+    const auto target = std::filesystem::temp_directory_path() / "sms-drag-test" / "Break_pad05.wav";
+    std::filesystem::remove_all(target.parent_path());
+    fixture.pads.handlePadFileRequest(encodePadFileRequest(PadFileAction::exportDrag, 4U, utf8(target)));
+    check(std::filesystem::exists(target), "the drag export writes the file (and its folder)");
+    auto loaded = readPadWav(target);
+    check(static_cast<bool>(loaded) && loaded.audio.sampleRate == 48000U && loaded.audio.frames == 500U,
+          "the export is the trimmed Start/End region at the stored rate");
+    bool exact = true;
+    for (std::uint32_t frame = 0; frame < loaded.audio.frames; ++frame)
+        exact = exact && loaded.audio.stereo[2U * frame] == sourceSample(1250U + frame) &&
+                loaded.audio.stereo[2U * frame + 1U] == -sourceSample(1250U + frame);
+    check(exact, "float32 export is bit-exact");
+    std::vector<char> head(24U);
+    std::ifstream stream(target, std::ios::binary);
+    stream.read(head.data(), 24);
+    check(head[20] == 3 && head[22] == 2, "format tag is IEEE float, stereo");
+    stream.close();
+
+    fixture.pads.handlePadFileRequest(encodePadFileRequest(PadFileAction::exportDrag, 9U, utf8(target)));
+    check(fixture.observer.latest(kPadFileStatusKey) == "Pad is empty", "an empty pad exports nothing");
+    check(!dragExportTooLarge(1000000U) && dragExportTooLarge(40000000U), "the size cap applies");
+    std::filesystem::remove_all(target.parent_path());
+    std::filesystem::remove(path);
+}
+
+void padDragCleanupAndGesture()
+{
+    using namespace midichopper::plugin;
+    namespace fs = std::filesystem;
+    const auto now = fs::file_time_type::clock::now();
+    check(isStaleDragFile(now - std::chrono::hours(25), now) && !isStaleDragFile(now - std::chrono::hours(23), now) &&
+          !isStaleDragFile(now + std::chrono::hours(1), now), "only files older than 24 h are stale");
+    const auto dir = fs::temp_directory_path() / "sms-drag-clean";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    for (const char* name : {"old.wav", "new.wav", "keep.txt"}) std::ofstream(dir / name) << "x";
+    fs::last_write_time(dir / "old.wav", now - std::chrono::hours(30));
+    fs::last_write_time(dir / "keep.txt", now - std::chrono::hours(30));
+    check(cleanDragDirectory(dir, now) == 1U && !fs::exists(dir / "old.wav") && fs::exists(dir / "new.wav") &&
+          fs::exists(dir / "keep.txt"), "cleanup removes only stale WAVs");
+    fs::remove_all(dir);
+    check(cleanDragDirectory(dir, now) == 0U, "a missing folder is fine");
+
+    using Gesture = PadDragOutGesture;
+    Gesture g;
+    check(g.poll(true, true) == Gesture::Action::none && !g.active(), "idle does nothing");
+    g.arm(7);
+    check(g.poll(false, true) == Gesture::Action::none && g.state() == Gesture::State::armed, "inside the window nothing starts");
+    check(g.poll(true, true) == Gesture::Action::request && g.state() == Gesture::State::requested, "leaving requests the export");
+    check(g.poll(true, true) == Gesture::Action::none, "the request is sent once");
+    g.exported(true);
+    check(g.poll(false, true) == Gesture::Action::none && g.state() == Gesture::State::ready, "no drag while back inside");
+    check(g.poll(true, true) == Gesture::Action::startDrag && g.state() == Gesture::State::dragging, "ready and outside starts the drag");
+    g.dragFinished();
+    check(!g.active(), "the gesture ends with the drag");
+    g.arm(3);
+    check(g.poll(true, true) == Gesture::Action::request, "request");
+    g.exported(false);
+    check(g.state() == Gesture::State::failed && g.poll(true, true) == Gesture::Action::none, "a failed export never drags");
+    g.arm(3);
+    check(g.poll(false, false) == Gesture::Action::none && !g.active(), "releasing the button disarms");
+    g.arm(3);
+    check(g.poll(true, true) == Gesture::Action::request, "request again");
+    check(g.poll(true, false) == Gesture::Action::none && !g.active(), "release while exporting cancels");
+    g.arm(-1);
+    check(!g.active(), "no pad, no gesture");
+}
+
 int main()
 {
     clipboardSnapshotAndReplies();
@@ -2093,6 +2184,8 @@ int main()
     mainSampleLoadQueryWaveformAndClear();
     mainSampleAssignEditAndDelete();
     sourceRangeWorkflow();
+    padDragExportWorkflow();
+    padDragCleanupAndGesture();
     cutAndCropWorkflow();
     trimWorkflow();
     chokeAllWorkflow();

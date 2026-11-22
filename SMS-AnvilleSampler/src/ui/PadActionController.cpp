@@ -458,11 +458,14 @@ bool PadActionController::acceptParameter(const PadActionContext& context,
         const auto result = fFileResultEvents.consume(value);
         if (result == midichopper::plugin::PadFileResultCode::none)
             return true;
+        const bool wasDrag = fActiveFileAction == PadFileDialog::exportDrag;
         const bool wasImport = fActiveFileAction == PadFileDialog::import;
         const int completedPad = fActiveFilePad;
         if (wasImport)
             fLastImportSucceeded = result == midichopper::plugin::PadFileResultCode::importSucceeded;
-        if (fActiveFileAction != PadFileDialog::none)
+        if (wasDrag)
+            fDragExportResult = result != midichopper::plugin::PadFileResultCode::failed;
+        if (fActiveFileAction != PadFileDialog::none && !(wasDrag && *fDragExportResult))
         {
             if (result == midichopper::plugin::PadFileResultCode::failed)
                 fHost.setPadActionStatus("WAV action failed");
@@ -643,17 +646,28 @@ bool PadActionController::importFile(const std::uint32_t globalPad, const std::s
     return true;
 }
 
+bool PadActionController::requestDragExport(const int pad, const std::string& path)
+{
+    if (busy() || dialogPending() || pad < 0 || pad >= static_cast<int>(midichopper::kPadCount) || path.empty())
+        return false;
+    fDragExportResult.reset();
+    submitFileRequest(PadFileDialog::exportDrag, pad, path);
+    return true;
+}
+
 void PadActionController::submitFileRequest(const PadFileDialog action, const int pad,
                                             const std::string& path)
 {
     const bool exporting = action == PadFileDialog::exportRaw ||
-                           action == PadFileDialog::exportProcessed;
+                           action == PadFileDialog::exportProcessed || action == PadFileDialog::exportDrag;
     midichopper::plugin::PadFileAction fileAction =
         midichopper::plugin::PadFileAction::import;
     if (action == PadFileDialog::exportRaw)
         fileAction = midichopper::plugin::PadFileAction::exportRaw;
     else if (action == PadFileDialog::exportProcessed)
         fileAction = midichopper::plugin::PadFileAction::exportProcessed;
+    else if (action == PadFileDialog::exportDrag)
+        fileAction = midichopper::plugin::PadFileAction::exportDrag;
 
     fFileBusy = true;
     fActiveFileAction = action;

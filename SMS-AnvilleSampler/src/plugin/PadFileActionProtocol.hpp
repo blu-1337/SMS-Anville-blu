@@ -14,6 +14,7 @@ enum class PadFileAction : std::uint8_t {
     exportRaw,
     exportProcessed,
     import,
+    exportDrag, // trimmed float32 WAV for a drag out of the window; reports rawExportSucceeded
 };
 
 enum class PadFileResultCode : std::uint8_t {
@@ -69,7 +70,7 @@ struct PadFileRequest {
         padText.data(), padText.data() + padText.size(), pad);
     if (actionParse.ec != std::errc{} || actionParse.ptr != actionText.data() + actionText.size() ||
         padParse.ec != std::errc{} || padParse.ptr != padText.data() + padText.size() ||
-        action > static_cast<unsigned int>(PadFileAction::import) || pad >= kPadCount)
+        action > static_cast<unsigned int>(PadFileAction::exportDrag) || pad >= kPadCount)
         return false;
 
     request.action = static_cast<PadFileAction>(action);

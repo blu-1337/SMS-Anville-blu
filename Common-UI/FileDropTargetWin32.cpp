@@ -1,6 +1,7 @@
 // Win32 OLE drop target. COM calls arrive on the host UI thread (STA), the
 // same thread that delivers the editor's window events.
 #include "FileDropWin32.hpp"
+#include "FileDragSource.hpp"
 #include "FileDropEffect.hpp"
 
 #include <shellapi.h>
@@ -223,7 +224,7 @@ public:
             auto paths = readDroppedPaths(data);
             const FileDropPoint client = clientPoint(point);
             const DWORD chosen = chooseDropEffect(
-                allowed, !paths.empty() && listener_->fileDragOver(client, paths));
+                allowed, !FileDragSource::active() && !paths.empty() && listener_->fileDragOver(client, paths));
             if (chosen != DROPEFFECT_NONE && dropNeedsPrivateCopy(chosen)) {
                 // MOVE/LINK sources (FL Studio Edison) may delete their file
                 // once Drop returns, before the worker reads it.
@@ -262,7 +263,9 @@ private:
     {
         if (effect == nullptr)
             return E_INVALIDARG;
-        const bool accept = listener_ != nullptr && !paths_.empty() &&
+        // Our own pad drag (CF_HDROP of a temp WAV) must never re-import onto this window.
+        const bool own = FileDragSource::active();
+        const bool accept = !own && listener_ != nullptr && !paths_.empty() &&
                             listener_->fileDragOver(clientPoint(point), paths_);
         // The Edison fix: answer with an effect the source allows.
         *effect = chooseDropEffect(*effect, accept);

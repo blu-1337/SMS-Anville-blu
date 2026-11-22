@@ -9,6 +9,7 @@
 
 #include <array>
 #include <chrono>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -44,7 +45,7 @@ inline constexpr std::array kPadMenuEntries{
 };
 inline constexpr int kPadColorMenuRow = 1;
 
-enum class PadFileDialog : std::uint8_t { none, exportRaw, exportProcessed, import };
+enum class PadFileDialog : std::uint8_t { none, exportRaw, exportProcessed, import, exportDrag };
 
 /** Current adapter inputs. The controller owns workflow state, not this projection. */
 struct PadActionContext {
@@ -92,6 +93,11 @@ public:
     [[nodiscard]] int target() const noexcept { return fTarget; }
     [[nodiscard]] const auto& menu() const noexcept { return fMenu; }
     [[nodiscard]] const auto& colorMenu() const noexcept { return fColorMenu; }
+    /** Export a pad's trimmed float32 WAV to `path` for a drag out of the window. False when busy. */
+    bool requestDragExport(int pad, const std::string& path);
+    /** The result of the last drag export: true/false once, then empty. */
+    [[nodiscard]] std::optional<bool> takeDragExportResult() noexcept
+    { auto result = fDragExportResult; fDragExportResult.reset(); return result; }
     [[nodiscard]] bool dialogPending() const noexcept { return fPendingDialog != PadFileDialog::none; }
     [[nodiscard]] bool busy() const noexcept;
     [[nodiscard]] bool actionEnabled(const PadActionContext&, PadMenuAction) const noexcept;
@@ -166,6 +172,7 @@ private:
     int fActiveClipboardPad = -1;
     bool fSaveDialogAvailable = true;
     PadFileDialog fPendingDialog = PadFileDialog::none;
+    std::optional<bool> fDragExportResult;
     int fPendingFilePad = -1;
     PadFileDialog fActiveFileAction = PadFileDialog::none;
     int fActiveFilePad = -1;

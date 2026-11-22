@@ -45,6 +45,10 @@ struct WavDecodeResult {
 [[nodiscard]] bool encodeStereoPcm16Wav(
     const WavAudio& audio, std::vector<std::uint8_t>& destination) noexcept;
 
+/** IEEE-float 32-bit stereo WAV (format tag 3); lossless for the engine's float audio. */
+[[nodiscard]] bool encodeStereoFloat32Wav(
+    const WavAudio& audio, std::vector<std::uint8_t>& destination) noexcept;
+
 [[nodiscard]] WavAudio renderProcessedStereo(
     const WavAudio& source, const dsp::SamplePlaybackSettings& settings,
     const dsp::SampleMixerSettings& mixerSettings = {}) noexcept;

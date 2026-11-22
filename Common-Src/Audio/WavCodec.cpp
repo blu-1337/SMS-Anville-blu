@@ -272,6 +272,47 @@ bool encodeStereoPcm16Wav(const WavAudio& audio,
     return true;
 }
 
+bool encodeStereoFloat32Wav(const WavAudio& audio,
+                          std::vector<std::uint8_t>& destination) noexcept
+{
+    if (audio.sampleRate == 0U || audio.sampleRate > 384000U || audio.frames == 0U ||
+        audio.stereo.size() < static_cast<std::size_t>(audio.frames) * 2U)
+        return false;
+    const std::uint64_t dataBytes = static_cast<std::uint64_t>(audio.frames) * 8U;
+    if (dataBytes + 36U > std::numeric_limits<std::uint32_t>::max())
+        return false;
+    try {
+        destination.clear();
+        destination.reserve(static_cast<std::size_t>(dataBytes) + 44U);
+        destination.insert(destination.end(), {'R', 'I', 'F', 'F'});
+        appendU32(destination, static_cast<std::uint32_t>(dataBytes + 36U));
+        destination.insert(destination.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+        appendU32(destination, 16U);
+        appendU16(destination, 3U);
+        appendU16(destination, 2U);
+        appendU32(destination, audio.sampleRate);
+        appendU32(destination, audio.sampleRate * 8U);
+        appendU16(destination, 8U);
+        appendU16(destination, 32U);
+        destination.insert(destination.end(), {'d', 'a', 't', 'a'});
+        appendU32(destination, static_cast<std::uint32_t>(dataBytes));
+        for (std::size_t index = 0; index < static_cast<std::size_t>(audio.frames) * 2U; ++index) {
+            float value = audio.stereo[index];
+            if (!std::isfinite(value)) {
+                destination.clear();
+                return false;
+            }
+            std::uint32_t bits = 0U;
+            std::memcpy(&bits, &value, sizeof bits);
+            appendU32(destination, bits);
+        }
+    } catch (...) {
+        destination.clear();
+        return false;
+    }
+    return true;
+}
+
 WavAudio renderProcessedStereo(const WavAudio& source,
                                const dsp::SamplePlaybackSettings& requested,
                                const dsp::SampleMixerSettings& requestedMixer) noexcept

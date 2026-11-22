@@ -15,6 +15,8 @@ struct PadFileResult {
 };
 
 [[nodiscard]] PadFileResult readPadWav(const std::filesystem::path& path);
+[[nodiscard]] std::string writePadWavFloat32(
+    const std::filesystem::path& path, const sms::audio::WavAudio& audio);
 [[nodiscard]] std::string writePadWav(
     const std::filesystem::path& path, const sms::audio::WavAudio& audio);
 

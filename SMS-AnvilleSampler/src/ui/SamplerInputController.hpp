@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../plugin/PadDragExport.hpp"
+
 #include "PadQuickEdit.hpp"
 
 #include "ApplicationMenuController.hpp"
@@ -21,6 +23,10 @@ public:
     virtual void editSamplerParameter(std::uint32_t parameter, bool begin) = 0;
     virtual void repaintSamplerInput() = 0;
     virtual ApplicationMenuContext applicationMenuContext() const = 0;
+    /** Pad drag-out of the window (Windows only; the defaults make it a no-op). */
+    [[nodiscard]] virtual bool pointerOutsideWindow() { return false; }
+    [[nodiscard]] virtual bool primaryButtonDown() { return false; }
+    virtual bool startFileDrag(const std::string& utf8Path) { static_cast<void>(utf8Path); return false; }
 };
 
 /** Resolves event precedence and owns pointer/key captures, never sampler state. */
@@ -101,6 +107,10 @@ private:
     void toggleMainSamplePreview();
     void assignSelectionToFreePad();
     void toggleFavorite(int pad);
+    void armPadDragOut(int pad);
+    void servicePadDragOut();
+    midichopper::plugin::PadDragOutGesture fDragOut;
+    std::string fDragOutPath;
     MainSampleDrag fMainSampleDrag = MainSampleDrag::none;
     float fMainSampleOriginX = 0.0f;
     double fPanOriginStart = 0.0;

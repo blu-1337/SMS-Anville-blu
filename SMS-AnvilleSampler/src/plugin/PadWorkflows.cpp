@@ -3,6 +3,7 @@
 
 #include "ChopEditorProtocol.hpp"
 #include "PadFileActions.hpp"
+#include "PadDragExport.hpp"
 #include "PadStructureProtocol.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
@@ -536,6 +537,17 @@ void PadWorkflows::handlePadFileRequestImpl(const std::string_view encoded)
                 std::clamp(snapshot.sampleRate, 1.0, 384000.0));
             audio.frames = snapshot.frames;
             audio.stereo = std::move(snapshot.stereo);
+            if (request.action == PadFileAction::exportDrag) {
+                audio = midichopper::plugin::trimToPlaybackRegion(audio, settings);
+                if (audio.frames == 0U) status = "Pad is empty";
+                else if (midichopper::plugin::dragExportTooLarge(audio.frames)) status = "Pad is too large to drag";
+                else status = midichopper::plugin::writePadWavFloat32(pathFromUtf8(request.path), audio);
+                if (status.empty()) result = midichopper::plugin::PadFileResultCode::rawExportSucceeded;
+                publishFileStatus(status.empty() ? "Dragging WAV" : status);
+                observer_.publishUiState(kPadFileBusyKey, "0");
+                observer_.publishFileResult(result);
+                return;
+            }
             if (request.action == PadFileAction::exportProcessed)
                 audio = sms::audio::renderProcessedStereo(audio, settings, mixerSettings);
             status = midichopper::plugin::writePadWav(pathFromUtf8(request.path), audio);

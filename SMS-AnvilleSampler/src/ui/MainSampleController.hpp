@@ -82,6 +82,9 @@ public:
      * until takeArrangedMoves() so the session can carry pad colours along.
      */
     bool arrange();
+    /** REMOVE OVERLAP: false (nothing sent) when no slice overlaps the next one. */
+    bool removeOverlaps();
+    [[nodiscard]] bool hasOverlaps() const;
     /** Destructive source edits (one plug-in request each; false and nothing sent when not applicable). */
     bool cutSelection();   // CUT: removes the selected region
     bool cropSelection();  // CROP: keeps only the selected region

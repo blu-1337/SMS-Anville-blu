@@ -275,6 +275,7 @@ void MainSampleWorkflows::handleRequestImpl(const MainSampleRequest& request)
     case MainSampleVerb::arrange: arrange(request); return;
     case MainSampleVerb::range: setRange(request); return;
     case MainSampleVerb::cut: cutSource(request); return;
+    case MainSampleVerb::overlap: removeOverlaps(request); return;
     }
 }
 
@@ -425,6 +426,33 @@ void MainSampleWorkflows::edit(const MainSampleRequest& request)
     session_ = std::move(edited);
     publishPadSettings(affected, false);
     publishStatusLocked(request.sequence, MainSampleState::ready, {}, affected);
+}
+
+void MainSampleWorkflows::removeOverlaps(const MainSampleRequest& request)
+{
+    const std::lock_guard lock(mutationMutex_);
+    if (session_.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Load a main sample first");
+        return;
+    }
+    const auto plan = planOverlapTrim(session_.slices, [&](const std::uint16_t id) { return sliceHasFavoritePad(id); });
+    if (plan.trimmed.empty()) {
+        publishStatusLocked(request.sequence, MainSampleState::ready,
+            plan.left == 0U ? "No overlaps" : std::to_string(plan.left) + " overlaps left");
+        return;
+    }
+    auto edited = session_;
+    edited.slices = plan.slices;
+    std::uint64_t affected = 0U;
+    if (!recutLinkedPads(edited, {plan.trimmed.data(), plan.trimmed.size()}, snapshotPads(), affected)) {
+        publishStatusLocked(request.sequence, MainSampleState::error, "Pads changed, try again");
+        return;
+    }
+    session_ = std::move(edited);
+    publishPadSettings(affected, false);
+    std::string text = "Removed " + std::to_string(plan.trimmed.size()) + (plan.trimmed.size() == 1U ? " overlap" : " overlaps");
+    if (plan.left != 0U) text += ", " + std::to_string(plan.left) + " left";
+    publishStatusLocked(request.sequence, MainSampleState::ready, text, affected);
 }
 
 void MainSampleWorkflows::setRange(const MainSampleRequest& request)

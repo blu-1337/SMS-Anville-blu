@@ -18,8 +18,6 @@ class Win32UndoKeyHook;
 std::mutex gMutex;
 std::vector<Win32UndoKeyHook*> gHooks;
 
-void keyLog(const std::string& text) noexcept { FileDragSource::log("key.log", "TEMP hook " + text); }
-
 class Win32UndoKeyHook final : public UndoKeyHook {
 public:
     Win32UndoKeyHook(const HWND window, Callback callback) : window_(window), callback_(std::move(callback)) {}
@@ -29,8 +27,6 @@ public:
         const DWORD thread = GetCurrentThreadId();
         keyboardHook_ = SetWindowsHookExW(WH_KEYBOARD, &keyboardProc, nullptr, thread);
         messageHook_ = SetWindowsHookExW(WH_GETMESSAGE, &messageProc, nullptr, thread);
-        keyLog(std::string("installed keyboard=") + (keyboardHook_ ? "yes" : "no") + " getmessage=" +
-               (messageHook_ ? "yes" : "no"));
         if (keyboardHook_ == nullptr && messageHook_ == nullptr) return false;
         std::lock_guard lock(gMutex);
         gHooks.push_back(this);
@@ -61,7 +57,7 @@ public:
     }
 
     /** Returns true when the keystroke was ours and has been handled. */
-    bool handle(const std::uint32_t vk, const bool down, const char* path) noexcept
+    bool handle(const std::uint32_t vk, const bool down, const char*) noexcept
     {
         const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -77,7 +73,6 @@ public:
             handled = callback_ && callback_(key);
         } catch (...) {
         }
-        keyLog(std::string(path) + (key == HistoryKey::undo ? " undo" : " redo") + (handled ? " handled" : " ignored (text entry)"));
         if (handled) pendingUp_ = vk;
         return handled;
     }

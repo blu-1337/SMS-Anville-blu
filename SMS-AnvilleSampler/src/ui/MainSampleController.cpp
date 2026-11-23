@@ -364,6 +364,22 @@ bool MainSampleController::arrange()
     return true;
 }
 
+bool MainSampleController::hasOverlaps() const
+{
+    const auto plan = plugin::planOverlapTrim(fStatus.slices, {}, 1U);
+    return !plan.trimmed.empty() || plan.left != 0U;
+}
+
+bool MainSampleController::removeOverlaps()
+{
+    if (!hasSource() || !hasOverlaps())
+        return false;
+    MainSampleRequest request;
+    request.verb = MainSampleVerb::overlap;
+    send(request);
+    return true;
+}
+
 std::vector<plugin::ArrangeMove> MainSampleController::takeArrangedMoves()
 {
     return std::exchange(fArrangeConfirmed, {});

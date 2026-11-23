@@ -504,11 +504,12 @@ void drawSidePanel(const ViewRenderContext& ctx, const MainSampleController& mai
                                       kEditLabels[index], false, colors.intentDanger,
                                       hovered(ctx, InteractiveType::mainSampleEdit, index), usable);
         }
-        static constexpr const char* kActionLabels[] = {"ASSIGN", "ARRANGE", "AUTO COLOR", "CLEAR COLORS", "FAVORITE"};
+        static constexpr const char* kActionLabels[] = {"ASSIGN", "ARRANGE", "AUTO COLOR", "CLEAR COLORS", "FAVORITE", "REMOVE OVERLAP"};
         for (int index = 0; index < uiLayout::kMainSampleActionCount; ++index)
             sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::mainSampleAction(index), kActionLabels[index],
                                       index == 4 && isFavoritePad(ctx, ctx.state.selectedPad), colors.activityPlayback,
-                                      hovered(ctx, InteractiveType::mainSampleAction, index));
+                                      hovered(ctx, InteractiveType::mainSampleAction, index),
+                                      index != 5 || main.hasOverlaps());
         drawButton(uiLayout::autoChopMode, main.autoChopModeName(), 0);
         drawButton(uiLayout::autoChopCountMinus, "-", 1);
         drawButton(uiLayout::autoChopCountPlus, "+", 2);

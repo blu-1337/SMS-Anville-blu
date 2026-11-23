@@ -424,6 +424,58 @@ void sliceLabelsFollowPads()
     check(controller.sliceLabel(1U) == 1U && controller.sliceLabel(2U) == 2U, "after ARRANGE the labels are 1..N");
 }
 
+void markerHoverEqualsGrab()
+{
+    Host host;
+    MainSampleController controller(host);
+    controller.acceptStatus(status(1U, MainSampleState::ready,
+        {{1U, 0U, 400U}, {2U, 400U, 700U}, {3U, 703U, 1000U}}, {}), Clock::now());
+    InteractionContext context;
+    context.mainSampleMode = true;
+    context.mainSampleHasSource = true;
+    context.mainSampleSlices = controller.displaySlices();
+    context.mainSampleViewport = controller.viewport();
+    const auto bounds = layout::mainSampleWaveform;
+    const float shared = context.mainSampleViewport.xForFrame(400.0, bounds);
+    const auto at = [&](const float x) { return mainSampleMarkerAt(x, context); };
+    // Coincident edges: the boundary splits the hit zone by the pointer's side.
+    check(at(shared - 3.0f) == 0 * 2 + 1, "left of a shared boundary is the first slice's END");
+    check(at(shared + 3.0f) == 1 * 2 + 0, "right of it is the next slice's START");
+    check(at(shared - 0.4f) == 1, "just left still the END");
+    // The hover target (interactiveTargetAt) and the press use the same function.
+    for (const float dx : {-5.0f, -2.0f, 2.0f, 5.0f}) {
+        const sms::ui::Point point{shared + dx, bounds.y + bounds.height * 0.5f};
+        const auto hover = interactiveTargetAt(point, context);
+        check(isTarget(hover, InteractiveType::mainSampleMarker, at(shared + dx)), "hover target == press target");
+    }
+    // Nearly coincident edges (a few frames apart): the nearest wins, the side breaks ties.
+    const float a = context.mainSampleViewport.xForFrame(700.0, bounds);
+    const float b = context.mainSampleViewport.xForFrame(703.0, bounds);
+    check(b - a < 3.0f && b - a > 0.0f, "the edges are close but distinct");
+    const float middle = (a + b) * 0.5f;
+    check(at(middle - 0.01f) == 1 * 2 + 1, "left half of the zone grabs slice 2's END");
+    check(at(middle + 0.01f) == 2 * 2 + 0, "right half grabs slice 3's START");
+    check(at(a - 4.0f) == 1 * 2 + 1 && at(b + 4.0f) == 2 * 2 + 0, "outside the pair the nearest edge wins");
+    check(at(shared + 40.0f) == -1, "nothing is grabbed away from an edge");
+}
+
+void firstEdgeDragSnaps()
+{
+    Host host;
+    MainSampleController controller(host);
+    controller.acceptStatus(status(1U, MainSampleState::ready, {{1U, 0U, 300U}, {2U, 500U, 1000U}}, {}), Clock::now());
+    check(controller.selectedSlice() == 0U, "nothing selected yet");
+    check(controller.beginMarkerDrag(1U, true, false), "grab a slice's END edge with no prior selection");
+    check(controller.snapFrame(496U, 1.0) == 500U, "the very first drag snaps to the neighbour's edge");
+    controller.cancelDrag();
+    controller.selectSlice(1U);
+    check(controller.beginMarkerDrag(1U, true, true) && controller.snapFrame(496U, 1.0) == 500U,
+          "and the same once selected");
+    controller.cancelDrag();
+    check(controller.beginEdgeDrag(298U, 8U) && controller.snapFrame(496U, 1.0) == 500U,
+          "a right-drag grab snaps too");
+}
+
 void zoomHelpers()
 {
     Host host;
@@ -1173,6 +1225,8 @@ int main()
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();
     sliceLabelsFollowPads();
+    markerHoverEqualsGrab();
+    firstEdgeDragSnaps();
     selectionPreviewFollowsEdits();
     zoomHelpers();
     padChangesRequery();

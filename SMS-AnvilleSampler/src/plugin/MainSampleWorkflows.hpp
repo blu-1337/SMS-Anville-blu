@@ -116,6 +116,7 @@ private:
     void assign(const MainSampleRequest& request);
     void remove(const MainSampleRequest& request);
     void arrange(const MainSampleRequest& request);
+    void removeOverlaps(const MainSampleRequest& request);
     /** Zero-crossing snap window, in milliseconds either side of the edge. */
     static constexpr double kZeroCrossMilliseconds = 3.0;
     /**

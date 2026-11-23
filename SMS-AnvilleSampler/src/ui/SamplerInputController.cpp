@@ -396,6 +396,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 else if (clicked.index == 2) fSession.autoColorPads();
                 else if (clicked.index == 3) fSession.clearPadColors();
                 else if (clicked.index == 4) toggleFavorite(fSession.state().selectedPad);
+                else if (clicked.index == 5 && !main.removeOverlaps()) fSession.setLocalStatus("No overlaps");
                 fHost.repaintSamplerInput();
                 return true;
             }
@@ -438,19 +439,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 const auto index = static_cast<std::size_t>(clicked.index / 2);
                 if (index >= slices.size()) return false;
                 const bool hadSelection = main.selectedSlice() != 0U;
-                if (hadSelection && slices[index].id != main.selectedSlice()) {
-                    // The active slice keeps priority: grab its edge if one is in reach.
-                    const auto& viewport = main.viewport();
-                    const double perPixel = static_cast<double>(viewport.end - viewport.start) /
-                                            static_cast<double>(uiLayout::mainSampleWaveform.width);
-                    if (main.beginEdgeDrag(static_cast<std::uint32_t>(
-                            viewport.frameAt(position.x, uiLayout::mainSampleWaveform)),
-                            static_cast<std::uint32_t>(perPixel * 8.0))) {
-                        fMainSampleDrag = MainSampleDrag::marker;
-                        fHost.repaintSamplerInput();
-                        return true;
-                    }
-                }
+                // Press grabs exactly the edge the hover highlighted (one hit-test).
                 main.selectSlice(slices[index].id);
                 if (main.beginMarkerDrag(slices[index].id, (clicked.index & 1) != 0, hadSelection))
                     fMainSampleDrag = MainSampleDrag::marker;

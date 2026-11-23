@@ -13,6 +13,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -173,7 +174,7 @@ private:
 } // namespace main_sample_detail
 
 enum class MainSampleVerb : std::uint8_t {
-    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram, range, cut };
+    load, clear, query, edit, assign, remove, waveform, arrange, spectrogram, range, cut, overlap };
 
 /** One pad whose audio and settings move to another pad. */
 struct ArrangeMove {
@@ -245,6 +246,39 @@ struct ArrangePlan {
  * A slice linked to several pads keeps its lowest pad as the one that moves; the copies stay put
  * and are never overwritten. Slices without a pad are filled from the source. Pure; no I/O.
  */
+/** REMOVE OVERLAP: slices (sorted by start) whose end passes the next start get end = next start. Starts never
+ * move. A slice that is locked (favourite pad) or would end up shorter than `minFrames` is left as it is and
+ * counted in `left`. */
+struct OverlapPlan {
+    std::vector<MainSampleSlice> slices;
+    std::vector<std::uint16_t> trimmed;
+    std::size_t left = 0U;
+};
+
+[[nodiscard]] inline OverlapPlan planOverlapTrim(
+    std::vector<MainSampleSlice> slices, const std::function<bool(std::uint16_t)>& locked,
+    const std::uint32_t minFrames = 16U)
+{
+    std::stable_sort(slices.begin(), slices.end(), [](const MainSampleSlice& a, const MainSampleSlice& b) {
+        return a.start != b.start ? a.start < b.start : a.id < b.id;
+    });
+    OverlapPlan plan;
+    for (std::size_t index = 0; index + 1U < slices.size(); ++index) {
+        auto& slice = slices[index];
+        const auto nextStart = slices[index + 1U].start;
+        if (slice.end <= nextStart)
+            continue;
+        if ((locked && locked(slice.id)) || nextStart < slice.start + minFrames) {
+            ++plan.left;
+            continue;
+        }
+        slice.end = nextStart;
+        plan.trimmed.push_back(slice.id);
+    }
+    plan.slices = std::move(slices);
+    return plan;
+}
+
 [[nodiscard]] inline ArrangePlan planArrange(
     const std::vector<MainSampleSlice>& slices, const std::vector<MainSampleLink>& links,
     const std::vector<std::uint16_t>& favouriteSlices, const std::vector<std::uint32_t>& candidates)
@@ -329,6 +363,7 @@ struct MainSampleRequest {
         return encoded + "A;" + std::to_string(request.pad) + ";" + std::to_string(request.start) +
                ";" + std::to_string(request.end) + ";" + (request.confirm ? "1" : "0") +
                (request.zeroCross ? ";Z" : "");
+    case MainSampleVerb::overlap: return encoded + "O";
     case MainSampleVerb::arrange: return encoded + "R" + (request.pad != 0U ? ";" + std::to_string(request.pad) : std::string());
     case MainSampleVerb::range:
         return encoded + "T;" + std::to_string(request.start) + ";" + std::to_string(request.end) +
@@ -374,6 +409,11 @@ struct MainSampleRequest {
         if (!fields.finished())
             return false;
         decoded.verb = verb[0] == 'C' ? MainSampleVerb::clear : MainSampleVerb::query;
+        break;
+    case 'O': // REMOVE OVERLAP: no arguments
+        if (!fields.finished())
+            return false;
+        decoded.verb = MainSampleVerb::overlap;
         break;
     case 'R': // optionally the first pad of the arranged run
         if (!fields.finished() && (!fields.number(decoded.pad) || !fields.finished() || decoded.pad >= kPadCount))

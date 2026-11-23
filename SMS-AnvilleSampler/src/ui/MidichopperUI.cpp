@@ -329,14 +329,8 @@ protected:
         const auto history = ctrl && isZ ? (shiftHeld ? InputKey::redo : InputKey::undo)
                            : ctrl && isY ? InputKey::redo : InputKey::other;
         if (history != InputKey::other) {
-            const bool handled = fInput.keyboard(history, ev.press, false);
-            sms::ui::FileDragSource::log("key.log", std::string("TEMP key ") + (ev.press ? "down" : "up") + " key=" + std::to_string(ev.key) +
-                " keycode=" + std::to_string(ev.keycode) + " mod=" + std::to_string(ev.mod) + " -> " +
-                (history == InputKey::undo ? "undo" : "redo") + (handled ? " handled" : " ignored (text entry)"));
-            return handled;
+            return fInput.keyboard(history, ev.press, false);
         }
-        sms::ui::FileDragSource::log("key.log", std::string("TEMP key ") + (ev.press ? "down" : "up") + " key=" + std::to_string(ev.key) +
-            " keycode=" + std::to_string(ev.keycode) + " mod=" + std::to_string(ev.mod));
         const auto key = ev.key == ' ' ? InputKey::space
             : ev.key == DGL_NAMESPACE::kKeyEscape ? InputKey::escape
             : isMixerValueCommitKey(ev.key) ? InputKey::commit
@@ -352,7 +346,6 @@ protected:
     bool onCharacterInput(const CharacterInputEvent& ev) override { return fInput.character(ev.character); }
     void uiFocus(const bool focus, DGL_NAMESPACE::CrossingMode) override
     {
-        sms::ui::FileDragSource::log("key.log", std::string("TEMP focus ") + (focus ? "gained" : "lost"));
         fInput.focus(focus);
     }
 #if DISTRHO_UI_FILE_BROWSER

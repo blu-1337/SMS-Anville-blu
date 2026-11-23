@@ -2080,6 +2080,38 @@ void favoriteGuards()
     std::filesystem::remove(path);
 }
 
+void removeOverlapWorkflow()
+{
+    MainSampleFixture fixture(12.0);
+    std::array<std::atomic<int>, kPadCount> colors{};
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto now = UndoController::Clock::now();
+    const auto path = writeSourceWav("sms-overlap.wav", 4000U);
+    auto load = mainRequest(MainSampleVerb::load);
+    load.path = utf8(path);
+    fixture.send(load, 2U);
+    check(fixture.send(assignRequest(0U, 100U, 500U)).state == MainSampleState::ready, "assign A");
+    check(fixture.send(assignRequest(1U, 300U, 900U)).state == MainSampleState::ready, "assign B overlapping A");
+    auto request = mainRequest(MainSampleVerb::overlap);
+    MainSampleStatus status;
+    const auto depth = undo.undoDepth();
+    undo.record(UndoController::Kind::action, now, [&] { status = fixture.send(request); });
+    check(status.state == MainSampleState::ready && status.text == "Removed 1 overlap" &&
+          undo.undoDepth() == depth + 1U, "one overlap removed in one undo step");
+    check(padHoldsSlice(fixture.engine, 0U, 100U, 300U) && padHoldsSlice(fixture.engine, 1U, 300U, 900U),
+          "the linked pad is re-cut to the trimmed slice; the later start did not move");
+    check(fixture.send(request).text == "No overlaps", "a second run is a no-op");
+    undo.undo();
+    check(padHoldsSlice(fixture.engine, 0U, 100U, 500U), "undo restores the original slice and pad");
+    // A favourite pad's slice is protected: it is reported, not trimmed.
+    fixture.engine.setFavoriteMask(std::uint64_t{1} << 0U);
+    status = fixture.send(request);
+    check(status.text == "1 overlaps left" && padHoldsSlice(fixture.engine, 0U, 100U, 500U),
+          "a favourite's slice stays as it is and is counted");
+    fixture.engine.setFavoriteMask(0U);
+    std::filesystem::remove(path);
+}
+
 void padDragExportWorkflow()
 {
     using namespace midichopper::plugin;
@@ -2201,6 +2233,7 @@ int main()
     mainSampleLoadQueryWaveformAndClear();
     mainSampleAssignEditAndDelete();
     sourceRangeWorkflow();
+    removeOverlapWorkflow();
     padDragExportWorkflow();
     padDragCleanupAndGesture();
     cutAndCropWorkflow();

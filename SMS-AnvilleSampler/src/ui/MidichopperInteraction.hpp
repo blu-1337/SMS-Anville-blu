@@ -564,31 +564,29 @@ struct InteractionContext {
     return {left, bounds.y + bounds.height - size - 1.0f, size, size};
 }
 
-/** Marker index = slice * 2 + (end edge ? 1 : 0). A boundary shared with the next slice is
- * reported once, as that slice's start edge. Returns -1 when no marker is within 6 px. */
+/** Marker index = slice * 2 + (end edge ? 1 : 0). The ONE hit-test behind both hover and press, so the
+ * highlighted edge is always the edge a click grabs. The nearest edge within 6 px wins; at equal distance
+ * (and for a boundary shared by two slices) the pointer's side decides: left of the line is the slice's
+ * END, right of it (or on it) the next slice's START. Returns -1 when no marker is within 6 px. */
 [[nodiscard]] inline int mainSampleMarkerAt(const float x, const InteractionContext& context) noexcept
 {
     const auto bounds = layout::mainSampleWaveform;
     int best = -1;
     float bestDistance = 6.5f;
+    bool bestSideMatch = false;
     const std::size_t count = std::min<std::size_t>(context.mainSampleSlices.size(), 64U);
     for (std::size_t index = 0; index < count; ++index) {
         const auto& slice = context.mainSampleSlices[index];
         for (int edge = 0; edge < 2; ++edge) {
             const auto frame = edge == 0 ? slice.start : slice.end;
-            if (edge == 1) {
-                bool shared = false;
-                for (std::size_t other = 0; other < count; ++other)
-                    shared = shared || context.mainSampleSlices[other].start == frame;
-                if (shared)
-                    continue;
-            }
             if (frame < context.mainSampleViewport.start || frame > context.mainSampleViewport.end)
                 continue;
-            const float distance = std::abs(
-                context.mainSampleViewport.xForFrame(static_cast<double>(frame), bounds) - x);
-            if (distance < bestDistance) {
+            const float edgeX = context.mainSampleViewport.xForFrame(static_cast<double>(frame), bounds);
+            const float distance = std::abs(edgeX - x);
+            const bool sideMatch = (x < edgeX) == (edge == 1); // pointer left of the line prefers an END
+            if (distance < bestDistance || (distance == bestDistance && sideMatch && !bestSideMatch)) {
                 bestDistance = distance;
+                bestSideMatch = sideMatch;
                 best = static_cast<int>(index) * 2 + edge;
             }
         }

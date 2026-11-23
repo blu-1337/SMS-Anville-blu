@@ -411,6 +411,40 @@ void autoChop()
           !decodeAutoChopStatus("AC1;4;BUSY;1", d), "AC1 malformed status is refused");
 }
 
+void overlapPlanning()
+{
+    MainSampleRequest overlap;
+    overlap.verb = MainSampleVerb::overlap;
+    check(roundTrip(overlap).verb == MainSampleVerb::overlap && encodeMainSampleRequest(overlap).ends_with(";O"),
+          "REMOVE OVERLAP round-trips with no arguments");
+    MainSampleRequest decoded;
+    check(!decodeMainSampleRequest("MS1;1;O;5", decoded), "it takes no arguments");
+    const auto none = [](std::uint16_t) { return false; };
+    // Adjacent overlap: only the end moves.
+    auto plan = planOverlapTrim({{1U, 0U, 500U}, {2U, 400U, 900U}}, none);
+    check(plan.trimmed == std::vector<std::uint16_t>{1U} && plan.slices[0] == MainSampleSlice{1U, 0U, 400U} &&
+          plan.slices[1] == MainSampleSlice{2U, 400U, 900U} && plan.left == 0U, "adjacent overlap trims the end only");
+    // Chained overlaps are all fixed against the next start.
+    plan = planOverlapTrim({{1U, 0U, 500U}, {2U, 400U, 900U}, {3U, 800U, 1000U}}, none);
+    check(plan.slices[0].end == 400U && plan.slices[1].end == 800U && plan.slices[2].end == 1000U &&
+          plan.trimmed.size() == 2U, "chained overlaps");
+    // Contained: the outer slice ends where the inner one starts; starts never move.
+    plan = planOverlapTrim({{1U, 0U, 1000U}, {2U, 300U, 400U}}, none);
+    check(plan.slices[0] == MainSampleSlice{1U, 0U, 300U} && plan.slices[1] == MainSampleSlice{2U, 300U, 400U},
+          "a contained slice trims the outer one");
+    // Same start (would be zero length) and too short (< 16 frames) are left alone and counted.
+    plan = planOverlapTrim({{1U, 100U, 500U}, {2U, 100U, 300U}}, none);
+    check(plan.trimmed.empty() && plan.left == 1U && plan.slices[0].end == 500U, "zero length result is left alone");
+    plan = planOverlapTrim({{1U, 100U, 500U}, {2U, 110U, 700U}}, none);
+    check(plan.trimmed.empty() && plan.left == 1U, "a result shorter than the minimum is left alone");
+    // No overlap; touching is not overlapping.
+    plan = planOverlapTrim({{1U, 0U, 400U}, {2U, 400U, 900U}}, none);
+    check(plan.trimmed.empty() && plan.left == 0U, "touching slices are fine");
+    // Locked (favourite) slices are skipped but still reported.
+    plan = planOverlapTrim({{1U, 0U, 500U}, {2U, 400U, 900U}}, [](std::uint16_t id) { return id == 1U; });
+    check(plan.trimmed.empty() && plan.left == 1U, "a locked slice is left and counted");
+}
+
 void arrangement()
 {
     // Pads 2, 5, 9 hold the slices at times 600, 0, 300: time order must be 5, 9, 2 -> pads 2, 5, 9.
@@ -489,6 +523,7 @@ int main()
     livePhaseCodec();
     requests();
     arrangement();
+    overlapPlanning();
     zeroCrossCodecAndSearch();
     statuses();
     waveforms();

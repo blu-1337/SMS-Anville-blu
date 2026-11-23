@@ -26,8 +26,9 @@ constexpr auto kEditorSnapshotRetryInterval = std::chrono::milliseconds(250);
 
 void copyString(char (&destination)[160], const char *source)
 {
-    std::strncpy(destination, source, sizeof(destination) - 1);
-    destination[sizeof(destination) - 1] = '\0';
+    const std::size_t length = std::min(std::strlen(source), sizeof(destination) - 1U);
+    std::memcpy(destination, source, length);
+    destination[length] = '\0';
 }
 
 template <std::size_t N> void copyChars(std::array<char, N> &destination, const char *source)

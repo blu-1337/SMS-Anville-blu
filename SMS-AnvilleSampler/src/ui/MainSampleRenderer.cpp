@@ -285,7 +285,11 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
     }
     std::sort(markers.begin(), markers.begin() + static_cast<std::ptrdiff_t>(markerTotal),
               [](const Marker& left, const Marker& right) { return left.x < right.x; });
-    for (std::size_t order = 0; order < markerTotal; ++order) {
+    // Two passes: idle lines first, the lit one last, so a highlighted edge is never painted over by a
+    // neighbouring idle line a pixel or two away.
+    for (std::size_t pass = 0; pass < 2U * markerTotal; ++pass) {
+        const std::size_t order = pass % markerTotal;
+        const bool litPass = pass >= markerTotal;
         const auto& marker = markers[order];
         float room = bounds.width;
         if (order > 0U)
@@ -298,6 +302,8 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             (marker.endSlice >= 0 && hovered(ctx, InteractiveType::mainSampleMarker, marker.endSlice * 2 + 1)) ||
             main.markerDragged(slices[static_cast<std::size_t>(marker.slice)].id, marker.edge == 1) ||
             (marker.endSlice >= 0 && main.markerDragged(slices[static_cast<std::size_t>(marker.endSlice)].id, true));
+        if (isHovered != litPass)
+            continue;
         const auto sliceColor = [&](const int slice) {
             const auto* tint = zoneTint(ctx, main, static_cast<std::size_t>(slice));
             return tint != nullptr ? *tint : colors.selection;

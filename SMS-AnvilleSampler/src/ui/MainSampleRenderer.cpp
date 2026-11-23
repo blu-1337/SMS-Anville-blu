@@ -292,8 +292,12 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
             room = std::min(room, marker.x - markers[order - 1U].x);
         if (order + 1U < markerTotal)
             room = std::min(room, markers[order + 1U].x - marker.x);
+        // A boundary shared by two slices is drawn once; hovering or dragging either side lights it.
         const bool isHovered =
-            hovered(ctx, InteractiveType::mainSampleMarker, marker.slice * 2 + marker.edge);
+            hovered(ctx, InteractiveType::mainSampleMarker, marker.slice * 2 + marker.edge) ||
+            (marker.endSlice >= 0 && hovered(ctx, InteractiveType::mainSampleMarker, marker.endSlice * 2 + 1)) ||
+            main.markerDragged(slices[static_cast<std::size_t>(marker.slice)].id, marker.edge == 1) ||
+            (marker.endSlice >= 0 && main.markerDragged(slices[static_cast<std::size_t>(marker.endSlice)].id, true));
         const auto sliceColor = [&](const int slice) {
             const auto* tint = zoneTint(ctx, main, static_cast<std::size_t>(slice));
             return tint != nullptr ? *tint : colors.selection;
@@ -302,7 +306,11 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         ctx.canvas.beginPath();
         ctx.canvas.moveTo(marker.x, bounds.y);
         ctx.canvas.lineTo(marker.x, bounds.y + bounds.height);
-        ctx.canvas.strokeColor(marker.edge == 1 ? darker(lineColor) : lineColor);
+        // Highlighted or dragged: start and end edges get the same bright line (their slice colour lifted
+        // toward the primary content colour, readable on every skin). Idle end edges stay a shade darker.
+        const auto lit = lineColor.withAlpha(1.0f);
+        const auto bright = DGL_NAMESPACE::Color(lit, colors.contentPrimary, 0.45f);
+        ctx.canvas.strokeColor(isHovered ? bright : (marker.edge == 1 ? darker(lineColor) : lineColor));
         ctx.canvas.strokeWidth(isHovered ? (room >= 38.0f ? 4.0f : 3.0f) : (room >= 38.0f ? 2.0f : 1.0f));
         ctx.canvas.stroke();
     }

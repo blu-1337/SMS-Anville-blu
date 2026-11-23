@@ -466,6 +466,8 @@ void firstEdgeDragSnaps()
     controller.acceptStatus(status(1U, MainSampleState::ready, {{1U, 0U, 300U}, {2U, 500U, 1000U}}, {}), Clock::now());
     check(controller.selectedSlice() == 0U, "nothing selected yet");
     check(controller.beginMarkerDrag(1U, true, false), "grab a slice's END edge with no prior selection");
+    check(controller.markerDragged(1U, true) && !controller.markerDragged(1U, false) && !controller.markerDragged(2U, true),
+          "the dragged edge is reported so it can be drawn lit");
     check(controller.snapFrame(496U, 1.0) == 500U, "the very first drag snaps to the neighbour's edge");
     controller.cancelDrag();
     controller.selectSlice(1U);

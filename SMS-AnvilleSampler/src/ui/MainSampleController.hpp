@@ -207,6 +207,9 @@ public:
     /** Moves the grabbed region by (frame - grab frame); snaps its edges to other slices when SNAP is on. */
     void dragRegionTo(std::uint32_t frame, double framesPerPixel) noexcept;
     [[nodiscard]] bool regionDragging() const noexcept { return fRegion.has_value(); }
+    /** True while this slice edge is the marker being dragged. */
+    [[nodiscard]] bool markerDragged(const std::uint16_t sliceId, const bool endEdge) const noexcept
+    { return fDrag.has_value() && fDrag->sliceId == sliceId && fDrag->endEdge == endEdge; }
     // Source range markers (bottom handles): a non-destructive [start, end) the tools are confined to.
     /** Range as displayed, including a handle being dragged. */
     [[nodiscard]] std::uint32_t rangeStart() const noexcept;

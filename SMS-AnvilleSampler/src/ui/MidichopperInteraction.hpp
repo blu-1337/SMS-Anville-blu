@@ -571,9 +571,10 @@ struct InteractionContext {
 [[nodiscard]] inline int mainSampleMarkerAt(const float x, const InteractionContext& context) noexcept
 {
     const auto bounds = layout::mainSampleWaveform;
-    int best = -1;
-    float bestDistance = 6.5f;
-    bool bestSideMatch = false;
+    constexpr float kReach = 6.5f;
+    struct Candidate { int id; float edgeX; bool end; };
+    std::array<Candidate, 128> found{};
+    std::size_t total = 0U;
     const std::size_t count = std::min<std::size_t>(context.mainSampleSlices.size(), 64U);
     for (std::size_t index = 0; index < count; ++index) {
         const auto& slice = context.mainSampleSlices[index];
@@ -582,13 +583,37 @@ struct InteractionContext {
             if (frame < context.mainSampleViewport.start || frame > context.mainSampleViewport.end)
                 continue;
             const float edgeX = context.mainSampleViewport.xForFrame(static_cast<double>(frame), bounds);
-            const float distance = std::abs(edgeX - x);
-            const bool sideMatch = (x < edgeX) == (edge == 1); // pointer left of the line prefers an END
-            if (distance < bestDistance || (distance == bestDistance && sideMatch && !bestSideMatch)) {
-                bestDistance = distance;
-                bestSideMatch = sideMatch;
-                best = static_cast<int>(index) * 2 + edge;
-            }
+            if (std::abs(edgeX - x) <= kReach)
+                found[total++] = {static_cast<int>(index) * 2 + edge, edgeX, edge == 1};
+        }
+    }
+    if (total == 0U)
+        return -1;
+    // The pointer left of every candidate is inside the slice that ends there: grab its END. Right of every
+    // candidate it is inside the next slice: grab its START. Between candidates (or with no such edge) the
+    // nearest wins, and an exact tie goes to the side the pointer is on.
+    bool left = true;
+    bool right = true;
+    for (std::size_t i = 0; i < total; ++i) {
+        left = left && x < found[i].edgeX;
+        right = right && x >= found[i].edgeX;
+    }
+    int best = -1;
+    float bestDistance = 1.0e9f;
+    bool bestSideMatch = false;
+    for (std::size_t i = 0; i < total; ++i) {
+        const auto& candidate = found[i];
+        if ((left && !candidate.end && std::any_of(found.begin(), found.begin() + static_cast<std::ptrdiff_t>(total),
+                [](const Candidate& other) { return other.end; })) ||
+            (right && candidate.end && std::any_of(found.begin(), found.begin() + static_cast<std::ptrdiff_t>(total),
+                [](const Candidate& other) { return !other.end; })))
+            continue;
+        const float distance = std::abs(candidate.edgeX - x);
+        const bool sideMatch = (x < candidate.edgeX) == candidate.end;
+        if (distance < bestDistance || (distance == bestDistance && sideMatch && !bestSideMatch)) {
+            bestDistance = distance;
+            bestSideMatch = sideMatch;
+            best = candidate.id;
         }
     }
     return best;

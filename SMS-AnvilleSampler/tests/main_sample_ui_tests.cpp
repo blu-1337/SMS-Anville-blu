@@ -459,6 +459,58 @@ void markerHoverEqualsGrab()
     check(at(shared + 40.0f) == -1, "nothing is grabbed away from an edge");
 }
 
+void markerHitGapAndOverlapAtZooms()
+{
+    const auto bounds = layout::mainSampleWaveform;
+    for (const std::uint32_t span : {1000U, 400U, 150U, 60U}) {
+        for (const bool overlap : {false, true}) {
+            // Sample 1 ends at 700 (+/- a few frames); sample 2 starts 3 frames after (gap) or before (overlap).
+            const std::uint32_t end1 = 700U;
+            const std::uint32_t start2 = overlap ? 697U : 703U;
+            std::vector<MainSampleSlice> slices{{1U, 100U, end1}, {2U, start2, 900U}};
+            InteractionContext context;
+            context.mainSampleMode = true;
+            context.mainSampleHasSource = true;
+            context.mainSampleSlices = slices;
+            context.mainSampleViewport.reset(1000U);
+            context.mainSampleViewport.start = 700U - span / 2U;
+            context.mainSampleViewport.end = 700U + span / 2U;
+            const float endX = context.mainSampleViewport.xForFrame(end1, bounds);
+            const float startX = context.mainSampleViewport.xForFrame(start2, bounds);
+            const float low = std::min(endX, startX);
+            const float high = std::max(endX, startX);
+            const auto at = [&](const float x) { return mainSampleMarkerAt(x, context); };
+            const int end1Id = 0 * 2 + 1;
+            const int start2Id = 1 * 2 + 0;
+            const int lowEdge = endX <= startX ? end1Id : start2Id;
+            const int highEdge = endX <= startX ? start2Id : end1Id;
+            if (high - low <= 5.0f) {
+                // Both edges in reach. Left of both: inside sample 1 only, so its END (gap or overlap).
+                check(at(low - 0.3f) == end1Id && at(low - 3.0f) == end1Id, "left of both edges grabs sample 1's END");
+                // Right of both: inside sample 2 only, so its START.
+                check(at(high + 0.3f) == start2Id && at(high + 3.0f) == start2Id, "right of both edges grabs sample 2's START");
+            } else {
+                // Far apart (zoomed in): each edge is simply grabbed on its own.
+                check(at(low - 0.3f) == lowEdge && at(high + 0.3f) == highEdge, "separate edges are grabbed by proximity");
+            }
+            // Between the edges (gap or overlap): the nearest one, and hover uses the same answer.
+            const float mid = (low + high) * 0.5f;
+            if (high - low > 1.0f && high - low <= 5.0f) {
+                const int nearLow = at(low + (high - low) * 0.25f);
+                const int nearHigh = at(low + (high - low) * 0.75f);
+                const int lowId = endX <= startX ? end1Id : start2Id;
+                const int highId = endX <= startX ? start2Id : end1Id;
+                check(nearLow == lowId && nearHigh == highId, "between the edges the nearer one wins");
+            }
+            const sms::ui::Point point{mid - (high - low) * 0.3f, bounds.y + bounds.height * 0.5f};
+            const auto hover = interactiveTargetAt(point, context);
+            check(at(point.x) < 0 ? !isTarget(hover, InteractiveType::mainSampleMarker)
+                                  : isTarget(hover, InteractiveType::mainSampleMarker, at(point.x)),
+                  "hover target is the grab target at every zoom");
+        }
+    }
+}
+
 void firstEdgeDragSnaps()
 {
     Host host;
@@ -1229,6 +1281,7 @@ int main()
     sliceLabelsFollowPads();
     markerHoverEqualsGrab();
     firstEdgeDragSnaps();
+    markerHitGapAndOverlapAtZooms();
     selectionPreviewFollowsEdits();
     zoomHelpers();
     padChangesRequery();

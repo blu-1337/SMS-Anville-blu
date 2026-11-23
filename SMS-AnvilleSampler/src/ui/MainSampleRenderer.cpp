@@ -149,7 +149,8 @@ void drawSliceBadge(const ViewRenderContext& ctx, const sms::ui::Rect& rect, con
         ctx.canvas.stroke();
     }
     char label[8];
-    std::snprintf(label, sizeof(label), "%u", number);
+    if (number == 0U) std::snprintf(label, sizeof(label), "-");
+    else std::snprintf(label, sizeof(label), "%u", number);
     ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
     ctx.canvas.fontSize(7.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
@@ -336,7 +337,7 @@ void drawWaveformArea(const ViewRenderContext& ctx, const MainSampleController& 
         if (rect.width <= 0.0f)
             continue;
         const auto* tint = zoneTint(ctx, main, index);
-        drawSliceBadge(ctx, rect, static_cast<unsigned>(index + 1U), slices[index].id == main.selectedSlice(),
+        drawSliceBadge(ctx, rect, main.sliceLabel(slices[index].id), slices[index].id == main.selectedSlice(),
                        hovered(ctx, InteractiveType::mainSampleBadge, static_cast<int>(index)),
                        tint != nullptr ? *tint : colors.selection);
     }
@@ -425,14 +426,15 @@ void drawPads(const ViewRenderContext& ctx, const MainSampleController& main)
         ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
         ctx.canvas.fillColor(padHovered ? colors.selection : colors.contentSecondary);
         char label[12];
-        std::snprintf(label, sizeof(label), "%02d", localPad + 1);
+        std::snprintf(label, sizeof(label), "%02d", pad + 1); // global 1-64, the number slice badges show
         text(ctx, cell.x + 10.0f, cell.y + 8.0f, label, nullptr);
         const int slice = main.sliceForPad(static_cast<std::uint32_t>(pad));
         const bool readout = ctx.state.quickEditPad == pad &&
             (ctx.state.quickEditAxis == 1 || ctx.state.quickEditAxis == 2);
         if (slice >= 0 && !readout) { // the volume/pan readout owns the centre
             char number[16];
-            std::snprintf(number, sizeof(number), "S%d", slice + 1);
+            std::snprintf(number, sizeof(number), "S%u",
+                          main.sliceLabel(main.status().slices[static_cast<std::size_t>(slice)].id));
             ctx.canvas.fontSize(20.0f);
             ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER |
                                  DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);

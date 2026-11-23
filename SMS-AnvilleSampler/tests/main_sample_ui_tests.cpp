@@ -316,14 +316,14 @@ void transportPlaysSelectedSlice()
           "Play while playing stops");
     controller.acceptPreviewPosition(0.0f);
 
-    check(controller.selectSliceNumber(2U) && !controller.selectSliceNumber(3U) &&
-          controller.selectedSlice() == 2U, "number keys pick slices that exist");
+    check(controller.selectSliceNumber(4U) && !controller.selectSliceNumber(3U) && !controller.selectSliceNumber(1U) &&
+          controller.selectedSlice() == 2U, "number keys pick the slice labelled with that pad number");
     controller.togglePlay();
     check(last() && preview.start == 400U && preview.end == 1000U, "Play plays exactly the selected slice");
 
     controller.acceptPreviewPosition(0.0f);
     controller.toggleLoop();
-    controller.selectSliceNumber(1U);
+    controller.selectSlice(1U);
     controller.togglePlay();
     check(last() && preview.loop && preview.start == 0U && preview.end == 400U, "Loop applies to the slice");
     controller.acceptPreviewPosition(1.1f);
@@ -387,6 +387,41 @@ void selectionPreviewFollowsEdits()
     const auto before = host.sent.size();
     check(!controller.assignSelection(0U), "a pad click with no selection never assigns");
     check(host.sent.size() == before, "and sends nothing");
+}
+
+void sliceLabelsFollowPads()
+{
+    Host host;
+    MainSampleController controller(host);
+    const auto now = Clock::now();
+    std::vector<MainSampleSlice> slices{{1U, 0U, 300U}, {2U, 600U, 1000U}};
+    controller.acceptStatus(status(1U, MainSampleState::ready, slices, {{0U, 1U}, {4U, 2U}}), now);
+    check(controller.sliceLabel(1U) == 1U && controller.sliceLabel(2U) == 5U, "a label is the pad number (1-64)");
+
+    // A new slice between them: nobody else is renumbered; it is unlabelled until it has a pad.
+    slices.insert(slices.begin() + 1, MainSampleSlice{3U, 300U, 600U});
+    controller.acceptStatus(status(2U, MainSampleState::ready, slices, {{0U, 1U}, {4U, 2U}}), now);
+    check(controller.sliceLabel(1U) == 1U && controller.sliceLabel(2U) == 5U && controller.sliceLabel(3U) == 0U,
+          "adding a slice leaves the other labels alone");
+    controller.acceptStatus(status(3U, MainSampleState::ready, slices, {{0U, 1U}, {4U, 2U}, {1U, 3U}}), now);
+    check(controller.sliceLabel(3U) == 2U && controller.sliceLabel(1U) == 1U && controller.sliceLabel(2U) == 5U,
+          "the new slice takes its pad's number only");
+
+    // Several pads: the lowest wins. Pads in later banks count on past 16.
+    controller.acceptStatus(status(4U, MainSampleState::ready, slices, {{20U, 1U}, {9U, 1U}, {40U, 2U}, {1U, 3U}}), now);
+    check(controller.sliceLabel(1U) == 10U && controller.sliceLabel(2U) == 41U, "lowest pad, global numbering across banks");
+
+    // Swapping two pads swaps their labels; deleting a slice does not renumber the rest.
+    controller.acceptStatus(status(5U, MainSampleState::ready, slices, {{0U, 2U}, {4U, 1U}, {1U, 3U}}), now);
+    check(controller.sliceLabel(1U) == 5U && controller.sliceLabel(2U) == 1U, "a swap updates the labels");
+    slices.erase(slices.begin() + 1);
+    controller.acceptStatus(status(6U, MainSampleState::ready, slices, {{0U, 2U}, {4U, 1U}}), now);
+    check(controller.sliceLabel(1U) == 5U && controller.sliceLabel(2U) == 1U && controller.sliceLabel(3U) == 0U,
+          "deleting a slice does not renumber");
+
+    // ARRANGE moves pads: afterwards the labels run 1..N left to right.
+    controller.acceptStatus(status(7U, MainSampleState::ready, slices, {{0U, 1U}, {1U, 2U}}), now);
+    check(controller.sliceLabel(1U) == 1U && controller.sliceLabel(2U) == 2U, "after ARRANGE the labels are 1..N");
 }
 
 void zoomHelpers()
@@ -1137,6 +1172,7 @@ int main()
     arrangeSendsOneRequestAndKeepsMoves();
     assignConfirmDeleteAndPreview();
     transportPlaysSelectedSlice();
+    sliceLabelsFollowPads();
     selectionPreviewFollowsEdits();
     zoomHelpers();
     padChangesRequery();

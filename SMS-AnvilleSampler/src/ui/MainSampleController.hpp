@@ -240,6 +240,9 @@ public:
     [[nodiscard]] bool confirmPending() const noexcept
     { return fConfirm.has_value() || fAutoConfirm; }
     [[nodiscard]] int sliceForPad(std::uint32_t pad) const noexcept;
+    /** The label a slice shows: its lowest linked pad, 1-64 (global pad + 1); 0 when it has no pad.
+     *  Stable: adding, deleting or moving slices never renumbers the others. */
+    [[nodiscard]] unsigned sliceLabel(std::uint16_t sliceId) const noexcept;
     [[nodiscard]] std::uint64_t lastSentSequence() const noexcept { return fSequence; }
 
 private:

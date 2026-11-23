@@ -539,7 +539,7 @@ struct InteractionContext {
                               viewport.xForFrame(static_cast<double>(slice.end), bounds));
     if (x1 <= x0)
         return {};
-    const float width = index + 1U >= 10U ? layout::sliceBadgeWideWidth : layout::sliceBadgeWidth;
+    const float width = layout::sliceBadgeWideWidth; // labels are pad numbers up to 64
     const bool narrow = x1 - x0 < width + 2.0f;
     const float row = narrow ? static_cast<float>(index % 3U) : 0.0f;
     const float left = std::min(x0 + 1.0f, bounds.x + bounds.width - width);

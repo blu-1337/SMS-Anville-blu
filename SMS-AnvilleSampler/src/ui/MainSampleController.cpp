@@ -512,11 +512,14 @@ int MainSampleController::sliceIndexAt(const std::uint32_t frame) const noexcept
 
 bool MainSampleController::selectSliceNumber(const std::size_t number) noexcept
 {
-    if (number == 0U || number > fDisplaySlices.size())
-        return false;
-    selectSlice(fDisplaySlices[number - 1U].id);
-    fHost.repaintMainSample();
-    return true;
+    // The number is the slice's label, i.e. the pad it is linked to.
+    for (const auto& slice : fDisplaySlices) {
+        if (sliceLabel(slice.id) != number) continue;
+        selectSlice(slice.id);
+        fHost.repaintMainSample();
+        return true;
+    }
+    return false;
 }
 
 bool MainSampleController::zoomFit(const Time now) noexcept
@@ -990,6 +993,15 @@ bool MainSampleController::pan(const float delta, const Time now) noexcept
 bool MainSampleController::setScrollPosition(const float position, const Time now) noexcept
 {
     return scheduleDetail(fViewport.setScrollPosition(position), now);
+}
+
+unsigned MainSampleController::sliceLabel(const std::uint16_t sliceId) const noexcept
+{
+    unsigned best = 0U;
+    for (const auto& link : fStatus.links)
+        if (link.sliceId == sliceId && (best == 0U || link.pad + 1U < best))
+            best = link.pad + 1U;
+    return best;
 }
 
 int MainSampleController::sliceForPad(const std::uint32_t pad) const noexcept

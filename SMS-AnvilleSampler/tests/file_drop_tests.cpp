@@ -1,5 +1,6 @@
 #include "FileDropEffect.hpp"
 #include "FileDropTarget.hpp"
+#include "UndoKeyHook.hpp"
 
 #if defined(_WIN32)
 # include "FileDropWin32.hpp"
@@ -385,11 +386,39 @@ void dragDataObject()
 }
 #endif
 
+void undoKeyHook()
+{
+    using sms::ui::HistoryKey;
+    using sms::ui::classifyHistoryKey;
+    check(classifyHistoryKey('Z', true, false, false) == HistoryKey::undo, "Ctrl+Z is undo");
+    check(classifyHistoryKey('Z', true, true, false) == HistoryKey::redo, "Ctrl+Shift+Z is redo");
+    check(classifyHistoryKey('Y', true, false, false) == HistoryKey::redo, "Ctrl+Y is redo");
+    check(classifyHistoryKey('Z', false, false, false) == HistoryKey::none, "plain Z is not a shortcut");
+    check(classifyHistoryKey('Z', true, false, true) == HistoryKey::none, "Ctrl+Alt+Z is left alone");
+    check(classifyHistoryKey('X', true, false, false) == HistoryKey::none, "other keys are left alone");
+#if defined(_WIN32)
+    int calls = 0;
+    {
+        auto hook = sms::ui::UndoKeyHook::install(reinterpret_cast<std::uintptr_t>(GetDesktopWindow()),
+                                                  [&](HistoryKey) { ++calls; return true; });
+        check(hook != nullptr, "the thread hooks install on a live window");
+        auto second = sms::ui::UndoKeyHook::install(reinterpret_cast<std::uintptr_t>(GetDesktopWindow()),
+                                                    [&](HistoryKey) { ++calls; return true; });
+        check(second != nullptr, "a second instance gets its own hook");
+        second.reset();
+        hook.reset();
+    }
+    check(sms::ui::UndoKeyHook::install(0U, [](HistoryKey) { return true; }) == nullptr, "no window, no hook");
+    check(calls == 0, "installing never fires the callback");
+#endif
+}
+
 int main()
 {
     effectChooser();
     extensionFilter();
     nullTargetIsSafe();
+    undoKeyHook();
 #if defined(_WIN32)
     check(SUCCEEDED(OleInitialize(nullptr)), "the test thread joins a single-threaded apartment");
     textConversion();

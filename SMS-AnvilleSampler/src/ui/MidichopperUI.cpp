@@ -17,6 +17,7 @@
 #include "SpectrogramPixels.hpp"
 #include "FileDropTarget.hpp"
 #include "FileDragSource.hpp"
+#include "UndoKeyHook.hpp"
 #include "../plugin/PadDragExport.hpp"
 #include "MidichopperView.hpp"
 #include "BrowserLauncher.hpp"
@@ -461,6 +462,10 @@ private:
         midichopper::plugin::cleanDragDirectory(midichopper::plugin::dragExportDirectory(),
                                                 std::filesystem::file_time_type::clock::now());
         fDropTarget = sms::ui::FileDropTarget::attach(window, *this);
+        // FL handles Ctrl+Z as an accelerator before the plug-in sees it; a thread-scoped hook takes it first.
+        fUndoKeys = sms::ui::UndoKeyHook::install(window, [this](const sms::ui::HistoryKey key) {
+            return fInput.keyboard(key == sms::ui::HistoryKey::undo ? InputKey::undo : InputKey::redo, true, false);
+        });
     }
     DropTarget dropTarget(const sms::ui::FileDropPoint point) const
     {
@@ -533,6 +538,7 @@ private:
     FileDropController fFileDrop{*this};
     std::uint32_t fMainSampleDropSequence = 0U;
     std::unique_ptr<sms::ui::FileDropTarget> fDropTarget;
+    std::unique_ptr<sms::ui::UndoKeyHook> fUndoKeys;
     bool fDropAttached = false;
 #if DISTRHO_PLUGIN_WANT_DIRECT_ACCESS
     PluginUiBridge* fUiBridge = nullptr;

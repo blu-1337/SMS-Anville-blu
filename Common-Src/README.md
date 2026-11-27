@@ -47,6 +47,11 @@ host, or a specific plug-in's state model.
   in consumers; see Anville's [preference contract](../Docs/AI/LAYOUT-PREFERENCE.md).
 - `Analysis/`: static library `sms_analysis` (CMake in that folder): seeded
   `SplitMix64`, `RealFft` and the auto-chop analysis. See [Auto-chop](../Docs/AI/AUTO-CHOP.md).
+  Pad sound detection (worker thread, allocates): `SoundAnalysis.hpp` `analyzeSound()`
+  (note + cents, chord, key) over `SoundPreprocess`, `PitchTracker`, `Chroma`,
+  `KeyChord` and `SpectralTools`; display text in `NoteNames.hpp`. Tests:
+  `sound_analysis_tests.cpp` (ctest `sound-analysis`).
+  Plug-in side: [Sound analysis](../Docs/AI/SOUND-ANALYSIS.md).
 - `UI/Geometry.hpp`: renderer-independent rectangles and reusable pad-grid
   layout/hit testing.
 

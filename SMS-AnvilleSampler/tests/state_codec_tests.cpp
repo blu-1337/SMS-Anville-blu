@@ -8,6 +8,7 @@
 #include "CaptureActionProtocol.hpp"
 #include "PlaybackRequest.hpp"
 #include "PadDirectionRequest.hpp"
+#include "PadAnalysisProtocol.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -1014,6 +1015,80 @@ void padDirectionRequestRoundTrip()
     reject(std::string(513U, 'x'));
 }
 
+void padAnalysisProtocolRoundTrip()
+{
+    using namespace midichopper::plugin;
+    PadAnalysisRequest request;
+    check(encodePadAnalysisRequest({7U, 63U}) == "AQ1;7;63" &&
+          decodePadAnalysisRequest("AQ1;7;63", request) && request.sequence == 7U &&
+          request.pad == 63U, "analysis request round-trips");
+    for (const char* bad : {"", "AQ1", "AQ1;7", "AQ1;7;64", "AQ1;-1;0", "AQ1;7;1;2",
+                            "AQ1;x;1", "AQ2;7;1", "AQ1;7;"})
+        check(!decodePadAnalysisRequest(bad, request) && request.sequence == 7U,
+              "malformed analysis request is rejected untouched");
+
+    PadAnalysisStatus status;
+    status.sequence = 9U;
+    status.pad = 5U;
+    status.generation = 1234567890123ULL;
+    status.state = PadAnalysisState::ready;
+    status.result.note.valid = true;
+    status.result.note.midi = 41.7702;
+    status.result.note.confidence = 0.875F;
+    status.result.note.approximate = true;
+    status.result.note.rangeLimited = true;
+    status.result.chord = {true, 0, sms::analysis::ChordQuality::major7, 0.5F, false};
+    status.result.key = {true, 9, true, 0.25F, 0, false};
+    const auto encoded = encodePadAnalysisStatus(status);
+    check(encoded == "AR1;9;5;1234567890123;R;41.7702;0.8750;ar;0;4;0.5000;9;1;0.2500;0;0",
+          "analysis status wire format");
+    PadAnalysisStatus decoded;
+    check(decodePadAnalysisStatus(encoded, decoded) && decoded.sequence == 9U && decoded.pad == 5U &&
+          decoded.generation == status.generation && decoded.state == PadAnalysisState::ready &&
+          decoded.result.note.valid && std::abs(decoded.result.note.midi - 41.7702) < 1.0e-9 &&
+          decoded.result.note.hz > 80.0 && decoded.result.note.approximate &&
+          !decoded.result.note.gliding && decoded.result.note.rangeLimited &&
+          decoded.result.chord.valid && decoded.result.chord.root == 0 &&
+          decoded.result.chord.quality == sms::analysis::ChordQuality::major7 &&
+          !decoded.result.chord.varies && decoded.result.key.valid && decoded.result.key.tonic == 9 &&
+          decoded.result.key.minor && decoded.result.key.runnerUpTonic == 0 &&
+          !decoded.result.key.runnerUpMinor, "analysis status round-trips");
+
+    PadAnalysisStatus empty;
+    empty.state = PadAnalysisState::noAudio;
+    empty.result.chord.varies = true;
+    check(decodePadAnalysisStatus(encodePadAnalysisStatus(empty), decoded) &&
+          decoded.state == PadAnalysisState::noAudio && !decoded.result.note.valid &&
+          !decoded.result.chord.valid && decoded.result.chord.varies && !decoded.result.key.valid,
+          "invalid fields and a varying chord survive");
+    for (const auto state : {PadAnalysisState::busy, PadAnalysisState::error}) {
+        empty.state = state;
+        check(decodePadAnalysisStatus(encodePadAnalysisStatus(empty), decoded) &&
+              decoded.state == state, "busy and error states round-trip");
+    }
+
+    const std::vector<std::string> fields{"AR1", "9", "5", "1", "R", "41.0000", "0.5000", "-",
+                                          "0", "1", "0.5000", "9", "1", "0.2500", "0", "0"};
+    const auto join = [&fields](const std::size_t damaged, const char* text) {
+        std::string joined;
+        for (std::size_t i = 0; i < fields.size(); ++i)
+            joined += (i == 0U ? "" : ";") + (i == damaged ? std::string(text) : fields[i]);
+        return joined;
+    };
+    const std::string good = join(fields.size(), "");
+    check(decodePadAnalysisStatus(good, decoded), "reference status decodes");
+    const std::vector<std::pair<std::size_t, const char*>> damage{
+        {0, "AR2"}, {1, "x"}, {2, "64"}, {3, "-1"}, {4, "Q"}, {4, "RR"}, {5, "nan"}, {5, "41x"},
+        {5, ""}, {6, "1.5"}, {7, "z"}, {7, "ra"}, {7, ""}, {8, "12"}, {8, "-1"}, {9, "11"},
+        {9, "0"}, {10, "-0.1"}, {11, "12"}, {12, "2"}, {13, "inf"}, {14, "-2"}, {15, "2"},
+        {15, "0;0"}};
+    for (const auto& [index, text] : damage)
+        check(!decodePadAnalysisStatus(join(index, text), decoded),
+              "malformed analysis status is rejected");
+    check(!decodePadAnalysisStatus(good.substr(0U, good.size() - 2U), decoded) &&
+          !decodePadAnalysisStatus("", decoded), "truncated analysis status is rejected");
+}
+
 int main()
 {
     padDirectionRequestRoundTrip();
@@ -1063,6 +1138,7 @@ int main()
     chopProtocolRoundTrip();
     padStructureProtocolRoundTrip();
     playbackRequests();
+    padAnalysisProtocolRoundTrip();
     captureActionsRejectRestoredOrMalformedState();
     std::cout << "state codec tests passed\n";
 }

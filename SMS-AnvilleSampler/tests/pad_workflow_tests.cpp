@@ -3,6 +3,7 @@
 #include "ChopEditorProtocol.hpp"
 #include "MainSampleWorkflows.hpp"
 #include "PadFileActions.hpp"
+#include "PadAnalysisService.hpp"
 #include "PadStructureProtocol.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
@@ -15,6 +16,9 @@
 #include <fstream>
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cmath>
+#include <thread>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -2176,6 +2180,101 @@ void padDragCleanupAndGesture()
     check(!g.active(), "no pad, no gesture");
 }
 
+PadData sine(const double hz)
+{
+    PadData result;
+    result.sampleRate = 48000.0;
+    result.frames = 48000U;
+    result.peak = 0.5f;
+    result.stereo.resize(static_cast<std::size_t>(result.frames) * 2U);
+    for (std::uint32_t frame = 0U; frame < result.frames; ++frame) {
+        const auto value = static_cast<float>(
+            0.5 * std::sin(6.283185307179586 * hz * frame / 48000.0));
+        result.stereo[frame * 2U] = result.stereo[frame * 2U + 1U] = value;
+    }
+    return result;
+}
+
+void padAnalysisService()
+{
+    SamplerEngine engine(48000, 3.0);
+    std::mutex mutation;
+    Observer observer;
+    PadAnalysisService service(engine, mutation, observer);
+    int runs = 0;
+    std::size_t analysedFrames = 0U;
+    service.setAnalyzer([&](const std::span<const float> audio, const double rate,
+                            const std::atomic<bool>* cancel) {
+        ++runs;
+        analysedFrames = audio.size() / 2U;
+        check(mutation.try_lock(), "analysis runs outside the mutation mutex");
+        mutation.unlock();
+        return sms::analysis::analyzeSound(audio, rate, cancel);
+    });
+    std::uint64_t sequence = 0U;
+    const auto request = [&](const std::uint32_t pad) {
+        const auto before = observer.messages.size();
+        service.handleRequest(encodePadAnalysisRequest({++sequence, pad}));
+        check(observer.messages.size() == before + 1U &&
+              observer.messages.back().first == kPadAnalysisStatusKey, "one status per request");
+        PadAnalysisStatus status;
+        check(decodePadAnalysisStatus(observer.messages.back().second, status) &&
+              status.sequence == sequence && status.pad == pad, "status answers the request");
+        return status;
+    };
+    const auto noteIs = [](const PadAnalysisStatus& status, const double midi) {
+        return status.state == PadAnalysisState::ready && status.result.note.valid &&
+            std::abs(status.result.note.midi - midi) < 0.05;
+    };
+
+    service.handleRequest("AQ1;1;99");
+    check(observer.messages.empty(), "a malformed request is ignored");
+    check(request(3U).state == PadAnalysisState::noAudio && runs == 0, "empty pad has no audio");
+
+    check(engine.importPad(3U, sine(440.0)), "seed sine pad");
+    const auto first = request(3U);
+    check(noteIs(first, 69.0) && runs == 1 && analysedFrames == 48000U,
+          "sine pad reports its note");
+    check(first.generation == engine.padMetadata(3U).generation, "status carries the pad generation");
+    check(noteIs(request(3U), 69.0) && runs == 1, "an unchanged pad is served from the cache");
+
+    auto playback = engine.padPlaybackSettings(3U);
+    playback.start = 0.25f;
+    playback.end = 0.75f;
+    engine.setPadPlaybackSettings(3U, playback);
+    check(noteIs(request(3U), 69.0) && runs == 2 && analysedFrames == 24000U,
+          "a changed trim recomputes the trimmed region");
+
+    check(engine.importPad(3U, sine(220.0)), "replace pad audio");
+    check(noteIs(request(3U), 57.0) && runs == 3, "changed audio recomputes");
+
+    // A host restore waiting for the next block does not move the generation.
+    const auto restored = sine(329.6276);
+    check(engine.restorePad(3U, &restored, 0U), "stage a restored pad");
+    check(noteIs(request(3U), 64.0) && runs == 4, "staged audio is not served stale");
+    const auto again = sine(440.0);
+    check(engine.restorePad(3U, &again, 0U), "stage a second restore");
+    check(noteIs(request(3U), 69.0) && runs == 5, "a second staged restore recomputes");
+
+    // Teardown: cancel() releases a running analysis and nothing is published.
+    PadAnalysisService stopping(engine, mutation, observer);
+    std::atomic<bool> entered{false};
+    stopping.setAnalyzer([&](std::span<const float>, double, const std::atomic<bool>* cancel) {
+        entered.store(true);
+        while (!cancel->load()) std::this_thread::yield();
+        sms::analysis::SoundAnalysis result;
+        result.cancelled = true;
+        return result;
+    });
+    const auto before = observer.messages.size();
+    std::thread worker([&] { stopping.handleRequest("AQ1;1;3"); });
+    while (!entered.load()) std::this_thread::yield();
+    stopping.cancel();
+    worker.join();
+    stopping.handleRequest("AQ1;2;3");
+    check(observer.messages.size() == before, "a cancelled service publishes nothing");
+}
+
 int main()
 {
     clipboardSnapshotAndReplies();
@@ -2209,5 +2308,6 @@ int main()
     arrangeScenario();
     arrangeCompactsSlices();
     zeroCrossSnap();
+    padAnalysisService();
     std::cout << "Pad workflow tests passed\n";
 }

@@ -9,6 +9,7 @@
 #include "DSP/PeakMeter.hpp"
 #include "EditorSnapshotProtocol.hpp"
 #include "MainSampleWorkflows.hpp"
+#include "PadAnalysisService.hpp"
 #include "UndoController.hpp"
 #include "PadWorkflows.hpp"
 #include "PadDirectionRequest.hpp"
@@ -93,7 +94,8 @@ public:
           sampler_(getSampleRate()),
           controls_(initialLayout_, initialBankMode_),
           padWorkflows_(sampler_, controlDispatcher_, *this),
-          mainSampleWorkflows_(sampler_, controlDispatcher_, *this, padWorkflows_.mutationMutex())
+          mainSampleWorkflows_(sampler_, controlDispatcher_, *this, padWorkflows_.mutationMutex()),
+          padAnalysis_(sampler_, padWorkflows_.mutationMutex(), *this)
     {
         mainSampleWorkflows_.setHostBpm(&hostBpm_);
         mainSampleWorkflows_.setArrangeHook([this](const std::vector<midichopper::plugin::ArrangeMove>& moves,
@@ -133,6 +135,7 @@ public:
 
     ~MidichopperPlugin() override
     {
+        padAnalysis_.cancel(); // lets the worker join without finishing an analysis
         controlDispatcher_.shutdown();
 #if DISTRHO_PLUGIN_WANT_DIRECT_ACCESS
         controlWorker_.stop();
@@ -337,7 +340,9 @@ protected:
             std::strcmp(key, kAutoChopRequestKey) == 0 ||
             std::strcmp(key, kAutoChopStatusKey) == 0 ||
             std::strcmp(key, kUndoRequestKey) == 0 ||
-            std::strcmp(key, kUndoStatusKey) == 0)
+            std::strcmp(key, kUndoStatusKey) == 0 ||
+            std::strcmp(key, kPadAnalysisRequestKey) == 0 ||
+            std::strcmp(key, kPadAnalysisStatusKey) == 0)
             return String();
         return String();
     }
@@ -358,7 +363,8 @@ protected:
             std::strcmp(key, kPadStructureRequestKey) == 0 ||
             std::strcmp(key, kMainSampleRequestKey) == 0 ||
             std::strcmp(key, kAutoChopRequestKey) == 0 ||
-            std::strcmp(key, kUndoRequestKey) == 0;
+            std::strcmp(key, kUndoRequestKey) == 0 ||
+            std::strcmp(key, kPadAnalysisRequestKey) == 0;
         if (transient) {
             if (value == nullptr || value[0] == '\0')
                 return;
@@ -409,6 +415,13 @@ protected:
             return;
         }
         if (controls_.queueStateCommand(key, value))
+            return;
+        if (std::strcmp(key, kPadAnalysisRequestKey) == 0) {
+            if (value != nullptr)
+                padAnalysis_.handleRequest(value);
+            return;
+        }
+        if (std::strcmp(key, kPadAnalysisStatusKey) == 0)
             return;
         if (std::strcmp(key, kUndoRequestKey) == 0) {
             if (value != nullptr && std::strncmp(value, "colors:", 7) == 0) {
@@ -751,6 +764,15 @@ private:
             status.text = "Main sample action failed; retry";
             const auto encoded = midichopper::plugin::encodeMainSampleStatus(status);
             publishUiState(kMainSampleStatusKey, encoded.c_str());
+        } else if (std::strcmp(key, kPadAnalysisRequestKey) == 0) {
+            midichopper::plugin::PadAnalysisRequest request;
+            if (!midichopper::plugin::decodePadAnalysisRequest(value, request))
+                return;
+            midichopper::plugin::PadAnalysisStatus status; // state defaults to error
+            status.sequence = request.sequence;
+            status.pad = request.pad;
+            const auto encoded = midichopper::plugin::encodePadAnalysisStatus(status);
+            publishUiState(kPadAnalysisStatusKey, encoded.c_str());
         }
     }
 
@@ -955,6 +977,7 @@ private:
 #endif
     midichopper::plugin::PadWorkflows padWorkflows_;
     midichopper::plugin::MainSampleWorkflows mainSampleWorkflows_;
+    midichopper::plugin::PadAnalysisService padAnalysis_;
     using UndoKind = midichopper::plugin::UndoController::Kind;
     using UndoClock = midichopper::plugin::UndoController::Clock;
     midichopper::plugin::UndoController undo_{sampler_, mainSampleWorkflows_, *this, padColors_};

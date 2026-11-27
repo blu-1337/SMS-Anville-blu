@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SMSAnvilleSampler VERSION 1.2.87 LANGUAGES C CXX)
+project(SMSAnvilleSampler VERSION 1.2.88 LANGUAGES C CXX)
 set(ANVILLESAMPLER_PRERELEASE "beta.1")
 set(ANVILLESAMPLER_RELEASE_VERSION "${PROJECT_VERSION}")
 if(NOT ANVILLESAMPLER_PRERELEASE STREQUAL "")
@@ -147,6 +147,7 @@ set(ANVILLESAMPLER_DSP_SOURCES
   src/plugin/PluginMetadata.cpp
   src/plugin/MainSampleSession.cpp
   src/plugin/MainSampleWorkflows.cpp
+  src/plugin/PadAnalysisService.cpp
   src/plugin/PadFileActions.cpp
   src/plugin/PadWorkflows.cpp
   src/plugin/UndoController.cpp
@@ -462,6 +463,7 @@ if(BUILD_TESTING)
     src/plugin/MainSampleSession.cpp
     src/plugin/MainSampleWorkflows.cpp
     src/plugin/PadWorkflows.cpp
+    src/plugin/PadAnalysisService.cpp
     src/plugin/PadFileActions.cpp
     src/plugin/UndoController.cpp
     src/plugin/StateCodec.cpp
@@ -478,6 +480,10 @@ if(BUILD_TESTING)
   add_executable(anvillesampler_analysis_tests tests/analysis_tests.cpp)
   target_link_libraries(anvillesampler_analysis_tests PRIVATE sms_analysis)
   add_test(NAME analysis COMMAND anvillesampler_analysis_tests)
+
+  add_executable(anvillesampler_sound_analysis_tests tests/sound_analysis_tests.cpp)
+  target_link_libraries(anvillesampler_sound_analysis_tests PRIVATE sms_analysis)
+  add_test(NAME sound-analysis COMMAND anvillesampler_sound_analysis_tests)
 
   add_executable(anvillesampler_core_tests tests/core_tests.cpp)
   target_link_libraries(anvillesampler_core_tests PRIVATE anvillesampler_core)

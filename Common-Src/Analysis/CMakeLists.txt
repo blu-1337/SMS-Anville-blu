@@ -1,9 +1,15 @@
-# Shared audio analysis (onsets, tempo, slice selection). Free of DPF and of any
-# plug-in dependency; strict warnings apply to every consumer build.
+# Shared audio analysis (onsets, tempo, slice selection, note/chord/key detection).
+# Free of DPF and of any plug-in dependency; strict warnings apply to every consumer build.
 add_library(sms_analysis STATIC
+  Chroma.cpp
+  KeyChord.cpp
   OnsetAnalysis.cpp
+  PitchTracker.cpp
   RealFft.cpp
   SliceStrategies.cpp
+  SoundAnalysis.cpp
+  SoundPreprocess.cpp
+  SpectralTools.cpp
   TempoEstimate.cpp)
 target_include_directories(sms_analysis PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_compile_features(sms_analysis PUBLIC cxx_std_20)

@@ -64,5 +64,8 @@ inline constexpr const char* kUndoRequestKey = "undo_request";
 inline constexpr const char* kUndoStatusKey = "undo_status";
 // Main Sample spectrogram background (MG1), worker to UI.
 inline constexpr const char* kMainSampleSpectrogramKey = "main_sample_spectrogram";
+// Pad sound detection: AQ1 request to the worker, AR1 status to the UI (Docs/AI/SOUND-ANALYSIS.md).
+inline constexpr const char* kPadAnalysisRequestKey = "pad_analysis_request";
+inline constexpr const char* kPadAnalysisStatusKey = "pad_analysis_status";
 
 } // namespace midichopper::plugin

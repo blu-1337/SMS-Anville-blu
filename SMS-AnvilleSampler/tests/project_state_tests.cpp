@@ -300,6 +300,21 @@ void mainSampleClearAndMismatch()
     checkNoMainSample(plugin, "an empty session clears the main sample");
     plugin.deactivateIfNeeded();
 }
+
+// Newest keys sit at the end of the append-only state table and are never saved.
+void analysisStateMetadata()
+{
+    PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
+    const auto count = plugin.getStateCount();
+    check(plugin.getStateKey(count - 3U) == kMainSampleSpectrogramKey &&
+          plugin.getStateKey(count - 2U) == kPadAnalysisRequestKey &&
+          plugin.getStateKey(count - 1U) == kPadAnalysisStatusKey &&
+          plugin.getStateHints(count - 2U) == DISTRHO::kStateIsOnlyForDSP &&
+          plugin.getStateHints(count - 1U) == DISTRHO::kStateIsOnlyForUI &&
+          plugin.getStateValue(kPadAnalysisRequestKey) == "" &&
+          plugin.getStateValue(kPadAnalysisStatusKey) == "",
+          "pad analysis keys are appended last and save empty values");
+}
 } // namespace
 
 int main()
@@ -314,6 +329,7 @@ int main()
     legacyRestore();
     mainSampleKeyOrders();
     mainSampleClearAndMismatch();
+    analysisStateMetadata();
     DISTRHO::d_nextPluginIsDummy = false;
     std::cout << "Project state tests passed\n";
 }

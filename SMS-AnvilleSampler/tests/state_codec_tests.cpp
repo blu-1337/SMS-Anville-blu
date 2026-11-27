@@ -9,6 +9,7 @@
 #include "PlaybackRequest.hpp"
 #include "PadDirectionRequest.hpp"
 #include "PadAnalysisProtocol.hpp"
+#include "PadQuickEditCodec.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -1015,6 +1016,16 @@ void padDirectionRequestRoundTrip()
     reject(std::string(513U, 'x'));
 }
 
+void padTuneCodec()
+{
+    using namespace midichopper::plugin;
+    float tune = 7.0F;
+    check(decodePadTune(encodePadTune(0.23F).c_str(), tune) && tune == 0.23F, "pad tune round-trips");
+    check(decodePadTune("TN1;-24", tune) && tune == -24.0F, "range limit decodes");
+    for (const char* bad : {"", "TN1;", "TN1;25", "TN1;nan", "TN1;1;2", "TN1;1x", "TN2;1", "MX7;1"})
+        check(!decodePadTune(bad, tune) && tune == -24.0F, "malformed pad tune is rejected untouched");
+}
+
 void padAnalysisProtocolRoundTrip()
 {
     using namespace midichopper::plugin;
@@ -1039,8 +1050,9 @@ void padAnalysisProtocolRoundTrip()
     status.result.note.rangeLimited = true;
     status.result.chord = {true, 0, sms::analysis::ChordQuality::major7, 0.5F, false};
     status.result.key = {true, 9, true, 0.25F, 0, false};
+    status.tune = -3.25F;
     const auto encoded = encodePadAnalysisStatus(status);
-    check(encoded == "AR1;9;5;1234567890123;R;41.7702;0.8750;ar;0;4;0.5000;9;1;0.2500;0;0",
+    check(encoded == "AR1;9;5;1234567890123;R;41.7702;0.8750;ar;0;4;0.5000;9;1;0.2500;0;0;-3.2500",
           "analysis status wire format");
     PadAnalysisStatus decoded;
     check(decodePadAnalysisStatus(encoded, decoded) && decoded.sequence == 9U && decoded.pad == 5U &&
@@ -1052,7 +1064,7 @@ void padAnalysisProtocolRoundTrip()
           decoded.result.chord.quality == sms::analysis::ChordQuality::major7 &&
           !decoded.result.chord.varies && decoded.result.key.valid && decoded.result.key.tonic == 9 &&
           decoded.result.key.minor && decoded.result.key.runnerUpTonic == 0 &&
-          !decoded.result.key.runnerUpMinor, "analysis status round-trips");
+          !decoded.result.key.runnerUpMinor && decoded.tune == -3.25F, "analysis status round-trips");
 
     PadAnalysisStatus empty;
     empty.state = PadAnalysisState::noAudio;
@@ -1068,7 +1080,7 @@ void padAnalysisProtocolRoundTrip()
     }
 
     const std::vector<std::string> fields{"AR1", "9", "5", "1", "R", "41.0000", "0.5000", "-",
-                                          "0", "1", "0.5000", "9", "1", "0.2500", "0", "0"};
+                                          "0", "1", "0.5000", "9", "1", "0.2500", "0", "0", "0.0000"};
     const auto join = [&fields](const std::size_t damaged, const char* text) {
         std::string joined;
         for (std::size_t i = 0; i < fields.size(); ++i)
@@ -1081,17 +1093,18 @@ void padAnalysisProtocolRoundTrip()
         {0, "AR2"}, {1, "x"}, {2, "64"}, {3, "-1"}, {4, "Q"}, {4, "RR"}, {5, "nan"}, {5, "41x"},
         {5, ""}, {6, "1.5"}, {7, "z"}, {7, "ra"}, {7, ""}, {8, "12"}, {8, "-1"}, {9, "11"},
         {9, "0"}, {10, "-0.1"}, {11, "12"}, {12, "2"}, {13, "inf"}, {14, "-2"}, {15, "2"},
-        {15, "0;0"}};
+        {16, "25"}, {16, "x"}, {16, "0;0"}};
     for (const auto& [index, text] : damage)
         check(!decodePadAnalysisStatus(join(index, text), decoded),
               "malformed analysis status is rejected");
-    check(!decodePadAnalysisStatus(good.substr(0U, good.size() - 2U), decoded) &&
+    check(!decodePadAnalysisStatus(good.substr(0U, good.rfind(';')), decoded) &&
           !decodePadAnalysisStatus("", decoded), "truncated analysis status is rejected");
 }
 
 int main()
 {
     padDirectionRequestRoundTrip();
+    padTuneCodec();
     using namespace midichopper::plugin;
     legacyStateFixtures();
     floatV2WireFixture();

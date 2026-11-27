@@ -478,14 +478,18 @@ void padAnalysisRequests()
         return decoded;
     };
     const auto reply = [&](const PadAnalysisRequest &to, const double midi,
-                           const PadAnalysisState state = PadAnalysisState::ready) {
+                           const PadAnalysisState state = PadAnalysisState::ready,
+                           const float tune = 0.0F, const float confidence = 0.9F,
+                           const bool approximate = false) {
         PadAnalysisStatus status;
         status.sequence = to.sequence;
         status.pad = to.pad;
         status.state = state;
+        status.tune = tune;
         status.result.note.valid = state == PadAnalysisState::ready;
         status.result.note.midi = midi;
-        status.result.note.confidence = 0.9F;
+        status.result.note.confidence = confidence;
+        status.result.note.approximate = approximate;
         check(f.session.acceptState(kPadAnalysisStatusKey, encodePadAnalysisStatus(status).c_str()),
               "analysis status is handled");
     };
@@ -576,10 +580,59 @@ void padAnalysisRequests()
     settle();
     check(analysisRequests(f.host) == 9, "an unanswered request times out and is sent again");
 
+    // TUNE writes to the analysed pad (6, not the selected pad 3), only on a fresh result.
+    const auto tunes = [&] {
+        return std::count_if(f.host.messages.begin(), f.host.messages.end(),
+            [](const auto &m) { return m.second.rfind("TN1;", 0) == 0; });
+    };
+    f.session.acceptState("selected_pad", "3");
+    check(!f.session.tuneAvailable(), "no TUNE while the refresh is unanswered");
+    reply(request(), 41.77);
+    check(f.session.tuneAvailable() && f.session.state().selectedPad != 6, "TUNE on a fresh result");
+    history();
+    check(!f.session.tuneAvailable(), "a quiet change makes the result stale");
+    f.session.tuneNearest();
+    f.session.toggleTuneMenu();
+    check(tunes() == 0 && !f.session.analysis().tuneMenu, "a stale result is never applied");
+    settle();
+    check(!f.session.tuneAvailable(), "nor while the re-analysis is pending");
+    reply(request(), 41.77);
+    f.session.toggleTuneMenu();
+    history();
+    check(!f.session.analysis().tuneMenu, "a change closes the note list");
+    settle();
+    reply(request(), 41.77);
+    const auto otherTune = f.session.state().mixerSettings.tuneSemitones;
+    f.session.tuneNearest();
+    const auto written = f.host.latestMessage(kPadMixerStateKeys[6].c_str());
+    check(tunes() == 1 && written.rfind("TN1;0.2", 0) == 0 &&
+          f.session.state().mixerSettings.tuneSemitones == otherTune,
+          "TUNE writes the analysed pad and leaves the selected pad alone");
+    f.session.tuneNearest();
+    check(f.host.latestMessage(kPadMixerStateKeys[6].c_str()) == written && note() == "F#2 +0c",
+          "repeated TUNE writes the same value");
+    // The pad tune reported with a result is part of the sounding note.
+    history();
+    settle();
+    reply(request(), 41.77, PadAnalysisState::ready, 3.23F);
+    check(note() == "A2 +0c", "a re-analysis shows raw note plus pad tune");
+    f.session.setPadFavorite(6, true);
+    check(!f.session.tuneAvailable(), "favourites are not tuned");
+    f.session.setPadFavorite(6, false);
+    history();
+    settle();
+    reply(request(), 41.77, PadAnalysisState::ready, 0.0F, 0.3F, true);
+    check(!f.session.tuneAvailable(), "a weak approximate note is not offered");
+    history();
+    settle();
+    reply(request(), 41.77, PadAnalysisState::ready, 0.0F, 0.5F, true);
+    check(f.session.tuneAvailable(), "a firmer approximate note is");
+
+    const auto requests = analysisRequests(f.host);
     f.session.toggleAnalysis();
     reply(request(), 65.0);
     settle();
-    check(note() == "-" && analysisRequests(f.host) == 9 &&
+    check(note() == "-" && analysisRequests(f.host) == requests &&
           f.host.analysisPreferences == std::vector<bool>({true, false}), "OFF stops and is remembered");
 
     const auto path = std::filesystem::temp_directory_path() / "sms-analysis-preference.ini";

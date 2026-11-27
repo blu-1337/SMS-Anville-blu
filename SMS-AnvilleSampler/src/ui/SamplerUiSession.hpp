@@ -80,6 +80,15 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void setAnalysisEnabled(bool on);
     void toggleAnalysis();
     void requestAnalysisIfNeeded(Time now);
+    /** TUNE acts on the analysed pad, and only on a current, firm enough note. */
+    [[nodiscard]] bool tuneAvailable() const noexcept;
+    /** The analysis view for drawing, with `tunable` filled in. */
+    [[nodiscard]] PadAnalysisView analysisView() const noexcept;
+    void tuneNearest();
+    void toggleTuneMenu();
+    void closeTuneMenu();
+    /** Tunes to a pitch class (0 = C) in the nearest octave and closes the list. */
+    void chooseTuneNote(int pitchClass);
     /** Main Sample AUTO COLOR / CLEAR COLORS: slice zones and pad colours together. */
     void autoColorPads();
     [[nodiscard]] bool isFavoritePad(int pad) const noexcept;
@@ -180,6 +189,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void stopLocalPlayhead(bool holdFinal);
     void updateLocalPlayhead(Time now, float effectiveGlobalTune);
     void sendEditorSnapshotRequest(Time now);
+    void applyTune(float semitones);
     void commitEditorSnapshotIfReady();
     void refreshPendingEditorSnapshot() noexcept;
     bool parseEditorState(const char *key, const char *value);

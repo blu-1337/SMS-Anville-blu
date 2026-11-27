@@ -18,7 +18,11 @@ struct PadAnalysisView {
     bool on = false;
     bool busy = false;  // waiting for a result, or the pad is recording
     bool valid = false; // result belongs to the followed pad
-    sms::analysis::SoundAnalysis result{};
+    sms::analysis::SoundAnalysis result{}; // of the untuned audio
+    float tune = 0.0F;     // the followed pad's TUNE
+    bool stale = false;    // the shown values await a refresh: never tune from them
+    bool tuneMenu = false; // the note list under TUNE is open
+    bool tunable = false;  // filled for drawing: TUNE can be used
 };
 
 /** Readout text; field 0 note, 1 chord, 2 key. "~" marks a weak estimate. */
@@ -27,7 +31,11 @@ struct PadAnalysisView {
     if (!view.on) return "-";
     if (view.busy) return "...";
     if (!view.valid) return "-";
-    if (field == 0) return sms::analysis::noteText(view.result.note); // adds its own "~"
+    if (field == 0) {
+        auto sounding = view.result.note;
+        sounding.midi += view.tune;
+        return sms::analysis::noteText(sounding); // adds its own "~"
+    }
     const auto& chord = view.result.chord;
     const auto& key = view.result.key;
     const bool weak = field == 1 ? chord.valid && chord.confidence < 0.75F
@@ -68,9 +76,20 @@ public:
         if (!fView.on || fPad < 0) return false;
         fDirty = true;
         fDue = now + kDebounce;
-        if (!showBusy || fView.busy) return false;
-        fView.busy = true;
-        return true;
+        const bool changed = !fView.stale || fView.tuneMenu || (showBusy && !fView.busy);
+        fView.stale = true;
+        fView.tuneMenu = false;
+        if (showBusy) fView.busy = true;
+        return changed;
+    }
+
+    void setTuneMenu(const bool open) noexcept { fView.tuneMenu = open; }
+
+    /** A local or pushed pad edit: newer than the tune any reply in flight carries. */
+    void setTune(const float semitones) noexcept
+    {
+        fView.tune = semitones;
+        fTuneEdited = true;
     }
 
     /** A reply may have been lost: ask again. */
@@ -92,6 +111,9 @@ public:
             fPad = pad;
             fView.valid = false;
             fView.busy = false;
+            fView.stale = false;
+            fView.tuneMenu = false;
+            fView.tune = 0.0F;
             fDirty = false;
             changed = true;
             if (pad >= 0) static_cast<void>(invalidate(now, true));
@@ -101,6 +123,7 @@ public:
         if (!fDirty || fInFlight || fPad < 0 || now < fDue) return std::nullopt;
         fDirty = false;
         fInFlight = true;
+        fTuneEdited = false;
         fTimeout = now + kReplyTimeout;
         fSequence = nextEditorSnapshotSequence();
         return plugin::PadAnalysisRequest{fSequence, static_cast<std::uint32_t>(fPad)};
@@ -116,6 +139,8 @@ public:
         fView.busy = status.state == plugin::PadAnalysisState::busy;
         fView.valid = status.state == plugin::PadAnalysisState::ready;
         fView.result = status.result;
+        fView.stale = false;
+        if (!fTuneEdited) fView.tune = status.tune;
         return true;
     }
 
@@ -124,6 +149,7 @@ private:
     int fPad = -1;
     bool fDirty = false;
     bool fInFlight = false;
+    bool fTuneEdited = false;
     std::uint64_t fSequence = 0U;
     Time fDue{};
     Time fTimeout{};

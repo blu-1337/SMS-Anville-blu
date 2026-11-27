@@ -42,7 +42,7 @@ inline constexpr sms::ui::Rect mainPanel{24.0f, 96.0f, 934.0f, 596.0f};
 inline constexpr sms::ui::Rect sidePanel{974.0f, 96.0f, 266.0f, 596.0f};
 inline constexpr sms::ui::Rect menuButton{1208.0f, 25.0f, 32.0f, 32.0f};
 // Sound detection panel in the header: right of the logo and its glow (before x 540), left of the
-// PLAY / ARMED LED (x 1146), level with the menu button. TUNE and its caret are inert for now.
+// PLAY / ARMED LED (x 1146), level with the menu button.
 inline constexpr sms::ui::Rect analysisPanel{560.0f, 25.0f, 576.0f, 32.0f};
 inline constexpr sms::ui::Rect analysisToggle{560.0f, 25.0f, 48.0f, 32.0f};
 inline constexpr sms::ui::Rect analysisNote{614.0f, 25.0f, 128.0f, 32.0f};
@@ -51,6 +51,13 @@ inline constexpr sms::ui::Rect analysisKey{854.0f, 25.0f, 108.0f, 32.0f};
 inline constexpr sms::ui::Rect analysisConfidence{966.0f, 25.0f, 24.0f, 32.0f};
 inline constexpr sms::ui::Rect tuneButton{994.0f, 25.0f, 96.0f, 32.0f};
 inline constexpr sms::ui::Rect tuneDropdown{1094.0f, 25.0f, 36.0f, 32.0f};
+// Note list under TUNE: 12 pitch classes from C, three columns of four.
+inline constexpr sms::ui::Rect tuneDropdownBox{994.0f, 59.0f, 3.0f * 56.0f + 8.0f, 4.0f * 24.0f + 8.0f};
+[[nodiscard]] constexpr sms::ui::Rect tuneNoteItem(const int index) noexcept
+{
+    return {tuneDropdownBox.x + 4.0f + static_cast<float>(index % 3) * 56.0f,
+            tuneDropdownBox.y + 4.0f + static_cast<float>(index / 3) * 24.0f, 56.0f, 24.0f};
+}
 // Undo / redo of pad and slice edits: a single pair at the right end of the Main Sample header
 // button row (same y and height as PLAY / LOOP / - / + / FIT / SNAP), right-aligned to the
 // waveform window's right edge (x 936).

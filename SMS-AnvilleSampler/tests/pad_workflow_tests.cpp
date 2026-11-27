@@ -2256,6 +2256,14 @@ void padAnalysisService()
     check(engine.restorePad(3U, &again, 0U), "stage a second restore");
     check(noteIs(request(3U), 69.0) && runs == 5, "a second staged restore recomputes");
 
+    // The analysis is of the untuned audio: a retune changes neither the note nor the cache.
+    auto mixer = engine.padMixerSettings(3U);
+    mixer.tuneSemitones = 3.25F;
+    engine.setPadMixerSettings(3U, mixer);
+    const auto tuned = request(3U);
+    check(noteIs(tuned, 69.0) && runs == 5 && tuned.tune == 3.25F,
+          "a retuned pad reports the raw note and its tune from the cache");
+
     // Teardown: cancel() releases a running analysis and nothing is published.
     PadAnalysisService stopping(engine, mutation, observer);
     std::atomic<bool> entered{false};
@@ -2275,8 +2283,53 @@ void padAnalysisService()
     check(observer.messages.size() == before, "a cancelled service publishes nothing");
 }
 
+// TUNE writes are one undo step each, whatever happened within the coalescing window.
+void padTuneUndoSteps()
+{
+    MainSampleFixture fixture;
+    std::array<std::atomic<int>, kPadCount> colors{};
+    std::mutex mutation;
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    check(fixture.engine.importPad(4U, sine(440.0)), "seed pad");
+    const auto now = UndoController::Clock::now();
+    const auto at = [&](const int ms) { return now + std::chrono::milliseconds(ms); };
+    // As in the plug-in: writes are staged for the next block, so read the snapshot.
+    const auto current = [&] {
+        sms::dsp::SamplePlaybackSettings playback;
+        sms::dsp::SampleMixerSettings mixer;
+        fixture.engine.snapshotPadSettings(4U, playback, mixer);
+        return mixer;
+    };
+    const auto tune = [&] { return current().tuneSemitones; };
+    const auto gainNow = [&] { return current().gainDecibels; };
+    const auto gain = [&](const float value, const int ms) {
+        auto mixer = current();
+        mixer.gainDecibels = value;
+        undo.record(UndoController::Kind::settings, at(ms),
+                    [&] { fixture.engine.restorePadMixerSettings(4U, mixer); });
+    };
+    gain(-6.0F, 0);
+    undo.applyPadTune(4U, 0.25F, mutation, at(50));
+    undo.applyPadTune(4U, 3.25F, mutation, at(100));
+    check(undo.undoDepth() == 3U && tune() == 3.25F && gainNow() == -6.0F,
+          "knob edit and two quick TUNEs are three steps");
+    check(fixture.observer.latest(kPadMixerStateKeys[4].c_str()) == encodeMixerSettings(current()),
+          "the new mixer is published");
+    undo.applyPadTune(4U, 3.25F, mutation, at(150));
+    check(undo.undoDepth() == 3U, "repeating the same TUNE adds no step");
+    gain(-9.0F, 200);
+    check(undo.undoDepth() == 4U, "a knob edit right after TUNE is its own step");
+    undo.undo();
+    check(tune() == 3.25F && gainNow() == -6.0F, "undo the knob only");
+    undo.undo();
+    check(tune() == 0.25F, "undo the second TUNE");
+    undo.undo();
+    check(tune() == 0.0F && gainNow() == -6.0F, "undo the first TUNE");
+}
+
 int main()
 {
+    padTuneUndoSteps();
     clipboardSnapshotAndReplies();
     resetClearsPadsAndClipboard();
     clipboardEmptyAndSamePadReplies();

@@ -525,6 +525,11 @@ protected:
                 }
                 return;
             }
+            float tune = 0.0F;
+            if (midichopper::plugin::decodePadTune(value, tune)) {
+                undo_.applyPadTune(pad, tune, padWorkflows_.mutationMutex(), UndoClock::now());
+                return;
+            }
             sms::dsp::SampleMixerSettings settings;
             if (midichopper::plugin::decodeMixerSettings(value, settings)) {
                 undo_.record(UndoKind::settings, UndoClock::now(), [&] {

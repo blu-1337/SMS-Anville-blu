@@ -618,12 +618,87 @@ void analysisToggleRouting()
     f.states.clear();
     f.input.mouse(center(L::tuneButton), InputButton::left, true);
     f.input.mouse(center(L::tuneDropdown), InputButton::left, true);
-    check(f.states.empty(), "TUNE does nothing yet");
+    check(f.states.empty(), "TUNE does nothing without a result");
+}
+
+// Detection ON with an F#2 -23c result for the selected pad of a ready editor.
+void analysed(Fixture& f)
+{
+    using namespace midichopper::plugin;
+    f.readyEditor();
+    f.session.toggleAnalysis();
+    const auto start = SamplerUiSession::Clock::now() + std::chrono::seconds(1);
+    f.session.idle(start, 0.0f);
+    f.session.idle(start + std::chrono::milliseconds(200), 0.0f);
+    const auto sent = std::find_if(f.states.rbegin(), f.states.rend(), [](const auto& state) {
+        return state.first == "pad_analysis_request";
+    });
+    check(sent != f.states.rend(), "analysis is requested");
+    PadAnalysisRequest request;
+    check(decodePadAnalysisRequest(sent->second, request) && request.pad == 0U, "for the editor pad");
+    PadAnalysisStatus status;
+    status.sequence = request.sequence;
+    status.pad = request.pad;
+    status.state = PadAnalysisState::ready;
+    status.result.note.valid = true;
+    status.result.note.midi = 41.77;
+    status.result.note.confidence = 0.9F;
+    f.session.acceptState("pad_analysis_status", encodePadAnalysisStatus(status).c_str());
+    f.states.clear();
+}
+
+void tuneRouting()
+{
+    namespace L = midichopper::ui::layout;
+    {
+        Fixture f;
+        analysed(f);
+        f.click(center(L::tuneButton));
+        check(f.states.size() == 1U && f.states[0].first == "pad_mix_01" &&
+              f.states[0].second.rfind("TN1;0.2", 0) == 0, "TUNE sends exactly one pad_mix write");
+        check(std::abs(f.session.state().mixerSettings.tuneSemitones - 0.23F) < 1.0e-4F,
+              "the Sample Editor TUNE knob follows");
+        check(midichopper::ui::analysisReadout(f.session.analysis(), 0) == "F#2 +0c",
+              "the sounding note is shown");
+    }
+    Fixture f;
+    analysed(f);
+    f.click(center(L::tuneDropdown));
+    check(f.session.analysis().tuneMenu && f.states.empty(), "the caret opens the note list");
+    // Outside clicks (left or right) only close the list.
+    for (const auto button : {InputButton::left, InputButton::right}) {
+        if (!f.session.analysis().tuneMenu) f.click(center(L::tuneDropdown));
+        f.click(center(L::editorBank(1)), button);
+        check(!f.session.analysis().tuneMenu && f.session.state().editorMode && f.states.empty() &&
+              f.session.state().bank == 0 &&
+              !f.session.padActions().menuOpen(), "an outside click closes the list and goes no further");
+    }
+    f.click(center(L::tuneDropdown));
+    f.click(center(L::analysisToggle));
+    check(f.session.analysis().on && !f.session.analysis().tuneMenu, "even on the detection toggle");
+    f.click(center(L::tuneDropdown));
+    check(f.input.keyboard(InputKey::escape, true) && !f.session.analysis().tuneMenu &&
+          f.session.state().editorMode, "Escape closes the list only");
+    f.click(center(L::tuneDropdown));
+    f.click(center(L::tuneDropdown));
+    check(!f.session.analysis().tuneMenu, "the caret closes the list again");
+    f.session.toggleDropdown(1);
+    f.click(center(L::tuneDropdown));
+    check(!f.session.analysis().tuneMenu && f.session.dropdown() == 0,
+          "an open editor list swallows the click");
+    f.states.clear();
+    f.click(center(L::tuneDropdown));
+    f.click(center(L::tuneNoteItem(9)));
+    check(f.states.size() == 1U && f.states[0].first == "pad_mix_01" &&
+          f.states[0].second.rfind("TN1;3.2", 0) == 0 && !f.session.analysis().tuneMenu,
+          "a note pick sends one write and closes the list");
+    check(midichopper::ui::analysisReadout(f.session.analysis(), 0) == "A2 +0c", "the picked note sounds");
 }
 
 int main()
 {
     analysisToggleRouting();
+    tuneRouting();
     padOwnershipAndSpace();
     padQuickEditGestures();
     undoRedoButtonsAndKeys();

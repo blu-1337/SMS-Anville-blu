@@ -44,11 +44,11 @@ void drawAnalysisPanel(const ViewRenderContext& ctx)
                                                : colors.contentSecondary.withAlpha(colors.disabledAlpha));
     ctx.canvas.fill();
 
-    // TUNE arrives in a later version: drawn disabled, with no hit target.
     sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::tuneButton, "TUNE", false, colors.controlAccent,
-                              false, false);
+                              hovered(ctx, InteractiveType::tuneButton), view.tunable);
     const auto caret = uiLayout::tuneDropdown;
-    sms::ui::dpf::drawSegment(ctx.canvas, caret, "", false, colors.controlAccent, false, false);
+    sms::ui::dpf::drawSegment(ctx.canvas, caret, "", view.tuneMenu, colors.controlAccent,
+                              hovered(ctx, InteractiveType::tuneDropdown), view.tunable);
     const float x = caret.x + caret.width * 0.5f;
     const float y = caret.y + caret.height * 0.5f;
     ctx.canvas.beginPath();
@@ -56,8 +56,46 @@ void drawAnalysisPanel(const ViewRenderContext& ctx)
     ctx.canvas.lineTo(x + 5.0f, y - 2.0f);
     ctx.canvas.lineTo(x, y + 4.0f);
     ctx.canvas.closePath();
-    ctx.canvas.fillColor(colors.contentSecondary.withAlpha(colors.disabledAlpha));
+    ctx.canvas.fillColor(view.tunable
+        ? colors.contentPrimary : colors.contentSecondary.withAlpha(colors.disabledAlpha));
     ctx.canvas.fill();
+}
+
+// Drawn after the view so it lies over it; lit cell = the sounding note's pitch class.
+void drawTuneMenu(const ViewRenderContext& ctx)
+{
+    const auto& view = ctx.state.analysis;
+    if (!view.tuneMenu)
+        return;
+    const auto& colors = sms::ui::dpf::theme();
+    const auto box = uiLayout::tuneDropdownBox;
+    ctx.canvas.beginPath();
+    ctx.canvas.roundedRect(box.x, box.y, box.width, box.height, 5.0f);
+    ctx.canvas.fillColor(colors.recess);
+    ctx.canvas.fill();
+    ctx.canvas.strokeColor(colors.controlAccent);
+    ctx.canvas.strokeWidth(1.5f);
+    ctx.canvas.stroke();
+    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
+    ctx.canvas.fontSize(11.0f);
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    const long nearest = std::lround(view.result.note.midi + view.tune);
+    const int current = static_cast<int>(((nearest % 12) + 12) % 12);
+    for (int item = 0; item < 12; ++item) {
+        const auto cell = uiLayout::tuneNoteItem(item);
+        const bool selected = item == current;
+        const bool hot = ctx.state.hoveredTarget.is(static_cast<int>(InteractiveType::tuneNoteItem)) &&
+                         ctx.state.hoveredTarget.index == item;
+        if (selected || hot) {
+            ctx.canvas.beginPath();
+            ctx.canvas.roundedRect(cell.x + 1.0f, cell.y + 1.0f, cell.width - 2.0f, cell.height - 2.0f, 4.0f);
+            ctx.canvas.fillColor(colors.controlAccent.withAlpha(selected ? 0.35f : 0.18f));
+            ctx.canvas.fill();
+        }
+        ctx.canvas.fillColor(selected ? colors.controlAccent : colors.contentPrimary);
+        text(ctx, cell.x + cell.width * 0.5f, cell.y + cell.height * 0.5f,
+             sms::analysis::kPitchClassNames[static_cast<std::size_t>(item)], nullptr);
+    }
 }
 
 } // namespace midichopper::ui::rendering

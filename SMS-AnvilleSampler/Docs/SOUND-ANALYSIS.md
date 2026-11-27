@@ -14,8 +14,23 @@ account, not saved in projects. It stays available in every view.
 - The dot is green for high confidence, yellow for medium and grey otherwise. It
   follows the note, or else the chord or key.
 
-Values update after the pad, its audio or its Start/End changes. Mixer settings
-such as TUNE and reverse playback do not change what is detected. At most the
-first 30 seconds of the region are analysed.
+Values update after the pad, its audio or its Start/End changes. Detection
+listens to the stored audio; reverse playback and mixer settings do not change
+it. **NOTE** then adds the pad's own TUNE, so it shows what the pad sounds like.
+CHORD and KEY stay those of the stored audio, and global TUNE is not included.
+At most the first 30 seconds of the region are analysed.
 
-The **TUNE** button and its arrow in this panel are not available yet.
+## Tune a pad
+
+Both controls change the TUNE knob of the pad shown in the panel, which may not
+be the selected pad.
+
+- **TUNE** moves the sounding note to the nearest semitone, so NOTE reads +0c.
+- The arrow opens a list of notes. Picking one tunes the pad to that note in the
+  nearest octave (a tie goes down). If that would pass the TUNE range of -24 to
+  +24 semitones, the next octave inside it is used.
+- A click outside the list or **Escape** closes it without doing anything else.
+
+Each use is one **Undo** step. Both controls are greyed out while detection is
+off or refreshing, without a note, for a very uncertain **~** note, for a
+favorite pad and in the Cut Point Editor.

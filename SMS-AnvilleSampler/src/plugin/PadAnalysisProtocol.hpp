@@ -30,6 +30,7 @@ struct PadAnalysisStatus {
     PadAnalysisState state = PadAnalysisState::error;
     // The wire omits silent, cancelled, hz (derived from midi) and the tuning offset.
     sms::analysis::SoundAnalysis result{};
+    float tune = 0.0F; // the pad's TUNE in semitones; the result is of the untuned audio
 };
 
 namespace pad_analysis_detail {
@@ -126,6 +127,7 @@ inline constexpr std::string_view kNoteFlags = "agrv"; // approximate, gliding, 
     out += ";" + std::to_string(key.valid ? key.tonic : -1) + ";" + (key.minor ? "1" : "0") + ";" +
         unit(key.confidence) + ";" + std::to_string(key.runnerUpTonic) + ";" +
         (key.runnerUpMinor ? "1" : "0");
+    out += ";" + decimal(std::isfinite(status.tune) ? std::clamp(status.tune, -24.0F, 24.0F) : 0.0F);
     return out;
 }
 
@@ -175,13 +177,15 @@ inline constexpr std::string_view kNoteFlags = "agrv"; // approximate, gliding, 
         chord.varies = set[3];
     }
     int quality = 0;
+    double tune = 0.0;
     if (!pitchClass(fields, chord.root) || !fields.number(quality) || quality < 0 ||
         quality > static_cast<int>(ChordQuality::power) || (chord.root >= 0) != (quality != 0) ||
         !confidence(fields, chord.confidence) || !pitchClass(fields, key.tonic) ||
         !flag(fields, key.minor) || !confidence(fields, key.confidence) ||
         !pitchClass(fields, key.runnerUpTonic) || !flag(fields, key.runnerUpMinor) ||
-        !fields.finished())
+        !number(fields, -24.0, 24.0, tune) || !fields.finished())
         return false;
+    decoded.tune = static_cast<float>(tune);
     chord.quality = static_cast<ChordQuality>(quality);
     chord.valid = chord.root >= 0;
     key.valid = key.tonic >= 0;

@@ -3,6 +3,8 @@
 #include "BankModePreference.hpp"
 #include "LayoutPreference.hpp"
 #include "LevelMeter.hpp"
+#include "TuneTarget.hpp"
+#include "../plugin/PadQuickEditCodec.hpp"
 #include "State/SampleMixerSettingsCodec.hpp"
 #include "State/SamplePlaybackSettingsCodec.hpp"
 #include "../plugin/CaptureActionProtocol.hpp"
@@ -1147,6 +1149,72 @@ void SamplerUiSession::requestAnalysisIfNeeded(const Time now)
         fHost.repaintUi();
 }
 
+bool SamplerUiSession::tuneAvailable() const noexcept
+{
+    const auto &view = fAnalysis.view();
+    const auto &note = view.result.note;
+    return fCapabilities.stateTransport && view.on && view.valid && !view.busy && !view.stale &&
+           fAnalysis.pad() >= 0 && !isFavoritePad(fAnalysis.pad()) && !fChopEditor.active() &&
+           !(fState.mainSampleMode && fMainSample.confirmPending()) && note.valid &&
+           !(note.approximate && note.confidence < 0.4F);
+}
+
+PadAnalysisView SamplerUiSession::analysisView() const noexcept
+{
+    auto view = fAnalysis.view();
+    view.tunable = tuneAvailable();
+    view.tuneMenu = view.tuneMenu && view.tunable;
+    return view;
+}
+
+void SamplerUiSession::tuneNearest()
+{
+    if (!tuneAvailable())
+        return;
+    applyTune(tuneToNearest(fAnalysis.view().result.note.midi, fAnalysis.view().tune));
+}
+
+void SamplerUiSession::toggleTuneMenu()
+{
+    fAnalysis.setTuneMenu(!fAnalysis.view().tuneMenu && tuneAvailable());
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::closeTuneMenu()
+{
+    if (!fAnalysis.view().tuneMenu)
+        return;
+    fAnalysis.setTuneMenu(false);
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::chooseTuneNote(const int pitchClass)
+{
+    closeTuneMenu();
+    if (pitchClass < 0 || pitchClass >= 12 || !tuneAvailable())
+        return;
+    applyTune(tuneToPitchClass(fAnalysis.view().result.note.midi, fAnalysis.view().tune, pitchClass));
+}
+
+void SamplerUiSession::applyTune(const float semitones)
+{
+    // The analysed pad, not necessarily the selected one. Only the tune is sent, so the
+    // plugin keeps that pad's other settings, which the UI may not know.
+    const int pad = fAnalysis.pad();
+    fAnalysis.setTune(semitones);
+    fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(pad)].c_str(),
+                      midichopper::plugin::encodePadTune(semitones));
+    if (pad == fState.selectedPad) {
+        if (fState.mixerSettingsPad == pad) {
+            fState.mixerSettings.tuneSemitones = semitones;
+            refreshPendingEditorSnapshot();
+        } else if (fEditorSnapshot.pending()) {
+            sendEditorSnapshotRequest(Clock::now()); // an older reply would show the old tune
+        }
+    }
+    fHost.repaintUi();
+}
+
 void SamplerUiSession::commitPlaybackSettings(const sms::dsp::SamplePlaybackSettings &settings)
 {
     // Only the trim changes what is analysed.
@@ -1246,6 +1314,8 @@ void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &
     fWaveformDetail.setReversed(
         fState.editorMode && !fChopEditor.active() && effectiveSampleReverse(), Clock::now());
     fState.mixerSettingsPad = fState.selectedPad;
+    if (fState.selectedPad == fAnalysis.pad())
+        fAnalysis.setTune(fState.mixerSettings.tuneSemitones);
     if (fCapabilities.stateTransport) {
         const std::string encoded = sms::state::encodeSampleMixerSettings(fState.mixerSettings);
         fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(fState.selectedPad)].c_str(),
@@ -1272,8 +1342,8 @@ bool SamplerUiSession::parseEditorState(const char *const key, const char *const
         sms::dsp::SamplePlaybackSettings decoded;
         if (sms::state::decodeSamplePlaybackSettings(value, decoded)) {
             const int decodedPad = static_cast<int>(pad);
-            if (decodedPad == fAnalysis.pad())
-                static_cast<void>(fAnalysis.invalidate(Clock::now(), false));
+            if (decodedPad == fAnalysis.pad() && fAnalysis.invalidate(Clock::now(), false))
+                fHost.repaintUi();
             if (!fEditorSnapshot.pending() && decodedPad == fState.selectedPad) {
                 fState.editorSettings = decoded;
                 fState.editorSettingsPad = decodedPad;
@@ -1294,6 +1364,10 @@ bool SamplerUiSession::parseMixerState(const char *const key, const char *const 
         sms::dsp::SampleMixerSettings decoded;
         if (sms::state::decodeSampleMixerSettings(value, decoded)) {
             const int decodedPad = static_cast<int>(pad);
+            if (decodedPad == fAnalysis.pad()) {
+                fAnalysis.setTune(decoded.tuneSemitones);
+                fHost.repaintUi();
+            }
             if (!fEditorSnapshot.pending() && decodedPad == fState.selectedPad) {
                 fState.mixerSettings = decoded;
                 fState.mixerSettingsPad = decodedPad;

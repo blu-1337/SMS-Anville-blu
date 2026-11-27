@@ -40,10 +40,9 @@ public:
 
 private:
     struct Entry {
-        std::uint64_t generation = 0U;
         float start = 0.0F;
         float end = 1.0F;
-        // Staged host restores replace audio without moving the generation.
+        // Covers every analysed sample and the rate.
         std::uint64_t audioHash = 0U;
         sms::analysis::SoundAnalysis result{};
     };

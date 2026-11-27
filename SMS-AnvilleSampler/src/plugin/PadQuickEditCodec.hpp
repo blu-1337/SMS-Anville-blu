@@ -81,4 +81,25 @@ struct PadQuickEditDelta {
     return sms::dsp::sanitize(settings);
 }
 
+/** Header TUNE, also sent on the pad's mixer key: "TN1;<semitones>", the absolute pad tune.
+ * Only the tune changes, and it is always its own undo step. */
+[[nodiscard]] inline std::string encodePadTune(const float semitones)
+{
+    char text[32];
+    std::snprintf(text, sizeof(text), "TN1;%.9g", static_cast<double>(semitones));
+    return text;
+}
+
+[[nodiscard]] inline bool decodePadTune(const char* const value, float& semitones) noexcept
+{
+    if (value == nullptr || std::strncmp(value, "TN1;", 4) != 0) return false;
+    char* stop = nullptr;
+    const float parsed = std::strtof(value + 4, &stop);
+    if (stop == value + 4 || *stop != '\0' || !std::isfinite(parsed) ||
+        parsed < sms::dsp::kMinimumTuneSemitones || parsed > sms::dsp::kMaximumTuneSemitones)
+        return false;
+    semitones = parsed;
+    return true;
+}
+
 } // namespace midichopper::plugin

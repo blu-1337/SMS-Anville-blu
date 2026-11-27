@@ -106,6 +106,9 @@ enum class InteractiveType : int {
     overviewWaveform,
     mainSampleRangeHandle, // index 0 = range start, 1 = range end
     analysisToggle,
+    tuneButton,
+    tuneDropdown,
+    tuneNoteItem, // index = pitch class, 0 = C
 };
 
 class PadPressTracker {
@@ -484,6 +487,8 @@ struct InteractionContext {
     bool mainSampleConfirm = false;
     bool mainSampleModeMenu = false; // auto-chop mode list is open
     int dropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
+    bool tuneEnabled = false; // header TUNE and its caret have a note to work with
+    bool tuneMenu = false;    // the note list under TUNE is open
     std::span<const plugin::MainSampleSlice> mainSampleSlices;
     sms::ui::waveform::Viewport mainSampleViewport;
     std::uint32_t mainSampleRangeStart = 0U; // source range, same frames as the slices
@@ -625,6 +630,15 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
 {
     namespace uiLayout = layout;
 
+    if (context.tuneMenu) { // modal: everything else only closes it
+        for (int item = 0; item < 12; ++item)
+            if (uiLayout::tuneNoteItem(item).contains(point))
+                return target(InteractiveType::tuneNoteItem, item);
+        if (uiLayout::tuneDropdown.contains(point))
+            return target(InteractiveType::tuneDropdown);
+        return sms::ui::kNoInteractiveTarget;
+    }
+
     if (context.globalControlMenu.active()) {
         const auto& menu = context.globalControlMenu;
         const int row = menu.submenu.hit(point);
@@ -706,6 +720,10 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
 
     if (uiLayout::analysisToggle.contains(point))
         return target(InteractiveType::analysisToggle); // the header is shared by every view
+    if (context.tuneEnabled && uiLayout::tuneButton.contains(point))
+        return target(InteractiveType::tuneButton);
+    if (context.tuneEnabled && uiLayout::tuneDropdown.contains(point))
+        return target(InteractiveType::tuneDropdown);
 
     for (int level = 0; level < 2; ++level) {
         if (uiLayout::levelValueLabel(level).contains(point))

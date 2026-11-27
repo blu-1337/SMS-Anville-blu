@@ -11,7 +11,7 @@ Note, chord and key of one pad's trimmed region, shown in the header panel ([use
 State keys `pad_analysis_request` (DSP only) and `pad_analysis_status` (UI only) end the state table; append later keys after them. Both read back empty and are never saved. [Codec](../../SMS-AnvilleSampler/src/plugin/PadAnalysisProtocol.hpp):
 
 - Request: `AQ1;seq;pad`, pad 0-63; the UI picks the pad.
-- Status: `AR1;seq;pad;generation;state;noteMidi;noteConf;flags;chordRoot;quality;chordConf;keyTonic;minor;keyConf;runnerTonic;runnerMinor`.
+- Status: `AR1;seq;pad;generation;state;noteMidi;noteConf;flags;chordRoot;quality;chordConf;keyTonic;minor;keyConf;runnerTonic;runnerMinor;tune`. `tune` is the pad's TUNE (-24 to 24); the result is always of the untuned audio.
 - `state`: `R` ready, `B` pad is recording, `N` empty pad or empty region, `E` worker failure or full queue (generation 0).
 - `noteMidi` is `-` without a note. `flags` is `-` or letters in this order: `a` approximate, `g` gliding, `r` range limited, `v` chord varies.
 - Chord root and key tonic are pitch classes (0 = C), -1 when invalid. `quality` is the `ChordQuality` value, 0 exactly when the root is -1.
@@ -29,11 +29,11 @@ Decoders reject malformed input; a malformed request gets no reply.
 
 ## Cache
 
-One in-memory entry per pad, keyed by storage generation, trim start/end and a hash of every analysed sample. The hash is needed because a staged host restore replaces audio without moving the generation. Mixer edits also move the generation, so they recompute. Reverse is ignored. Nothing is persisted.
+One in-memory entry per pad, keyed by trim start/end and a hash of every analysed sample and the rate. Not by storage generation: mixer edits move it without changing audio, and a staged host restore does the opposite. So TUNE and its undo are served from the cache. Reverse is ignored. Nothing is persisted.
 
 ## Header panel
 
-[Rects](../../SMS-AnvilleSampler/src/ui/MidichopperLayout.hpp): `analysisPanel` {560,25,576,32}, between the logo glow and the PLAY LED, in every view. Skin title translations much longer than the default would push the logo under it. [Renderer](../../SMS-AnvilleSampler/src/ui/AnalysisPanelRenderer.cpp). TUNE and its caret are drawn disabled and have no hit target. ON/OFF is `analysis` in the user defaults file ([preference](../../SMS-AnvilleSampler/src/plugin/AnalysisPreference.hpp)), default OFF.
+[Rects](../../SMS-AnvilleSampler/src/ui/MidichopperLayout.hpp): `analysisPanel` {560,25,576,32}, between the logo glow and the PLAY LED, in every view. Skin title translations much longer than the default would push the logo under it. [Renderer](../../SMS-AnvilleSampler/src/ui/AnalysisPanelRenderer.cpp). ON/OFF is `analysis` in the user defaults file ([preference](../../SMS-AnvilleSampler/src/plugin/AnalysisPreference.hpp)), default OFF.
 
 ## Requests
 
@@ -42,6 +42,13 @@ One in-memory entry per pad, keyed by storage generation, trim start/end and a h
 - Changes are debounced 150 ms. One request is in flight; replies with another sequence or pad, or outdated by a later change, are dropped. No reply for 10 s resends.
 - The UI has no pad generation, so these mark the pad changed: target change, occupancy, capture start/end, trim edit or host-pushed pad settings (all show `...` except the last), and every `undo_status` (load, chop, paste, move, undo), which keeps the shown values until the reply.
 - A new way of replacing pad audio must reach one of these.
+
+## TUNE
+
+- [Math](../../SMS-AnvilleSampler/src/ui/TuneTarget.hpp) returns an absolute pad tune from raw note + current tune, so repeating it cannot double-apply. The note list is modal.
+- It targets the analysed pad, and only while the result is ready and not stale (any change above, until its reply).
+- The write is `TN1;semitones` on `pad_mix_NN` ([codec](../../SMS-AnvilleSampler/src/plugin/PadQuickEditCodec.hpp)): the UI may not know the other settings of a pad that is not selected. [`applyPadTune`](../../SMS-AnvilleSampler/src/plugin/UndoController.hpp) records it as an action, never coalesced, and publishes the full mixer.
+- The UI's tune follows that pad's local edits and pushed mixer state, else the `AR1` value.
 
 ## Limits
 

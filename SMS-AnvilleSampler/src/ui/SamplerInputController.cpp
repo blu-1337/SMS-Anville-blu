@@ -61,6 +61,8 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.mainSampleHasSource = fSession.mainSample().hasSource();
     context.holdPlayback = fSession.state().playbackMode >= 0.5f;
     context.dropdown = fSession.dropdown();
+    context.tuneEnabled = fSession.tuneAvailable();
+    context.tuneMenu = fSession.analysis().tuneMenu;
     context.perBankMidi = fSession.state().midiBankMode == 0;
     context.mainSampleConfirm = fSession.mainSample().confirmPending();
     context.mainSampleModeMenu = fSession.mainSample().modeMenuOpen();
@@ -112,6 +114,17 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
     auto& actions = fSession.padActions();
     auto& chop = fSession.chopEditor();
 
+    if (press && fSession.analysis().tuneMenu) {
+        // The open note list swallows the click that picks from it or dismisses it.
+        const auto clicked = targetAt(position);
+        if (button == InputButton::left && isTarget(clicked, InteractiveType::tuneNoteItem))
+            fSession.chooseTuneNote(clicked.index);
+        else
+            fSession.closeTuneMenu();
+        static_cast<void>(fHover.update(sms::ui::kNoInteractiveTarget));
+        fHost.repaintSamplerInput();
+        return true;
+    }
     if (fMixer.menu().active() && press)
         return fMixer.menuPress(mixerButton(button), targetAt(position), position);
     if (button == InputButton::middle) {
@@ -238,6 +251,17 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         if (isTarget(clicked, InteractiveType::analysisToggle)) {
             fSession.toggleAnalysis();
             return true;
+        }
+        // An open list of its own view swallows this click instead.
+        if (fSession.dropdown() == 0 && !(s.mainSampleMode && fSession.mainSample().modeMenuOpen())) {
+            if (isTarget(clicked, InteractiveType::tuneButton)) {
+                fSession.tuneNearest();
+                return true;
+            }
+            if (isTarget(clicked, InteractiveType::tuneDropdown)) {
+                fSession.toggleTuneMenu();
+                return true;
+            }
         }
         if (chop.active()) {
             if (beginViewportDrag(clicked, position)) return true;
@@ -645,7 +669,7 @@ void SamplerInputController::wheelParameter(const std::uint32_t parameter, const
 bool SamplerInputController::scroll(const sms::ui::Point position, const float delta,
     const bool control, const bool shift, const KnobAdjustment adjustment)
 {
-    if (fMixer.menu().active()) return true;
+    if (fMixer.menu().active() || fSession.analysis().tuneMenu) return true;
     const auto hovered = targetAt(position);
     if (fHover.update(hovered)) fHost.repaintSamplerInput();
     if (delta == 0.0f || !std::isfinite(delta)) return false;
@@ -722,6 +746,10 @@ bool SamplerInputController::scroll(const sms::ui::Point position, const float d
 
 bool SamplerInputController::keyboard(const InputKey key, const bool press, const bool backward)
 {
+    if (press && key == InputKey::escape && fSession.analysis().tuneMenu) {
+        fSession.closeTuneMenu();
+        return true;
+    }
     if (fSession.state().mainSampleMode && fSession.mainSample().countEditing()) {
         auto& main = fSession.mainSample();
         if (press && key == InputKey::commit) main.commitCount();

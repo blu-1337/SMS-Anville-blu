@@ -35,6 +35,7 @@ void PadAnalysisService::handleRequest(const std::string_view encoded)
 
     PadData audio;
     sms::dsp::SamplePlaybackSettings playback;
+    sms::dsp::SampleMixerSettings mixer;
     bool recording = false;
     {
         const std::lock_guard lock(mutation_);
@@ -42,7 +43,7 @@ void PadAnalysisService::handleRequest(const std::string_view encoded)
         recording = metadata.recording;
         audio.generation = metadata.generation;
         if (!recording &&
-            !sampler_.exportPublishedPad(request.pad, audio, &playback))
+            !sampler_.exportPublishedPad(request.pad, audio, &playback, &mixer))
             return;
     }
 
@@ -50,6 +51,7 @@ void PadAnalysisService::handleRequest(const std::string_view encoded)
     status.sequence = request.sequence;
     status.pad = request.pad;
     status.generation = audio.generation;
+    status.tune = mixer.tuneSemitones;
     const auto publish = [&] {
         if (!cancelled())
             observer_.publishUiState(kPadAnalysisStatusKey,
@@ -76,12 +78,13 @@ void PadAnalysisService::handleRequest(const std::string_view encoded)
     const auto region = std::span<const float>(audio.stereo).subspan(first * 2U, length * 2U);
     const auto audioHash = hashAudio(region, audio.sampleRate);
     auto& entry = cache_[request.pad];
-    if (!entry || entry->generation != audio.generation || entry->start != playback.start ||
-        entry->end != playback.end || entry->audioHash != audioHash) {
+    // Not keyed by generation: mixer edits such as TUNE move it without changing the audio.
+    if (!entry || entry->start != playback.start || entry->end != playback.end ||
+        entry->audioHash != audioHash) {
         const auto result = analyzer_(region, audio.sampleRate, &cancel_);
         if (result.cancelled || cancelled())
             return;
-        entry = Entry{audio.generation, playback.start, playback.end, audioHash, result};
+        entry = Entry{playback.start, playback.end, audioHash, result};
     }
     status.state = PadAnalysisState::ready;
     status.result = entry->result;

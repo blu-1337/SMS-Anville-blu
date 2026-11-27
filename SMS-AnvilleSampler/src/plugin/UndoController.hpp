@@ -123,6 +123,11 @@ public:
      * False when the text is too short.
      */
     bool applyColorBatch(std::string_view digits, Clock::time_point now);
+    /**
+     * Header TUNE: sets only the pad's tune and publishes its mixer. An action, so it never
+     * coalesces with a knob edit or another TUNE; an unchanged value leaves no step.
+     */
+    void applyPadTune(std::uint32_t pad, float semitones, std::mutex& mutation, Clock::time_point now);
     void undo() { step(true); }
     void redo() { step(false); }
     /** Host restored durable state: history no longer describes it. */

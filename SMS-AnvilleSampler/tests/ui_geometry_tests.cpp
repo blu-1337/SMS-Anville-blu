@@ -8,6 +8,7 @@
 #include "MixerValueNavigation.hpp"
 #include "PlaybackIndicator.hpp"
 #include "SampleWaveform.hpp"
+#include "TuneTarget.hpp"
 #include "EditorAuditionMode.hpp"
 #include "WaveformDetailSession.hpp"
 #include "DSP/SamplePlaybackSettings.hpp"
@@ -2885,6 +2886,50 @@ void mainSampleTargetPrecedence()
                    InteractiveType::menuMainSample), "menu offers Main Sample");
 }
 
+void tuneTargetTable()
+{
+    using midichopper::ui::tuneToNearest;
+    using midichopper::ui::tuneToPitchClass;
+    const auto is = [](const float value, const double expected) {
+        return std::abs(static_cast<double>(value) - expected) < 1.0e-4;
+    };
+    constexpr double fSharp2 = 41.77; // F#2 -23c
+    check(is(tuneToNearest(fSharp2, 0.0F), 0.23), "nearest removes the cents");
+    check(is(tuneToNearest(fSharp2, tuneToNearest(fSharp2, 0.0F)), 0.23), "nearest is idempotent");
+    check(is(tuneToNearest(fSharp2, 2.1F), 2.23), "nearest keeps the semitone already tuned");
+    check(is(tuneToPitchClass(fSharp2, 0.0F, 9), 3.23), "A picks the nearest octave, above");
+    check(is(tuneToPitchClass(fSharp2, 0.0F, 2), -3.77), "D picks the nearest octave, below");
+    check(is(tuneToPitchClass(fSharp2, 12.0F, 9), 15.23), "the octave follows the sounding note");
+    check(is(tuneToPitchClass(60.0, 0.0F, 6), -6.0), "a tritone tie goes down");
+    check(is(tuneToPitchClass(60.0, tuneToPitchClass(60.0, 0.0F, 9), 9), -3.0),
+          "picking the same note again changes nothing");
+    check(is(tuneToPitchClass(60.0, 23.0F, 2), 14.0), "above the range steps down an octave");
+    check(is(tuneToPitchClass(60.0, -23.0F, 11), -13.0) &&
+          is(tuneToPitchClass(60.0, -23.0F, 0), -24.0), "the range limits themselves are allowed");
+    check(is(tuneToPitchClass(60.0, -24.0F, 10), -14.0), "below the range steps up an octave");
+    check(is(tuneToNearest(60.4, 24.0F), 23.6), "nearest stays inside the range");
+
+    namespace layout = midichopper::ui::layout;
+    using midichopper::ui::InteractiveType;
+    const auto box = layout::tuneDropdownBox;
+    check(box.x == 994.0F && box.y == 59.0F && box.width == 176.0F && box.height == 104.0F,
+          "note list sits under the TUNE button");
+    midichopper::ui::InteractionContext context;
+    context.tuneEnabled = true;
+    const auto at = [&](const sms::ui::Rect r) {
+        return midichopper::ui::interactiveTargetAt(center(r), context);
+    };
+    check(midichopper::ui::isTarget(at(layout::tuneButton), InteractiveType::tuneButton) &&
+          midichopper::ui::isTarget(at(layout::tuneDropdown), InteractiveType::tuneDropdown),
+          "an enabled TUNE and caret are targets");
+    context.tuneMenu = true;
+    for (int item = 0; item < 12; ++item)
+        check(midichopper::ui::isTarget(at(layout::tuneNoteItem(item)),
+                  InteractiveType::tuneNoteItem, item), "every note cell is a target");
+    check(!at(layout::tuneButton).valid() && !at(layout::analysisToggle).valid() &&
+          !at(layout::menuButton).valid(), "the open note list blocks everything else");
+}
+
 void analysisHeaderGeometry()
 {
     namespace layout = midichopper::ui::layout;
@@ -2934,7 +2979,7 @@ void analysisHeaderGeometry()
             check(midichopper::ui::isTarget(at(layout::analysisToggle), InteractiveType::analysisToggle),
                   "the analysis toggle is reachable in every view");
             check(!at(layout::tuneButton).valid() && !at(layout::tuneDropdown).valid(),
-                  "TUNE and its caret are inert");
+                  "a disabled TUNE and caret are inert");
             context.menuOpen = true;
             check(!midichopper::ui::isTarget(at(layout::analysisToggle), InteractiveType::analysisToggle),
                   "the open application menu blocks the toggle");
@@ -2947,6 +2992,7 @@ void analysisHeaderGeometry()
 int main()
 {
     analysisHeaderGeometry();
+    tuneTargetTable();
     mainSampleTargetPrecedence();
     logoGlow();
     padLayouts();

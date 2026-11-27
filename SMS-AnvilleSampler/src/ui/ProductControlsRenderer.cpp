@@ -342,39 +342,6 @@ void drawEditorDropdown(const ViewRenderContext& ctx)
     }
 }
 
-void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
-                     const InteractiveType type, const float slope)
-{
-    const auto& colors = sms::ui::dpf::theme();
-    const auto track = uiLayout::slopeTrack(bounds);
-    const int index = std::clamp(static_cast<int>(std::lround(slope)), 0, 2);
-    ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
-    ctx.canvas.fontSize(9.0f);
-    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-    ctx.canvas.fillColor(colors.contentSecondary);
-    text(ctx, bounds.x + bounds.width * 0.5f, bounds.y + 2.0f, "SLOPE", nullptr);
-    char value[20];
-    std::snprintf(value, sizeof(value), sms::ui::dpf::themeFormat("%d dB"),
-                  index == 0   ? 6
-                  : index == 1 ? 12
-                               : 24);
-    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_RIGHT | DGL_NAMESPACE::NanoVG::ALIGN_TOP);
-    ctx.canvas.fillColor(colors.contentPrimary);
-    text(ctx, track.x + track.width, bounds.y + 5.0f, value, nullptr);
-    sms::ui::dpf::drawSlider(ctx.canvas, track.x, track.y, track.width,
-                             static_cast<float>(index) * 0.5f, colors.controlAccent,
-                             hovered(ctx, type, 5));
-    for (int tick = 0; tick < 3; ++tick) {
-        const float tickX = track.x + track.width * static_cast<float>(tick) * 0.5f;
-        ctx.canvas.beginPath();
-        ctx.canvas.moveTo(tickX, track.y - 4.0f);
-        ctx.canvas.lineTo(tickX, track.y - 1.0f);
-        ctx.canvas.strokeColor(colors.contentSecondary.withAlpha(0.65f));
-        ctx.canvas.strokeWidth(1.0f);
-        ctx.canvas.stroke();
-    }
-}
-
 void drawSlopeButton(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
                      const InteractiveType type, const float slope)
 {
@@ -427,7 +394,7 @@ void drawGlobalMixer(const ViewRenderContext& ctx)
     drawMixerKnob(ctx, uiLayout::globalMixerKnob(4), InteractiveType::globalMixerKnob, 4,
                   "HIGHPASS", ctx.state.globalHighpass, ctx.state.globalValueSettings[4].minimum,
                   ctx.state.globalValueSettings[4].maximum, high);
-    drawSlopeSlider(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
+    drawSlopeButton(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
                     ctx.state.globalFilterSlope);
 }
 

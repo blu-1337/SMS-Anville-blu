@@ -638,21 +638,18 @@ void interactionTargets()
               center(layout::globalDirection), context), interaction::InteractiveType::globalDirection),
           "global direction follows the mixer visibility when capture is armed");
     context.armed = false;
+    const auto globalSlope = layout::globalMixerKnob(5);
     check(layout::globalMixerKnob(0).width == 0.0f &&
           layout::globalMixerKnob(1).y < layout::globalMixerKnob(2).y &&
           layout::globalMixerKnob(6).y == layout::globalMixerKnob(1).y &&
-          layout::globalMixerKnob(5).y > layout::globalMixerKnob(4).y +
-              layout::globalMixerKnob(4).height,
-          "global controls use the requested two rows and lower slope slider");
-    const auto globalSlopeTrack = layout::slopeTrack(layout::globalMixerKnob(5));
-    check(globalSlopeTrack.x == layout::globalMixerKnob(3).x +
-              layout::globalMixerKnob(3).width * 0.5f - 24.0f &&
-          globalSlopeTrack.x + globalSlopeTrack.width ==
-              layout::globalMixerKnob(4).x +
-                  layout::globalMixerKnob(4).width * 0.5f + 24.0f &&
-          globalSlopeTrack.y < layout::globalMixerKnob(4).y +
-              layout::globalMixerKnob(4).height + 20.0f,
-          "global slope track aligns with knob artwork and sits close below");
+          globalSlope.y >= layout::globalMixerKnob(4).y + layout::globalMixerKnob(4).height &&
+          globalSlope.x + globalSlope.width * 0.5f ==
+              (layout::globalMixerKnob(3).x + layout::globalMixerKnob(4).x +
+               layout::globalMixerKnob(4).width) * 0.5f &&
+          globalSlope.y + globalSlope.height <= layout::sidePanel.y + layout::sidePanel.height,
+          "global controls use two rows with the slope button centred under LP/HP");
+    // {1000, 569, 56, 22} under global TUNE stays free for a later GSP toggle.
+    check(globalSlope.x >= 1056.0f, "global slope button leaves room under TUNE");
     check(!interaction::isTarget(
               interaction::interactiveTargetAt(center(layout::fixedLength), context),
               interaction::InteractiveType::fixedLength),
@@ -828,11 +825,15 @@ void interactionTargets()
           layout::mixerKnob(1).x + layout::mixerKnob(1).width <
               layout::padMixerSeparator.x &&
           layout::padMixerSeparator.x < layout::mixerKnob(6).x &&
-          layout::mixerKnob(5).y + layout::mixerKnob(5).height <= layout::mixerKnob(4).y &&
+          layout::mixerKnob(5).y >= layout::mixerKnob(3).y + layout::mixerKnob(3).height &&
+          layout::mixerKnob(5).y >= layout::mixerKnob(4).y + layout::mixerKnob(4).height &&
+          layout::mixerKnob(5).y + layout::mixerKnob(5).height <=
+              layout::mainPanel.y + layout::mainPanel.height &&
+          layout::mixerKnob(5).x >= 444.0f &&
           layout::mixerKnob(5).x >= layout::mixerKnob(3).x &&
           layout::mixerKnob(5).x + layout::mixerKnob(5).width <=
               layout::mixerKnob(4).x + layout::mixerKnob(4).width,
-          "pad controls share a row with a vertical divider and the slope button over LP/HP");
+          "pad controls share a row with a vertical divider and the slope button under LP/HP");
     for (int first = 0; first < 7; ++first)
         for (int second = first + 1; second < 7; ++second) {
             const auto a = layout::mixerKnob(first);
@@ -1621,12 +1622,6 @@ void waveformGeometry()
           midichopper::ui::bipolarKnobPosition(0.5f, 0.0f, 1.0f) == 0.5f &&
           midichopper::ui::bipolarKnobPosition(1.0f, 0.0f, 1.0f) == 1.0f,
           "filter knob marker follows its full unipolar sweep");
-    const auto slope = midichopper::ui::layout::globalMixerKnob(5);
-    const auto slopeTrack = midichopper::ui::layout::slopeTrack(slope);
-    check(midichopper::ui::slopeValueAtX(slopeTrack.x, slope) == 0.0f &&
-          midichopper::ui::slopeValueAtX(slopeTrack.x + slopeTrack.width * 0.5f, slope) == 1.0f &&
-          midichopper::ui::slopeValueAtX(slopeTrack.x + slopeTrack.width, slope) == 2.0f,
-          "slope slider selects 6, 12, and 24 dB positions");
     check(midichopper::ui::mixerValueFromText("-12.5", 1.0f, -60.0f, 12.0f) ==
               -12.5f &&
           midichopper::ui::mixerValueFromText("25", 0.01f, -1.0f, 1.0f) == 0.25f &&

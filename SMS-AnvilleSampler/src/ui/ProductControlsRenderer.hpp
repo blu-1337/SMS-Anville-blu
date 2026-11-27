@@ -27,8 +27,6 @@ void drawOutputSelector(const ViewRenderContext& ctx);
 /** The open CHOKE/OUT list, drawn last so it sits over the editor. */
 void drawEditorDropdown(const ViewRenderContext& ctx);
 
-void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
-                     const InteractiveType type, const float slope);
 void drawSlopeButton(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
                      const InteractiveType type, const float slope);
 

@@ -236,13 +236,7 @@ bool MixerInteractionController::resetControl(const MixerInteractionContext& con
 
 void MixerInteractionController::updateGlobalDrag(const sms::ui::Point position)
 {
-    const float x = position.x;
     const float y = position.y;
-    if (fGlobalDrag == 5) {
-        fHost.setMixerParameter(kParameterGlobalFilterSlope,
-            midichopper::ui::slopeValueAtX(x, uiLayout::globalMixerKnob(5)));
-        return;
-    }
     if (fGlobalDrag < 0 || fGlobalDrag >= 5)
         return;
     float startValue = 0.0f;
@@ -581,15 +575,11 @@ bool MixerInteractionController::globalMixerPress(const MixerInteractionContext&
     const bool knob = isTarget(clicked, InteractiveType::globalMixerKnob);
     const bool label = isTarget(clicked, InteractiveType::globalMixerValueLabel);
     if ((knob || label) && clicked.index >= 5) {
-        if (clicked.index == 5) {
-            fGlobalDrag = 5;
-            fHost.editMixerParameter(kParameterGlobalFilterSlope, true);
-            updateGlobalDrag(position);
-        } else {
-            fHost.editMixerParameter(kParameterGlobalDirty, true);
-            fHost.setMixerParameter(kParameterGlobalDirty, context.globalRaw[6] >= 0.5f ? 0.0f : 1.0f);
-            fHost.editMixerParameter(kParameterGlobalDirty, false);
-        }
+        if (clicked.index == 5) // SLOPE button: each click cycles 6 / 12 / 24 dB
+            setWheelValue(kParameterGlobalFilterSlope,
+                static_cast<float>((std::lround(context.globalRaw[5]) + 1) % 3));
+        else
+            setWheelValue(kParameterGlobalDirty, context.globalRaw[6] >= 0.5f ? 0.0f : 1.0f);
         fHost.repaintMixer();
         return true;
     }
@@ -679,8 +669,6 @@ bool MixerInteractionController::releaseKnob(const MixerInteractionContext& cont
         return true;
     }
     if (fGlobalDrag >= 0) {
-        if (fGlobalDrag == 5)
-            fHost.editMixerParameter(kParameterGlobalFilterSlope, false);
         fGlobalDrag = -1;
         fHost.repaintMixer();
         return true;
@@ -895,11 +883,8 @@ void MixerInteractionController::cancelScope(const MixerCancelScope scope)
         static_cast<void>(releaseFader());
     if (scope == MixerCancelScope::sample || scope == MixerCancelScope::all)
         fSampleDrag = -1;
-    if (scope == MixerCancelScope::global || scope == MixerCancelScope::mode || scope == MixerCancelScope::all) {
-        if (fGlobalDrag == 5)
-            fHost.editMixerParameter(kParameterGlobalFilterSlope, false);
+    if (scope == MixerCancelScope::global || scope == MixerCancelScope::mode || scope == MixerCancelScope::all)
         fGlobalDrag = -1;
-    }
     if (scope == MixerCancelScope::all) {
         fEntryPointerCaptured = false;
         fResetPointerCaptured = false;

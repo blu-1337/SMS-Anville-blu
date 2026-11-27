@@ -260,7 +260,7 @@ inline constexpr sms::ui::Rect mainRedo{802.0f, 138.0f, 106.0f, 28.0f};
     case 2: return {376.0f, 590.0f, 80.0f, 72.0f}; // Tune
     case 3: return {462.0f, 590.0f, 80.0f, 72.0f}; // Lowpass
     case 4: return {548.0f, 590.0f, 80.0f, 72.0f}; // Highpass
-    case 5: return {495.0f, 562.0f, 100.0f, 22.0f}; // Slope cycle button over LP/HP
+    case 5: return {495.0f, 664.0f, 100.0f, 22.0f}; // Slope cycle button under LP/HP
     default: return {};
     }
 }
@@ -279,7 +279,7 @@ inline constexpr sms::ui::Rect mainRedo{802.0f, 138.0f, 106.0f, 28.0f};
     case 2: return {994.0f, 494.0f, 68.0f, 72.0f}; // Tune
     case 3: return {1068.0f, 494.0f, 68.0f, 72.0f}; // Lowpass
     case 4: return {1142.0f, 494.0f, 68.0f, 72.0f}; // Highpass
-    case 5: return {1068.0f, 570.0f, 142.0f, 28.0f}; // Slope hit area
+    case 5: return {1089.0f, 569.0f, 100.0f, 22.0f}; // Slope cycle button under LP/HP
     default: return {};
     }
 }
@@ -288,11 +288,6 @@ inline constexpr sms::ui::Rect mainRedo{802.0f, 138.0f, 106.0f, 28.0f};
 {
     const auto knob = globalMixerKnob(index);
     return {knob.x, knob.y + 52.0f, knob.width, 18.0f};
-}
-
-[[nodiscard]] constexpr sms::ui::Rect slopeTrack(const sms::ui::Rect bounds) noexcept
-{
-    return {bounds.x + 10.0f, bounds.y + 14.0f, bounds.width - 20.0f, 6.0f};
 }
 
 [[nodiscard]] constexpr sms::ui::Rect chopPadButton(const int index) noexcept

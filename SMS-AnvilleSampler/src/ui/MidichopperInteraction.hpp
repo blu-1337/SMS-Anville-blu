@@ -365,14 +365,6 @@ inline constexpr float kFineKnobScale = 0.1f;
         : 0.5f + 0.5f * std::clamp(value / maximum, 0.0f, 1.0f);
 }
 
-[[nodiscard]] inline float slopeValueAtX(const float x,
-                                         const sms::ui::Rect bounds) noexcept
-{
-    const auto track = layout::slopeTrack(bounds);
-    const float position = std::clamp((x - track.x) / track.width, 0.0f, 1.0f);
-    return position < 0.25f ? 0.0f : position < 0.75f ? 1.0f : 2.0f;
-}
-
 /** Editor data only needs reloading when the requested pad changes. */
 [[nodiscard]] constexpr bool editorPadSelectionChanged(const int selectedPad,
                                                        const int requestedPad) noexcept

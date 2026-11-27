@@ -50,7 +50,7 @@ it in PLAY mode too.
 In **Options → Preferences → MIDI Inputs**, enable your controller for control
 messages as well as track input.
 
-1. Move a global knob/slider or click the plugin button you want to control.
+1. Move a global knob/fader or click the plugin button you want to control.
 2. Immediately choose **Param → Learn** in REAPER's FX window.
 3. Move the hardware control, then accept with **OK**. For a momentary button
    controlling a toggle, choose **CC mode → Toggle**.

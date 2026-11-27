@@ -198,16 +198,6 @@ void knobAndWheelGestures()
     effect(f.host, 0, "set", kParameterGlobalPan, 0.2f);
 
     f.host.effects.clear();
-    const auto slope = layout::globalMixerKnob(5);
-    f.mixer.globalMixerPress(f.context, target(InteractiveType::globalMixerKnob, 5),
-                            {slope.x + slope.width - 1.0f, slope.y}, KnobAdjustment::normal);
-    f.mixer.releaseKnob(f.context);
-    check(f.host.effects.size() == 3U, "slope drag sends balanced begin/value/end");
-    effect(f.host, 0, "begin", kParameterGlobalFilterSlope);
-    effect(f.host, 1, "set", kParameterGlobalFilterSlope, 2.0f);
-    effect(f.host, 2, "end", kParameterGlobalFilterSlope);
-
-    f.host.effects.clear();
     f.mixer.wheel(f.context, target(InteractiveType::globalMixerKnob, 2), 1.0f, KnobAdjustment::stepped);
     check(f.host.effects.size() == 3U, "global wheel sends a balanced gesture");
     effect(f.host, 0, "begin", kParameterGlobalTuneSemitones);
@@ -261,6 +251,34 @@ void slopeButtonCycles()
     }
 }
 
+void globalSlopeButtonCycles()
+{
+    Fixture f;
+    f.context.globalRaw[5] = 0.0f;
+    const auto bounds = layout::globalMixerKnob(5);
+    const auto slope = target(InteractiveType::globalMixerKnob, 5);
+    // All presses land at one instant, so the quick repeats are double clicks.
+    for (const float expected : {1.0f, 2.0f, 0.0f}) {
+        f.host.effects.clear();
+        check(f.mixer.globalMixerPress(f.context, slope, {bounds.x + 1.0f, bounds.y + 1.0f},
+                                       KnobAdjustment::normal, {}),
+              "global slope button consumes the press");
+        check(f.context.globalRaw[5] == expected && f.host.effects.size() == 3U &&
+              !f.mixer.globalDragging() && !f.mixer.entry().target().valid(),
+              "each global slope click cycles 6/12/24 dB once without drag or numeric entry");
+        effect(f.host, 0, "begin", kParameterGlobalFilterSlope);
+        effect(f.host, 1, "set", kParameterGlobalFilterSlope, expected);
+        effect(f.host, 2, "end", kParameterGlobalFilterSlope);
+        f.host.effects.clear();
+        check(!f.mixer.motion(f.context, {bounds.x + bounds.width, bounds.y}) &&
+              !f.mixer.releaseKnob(f.context) && f.host.effects.empty(),
+              "dragging and releasing after a global slope click changes nothing");
+    }
+    f.mixer.wheel(f.context, slope, 1.0f, KnobAdjustment::normal);
+    check(f.context.globalRaw[5] == 1.0f && f.host.effects.size() == 3U,
+          "wheel still steps the global slope");
+}
+
 void staleSampleDragRoutesToGlobal()
 {
     Fixture f;
@@ -278,19 +296,15 @@ void staleSampleDragRoutesToGlobal()
           f.host.effects.empty() && f.mixer.sampleDragging(),
           "stale sample gesture outside editor is ignored without committing an invalid pad");
 
-    const auto slope = layout::globalMixerKnob(5);
-    f.mixer.globalMixerPress(f.context, target(InteractiveType::globalMixerKnob, 5),
-                            {slope.x, slope.y}, KnobAdjustment::normal);
+    f.mixer.globalMixerPress(f.context, target(InteractiveType::globalMixerKnob, 1),
+                            {100.0f, 100.0f}, KnobAdjustment::normal, Clock::time_point{} + 1s);
     check(f.mixer.globalDragging() && f.mixer.sampleDragging(),
           "a new global drag can coexist with the preserved stale sample index");
-    f.mixer.motion(f.context, {slope.x + slope.width - 1.0f, slope.y});
+    f.mixer.motion(f.context, {100.0f, 88.0f});
     f.mixer.releaseKnob(f.context);
-    check(f.host.effects.size() == 4U && !f.mixer.globalDragging() && f.mixer.sampleDragging(),
-          "global drag motion and release skip stale sample state and balance their gesture");
-    effect(f.host, 0, "begin", kParameterGlobalFilterSlope);
-    effect(f.host, 1, "set", kParameterGlobalFilterSlope, 0.0f);
-    effect(f.host, 2, "set", kParameterGlobalFilterSlope, 2.0f);
-    effect(f.host, 3, "end", kParameterGlobalFilterSlope);
+    check(f.host.effects.size() == 1U && !f.mixer.globalDragging() && f.mixer.sampleDragging(),
+          "global drag motion and release skip stale sample state");
+    effect(f.host, 0, "set", kParameterGlobalPan, 0.2f);
     check(f.host.committedPad == -1, "global routing never invokes pad mixer commit");
 }
 
@@ -422,18 +436,16 @@ void focusAndModeCancellation()
     f.mixer.cancelScope(MixerCancelScope::focus);
     check(f.host.effects.empty(), "repeated focus loss emits no duplicate end gesture");
 
-    const auto slope = layout::globalMixerKnob(5);
-    f.mixer.globalMixerPress(f.context, target(InteractiveType::globalMixerKnob, 5),
-                            {slope.x, slope.y}, KnobAdjustment::normal);
+    f.mixer.globalMixerPress(f.context, target(InteractiveType::globalMixerKnob, 1),
+                            {100.0f, 100.0f}, KnobAdjustment::normal);
     f.mixer.beginEntry(f.context, target(InteractiveType::levelValueLabel, 0));
     f.host.effects.clear();
     f.mixer.cancelScope(MixerCancelScope::focus);
     check(f.mixer.globalDragging() && f.mixer.entry().target().valid() && f.host.effects.empty(),
           "focus loss preserves original global drag and non-range numeric behavior");
     f.mixer.cancelScope(MixerCancelScope::mode);
-    check(!f.mixer.globalDragging() && !f.mixer.entry().target().valid() && f.host.effects.size() == 1U,
-          "mode change cancels numeric entry and balances global slope gesture");
-    effect(f.host, 0, "end", kParameterGlobalFilterSlope);
+    check(!f.mixer.globalDragging() && !f.mixer.entry().target().valid() && f.host.effects.empty(),
+          "mode change cancels numeric entry and the global drag");
     f.mixer.sampleMixerPress(f.context, target(InteractiveType::mixerKnob, 0),
                             {100.0f, 100.0f}, KnobAdjustment::normal);
     f.mixer.cancelScope(MixerCancelScope::sample);
@@ -455,6 +467,7 @@ int main()
     keyboardNavigation();
     knobAndWheelGestures();
     slopeButtonCycles();
+    globalSlopeButtonCycles();
     staleSampleDragRoutesToGlobal();
     faderAndCapture();
     doubleClickHistory();

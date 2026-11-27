@@ -3,7 +3,7 @@
 The main PLAY view has a **Global Mixer**: Direction, Pan and Dirty, then Tune, Lowpass,
 and Highpass. ARM hides it. **SAMPLE EDITOR** has a **Pad Mixer** for the selected
 pad: Direction, Gain and Pan beside Dirty, Tune, Lowpass, and Highpass, with a divider
-between Pan and Dirty. Slope sits by the filters.
+between Pan and Dirty. Slope sits under the filters.
 
 After Highpass, a divider and **Global Mixer** power button control whether the
 selected pad uses global Direction, Pan, Dirty, Tune, Lowpass, and Highpass.
@@ -62,7 +62,7 @@ Levels are host parameters saved with projects.
 **Lowpass** removes treble as you raise it from 0% to 100%. **Highpass** removes
 bass. At 0%, each filter is off. Lowpass is drawn right to left (100% at left), mirroring its drag and wheel; saved values are unchanged. Both add resonance as you turn them farther
 from off. **Slope** selects 6, 12, or 24 dB per octave: click the pad
-button to cycle, drag the global slider, or use the wheel. Steeper slopes cut faster.
+or global button to cycle, or use the wheel. Steeper slopes cut faster.
 
 **Dirty** is a sliding on/off switch. It folds pad playback to mono, holds it at a
 26.04 kHz source clock, and reduces it to 12-bit resolution. Dirty runs before

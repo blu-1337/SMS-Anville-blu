@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SMSAnvilleSampler VERSION 1.2.88 LANGUAGES C CXX)
+project(SMSAnvilleSampler VERSION 1.2.89 LANGUAGES C CXX)
 set(ANVILLESAMPLER_PRERELEASE "beta.1")
 set(ANVILLESAMPLER_RELEASE_VERSION "${PROJECT_VERSION}")
 if(NOT ANVILLESAMPLER_PRERELEASE STREQUAL "")
@@ -174,6 +174,7 @@ set(ANVILLESAMPLER_UI_SOURCES
   src/ui/MainSampleRenderer.cpp
   src/ui/MenuRenderer.cpp
   src/ui/ProductControlsRenderer.cpp
+  src/ui/AnalysisPanelRenderer.cpp
   "${ANVILLESAMPLER_ARTWORK_DIR}/anvillesampler_artwork.cpp"
   "${ANVILLESAMPLER_ARTWORK_DIR}/anvillesampler_artwork.hpp")
 

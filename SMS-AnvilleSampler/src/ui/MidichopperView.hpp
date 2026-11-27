@@ -11,6 +11,7 @@
 #include "EditorAuditionMode.hpp"
 #include "GlobalControlMenu.hpp"
 #include "MainSampleController.hpp"
+#include "PadAnalysisSession.hpp"
 #include "WaveformViewport.hpp"
 
 #include <array>
@@ -115,6 +116,7 @@ struct ViewState {
     float quickEditX = 0.0f;    // pointer while swapping pads (axis 3)
     float quickEditY = 0.0f;
     int swapTargetPad = -1;     // global pad highlighted as the swap target, or -1
+    PadAnalysisView analysis{}; // header sound detection panel
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

@@ -1,6 +1,6 @@
 # Pad sound detection
 
-Note, chord and key of one pad's trimmed region. There is no UI yet.
+Note, chord and key of one pad's trimmed region, shown in the header panel ([user guide](../../SMS-AnvilleSampler/Docs/SOUND-ANALYSIS.md)).
 
 ## Analysis contract
 
@@ -30,6 +30,18 @@ Decoders reject malformed input; a malformed request gets no reply.
 ## Cache
 
 One in-memory entry per pad, keyed by storage generation, trim start/end and a hash of every analysed sample. The hash is needed because a staged host restore replaces audio without moving the generation. Mixer edits also move the generation, so they recompute. Reverse is ignored. Nothing is persisted.
+
+## Header panel
+
+[Rects](../../SMS-AnvilleSampler/src/ui/MidichopperLayout.hpp): `analysisPanel` {560,25,576,32}, between the logo glow and the PLAY LED, in every view. Skin title translations much longer than the default would push the logo under it. [Renderer](../../SMS-AnvilleSampler/src/ui/AnalysisPanelRenderer.cpp). TUNE and its caret are drawn disabled and have no hit target. ON/OFF is `analysis` in the user defaults file ([preference](../../SMS-AnvilleSampler/src/plugin/AnalysisPreference.hpp)), default OFF.
+
+## Requests
+
+[`PadAnalysisSession`](../../SMS-AnvilleSampler/src/ui/PadAnalysisSession.hpp) follows the last played pad, else the selected one.
+
+- Changes are debounced 150 ms. One request is in flight; replies with another sequence or pad, or outdated by a later change, are dropped. No reply for 10 s resends.
+- The UI has no pad generation, so these mark the pad changed: target change, occupancy, capture start/end, trim edit or host-pushed pad settings (all show `...` except the last), and every `undo_status` (load, chop, paste, move, undo), which keeps the shown values until the reply.
+- A new way of replacing pad audio must reach one of these.
 
 ## Limits
 

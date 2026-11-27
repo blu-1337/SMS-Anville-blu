@@ -22,6 +22,7 @@
 #include "MidichopperView.hpp"
 #include "BrowserLauncher.hpp"
 #include "KnobPreference.hpp"
+#include "AnalysisPreference.hpp"
 #include "PluginUiBridge.hpp"
 #include "StateKeys.hpp"
 #include "anvillesampler_artwork.hpp"
@@ -76,6 +77,7 @@ public:
 #ifndef DGL_NO_SHARED_RESOURCES
         loadSharedResources();
 #endif
+        fSession.setAnalysisEnabled(AnalysisPreference::read(AnalysisPreference::configPath()));
         attachFileDrop();
     }
 
@@ -282,6 +284,7 @@ protected:
             fSpectrogramImage ? &*fSpectrogramImage : nullptr,
             fInput.quickEditPad(), fInput.quickEditAxis(), fInput.quickEditVolume(), fInput.quickEditPan(),
             fInput.quickEditPoint().x, fInput.quickEditPoint().y, fInput.swapTargetPad(),
+            fSession.analysis(),
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();
@@ -385,6 +388,11 @@ private:
 #endif
     }
     void repaintUi() override { requestRepaint(); }
+    void saveUiAnalysisPreference(const bool on) override
+    {
+        if (!AnalysisPreference::write(AnalysisPreference::configPath(), on))
+            fSession.setLocalStatus("Detection preference could not be saved");
+    }
     bool showUiPadFileBrowser(const bool saving, const char* defaultName) override
     {
 #if DISTRHO_UI_FILE_BROWSER

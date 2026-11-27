@@ -105,6 +105,7 @@ enum class InteractiveType : int {
     mainSampleModeItem,
     overviewWaveform,
     mainSampleRangeHandle, // index 0 = range start, 1 = range end
+    analysisToggle,
 };
 
 class PadPressTracker {
@@ -702,6 +703,9 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         }
         return sms::ui::kNoInteractiveTarget;
     }
+
+    if (uiLayout::analysisToggle.contains(point))
+        return target(InteractiveType::analysisToggle); // the header is shared by every view
 
     for (int level = 0; level < 2; ++level) {
         if (uiLayout::levelValueLabel(level).contains(point))

@@ -146,6 +146,8 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
         if (wasOccupied == isOccupied)
             return;
         fState.padState[localPad] = isOccupied ? '1' : '0';
+        if (pad == fAnalysis.pad())
+            static_cast<void>(fAnalysis.invalidate(Clock::now(), true));
         if (pad == fPadActions.target())
             fPadActions.closeMenu();
         if (pad == fState.selectedPad)
@@ -354,6 +356,10 @@ void SamplerUiSession::acceptParameter(std::uint32_t index, float value, const T
         changed = fState.currentPad != currentPad;
         if (!changed)
             break;
+        // Recording into, or finishing on, the analysed pad replaces its audio.
+        if (fAnalysis.pad() >= 0 &&
+            (fAnalysis.pad() == fState.currentPad || fAnalysis.pad() == currentPad))
+            static_cast<void>(fAnalysis.invalidate(Clock::now(), true));
         fState.currentPad = currentPad;
         if (fState.armed && fState.currentPad >= 0) {
             const int bank = bankForGlobalPad(fState.currentPad);
@@ -494,7 +500,18 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
         }
         if (fState.editorMode)
             refreshPadWaveform();
+        // Load, chop, paste, move and undo all land here; the shown values stay meanwhile.
+        static_cast<void>(fAnalysis.invalidate(Clock::now(), false));
         fHost.repaintUi();
+        return true;
+    }
+
+    if (std::strcmp(key, kPadAnalysisStatusKey) == 0) {
+        PadAnalysisStatus status;
+        if (!decodePadAnalysisStatus(value, status))
+            return false;
+        if (fAnalysis.accept(status))
+            fHost.repaintUi();
         return true;
     }
 
@@ -1104,8 +1121,38 @@ void SamplerUiSession::selectMidiBankMode(const int mode)
     fHost.repaintUi();
 }
 
+void SamplerUiSession::setAnalysisEnabled(const bool on)
+{
+    fAnalysis.setOn(on);
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::toggleAnalysis()
+{
+    setAnalysisEnabled(!fAnalysis.view().on);
+    fHost.saveUiAnalysisPreference(fAnalysis.view().on);
+}
+
+void SamplerUiSession::requestAnalysisIfNeeded(const Time now)
+{
+    if (!fCapabilities.stateTransport)
+        return;
+    const int pad = fState.lastPlayedPad >= 0 ? fState.lastPlayedPad : fState.selectedPad;
+    bool changed = false;
+    const auto request = fAnalysis.poll(
+        pad >= 0 && pad < static_cast<int>(midichopper::kPadCount) ? pad : -1, now, changed);
+    if (request)
+        fHost.sendUiState(kPadAnalysisRequestKey, encodePadAnalysisRequest(*request).c_str());
+    if (changed)
+        fHost.repaintUi();
+}
+
 void SamplerUiSession::commitPlaybackSettings(const sms::dsp::SamplePlaybackSettings &settings)
 {
+    // Only the trim changes what is analysed.
+    if (fState.selectedPad == fAnalysis.pad() &&
+        (settings.start != fState.editorSettings.start || settings.end != fState.editorSettings.end))
+        static_cast<void>(fAnalysis.invalidate(Clock::now(), true));
     fState.editorSettings = settings;
     fState.editorSettingsPad = fState.selectedPad;
     if (fCapabilities.stateTransport) {
@@ -1225,6 +1272,8 @@ bool SamplerUiSession::parseEditorState(const char *const key, const char *const
         sms::dsp::SamplePlaybackSettings decoded;
         if (sms::state::decodeSamplePlaybackSettings(value, decoded)) {
             const int decodedPad = static_cast<int>(pad);
+            if (decodedPad == fAnalysis.pad())
+                static_cast<void>(fAnalysis.invalidate(Clock::now(), false));
             if (!fEditorSnapshot.pending() && decodedPad == fState.selectedPad) {
                 fState.editorSettings = decoded;
                 fState.editorSettingsPad = decodedPad;
@@ -1367,6 +1416,7 @@ void SamplerUiSession::idle(const Time now, const float effectiveGlobalTune)
     updateLocalPlayhead(now, effectiveGlobalTune);
     if (fCapabilities.stateTransport)
         fMainSample.idle(now);
+    requestAnalysisIfNeeded(now);
 }
 
 void SamplerUiSession::rendered(const Time now) noexcept
@@ -1381,6 +1431,7 @@ void SamplerUiSession::missedReplies()
     if (fChopEditor.split() || fChopEditor.applying())
         fChopEditor.cancel();
     requestWaveform();
+    fAnalysis.retry(Clock::now());
     if (fCapabilities.stateTransport)
         fMainSample.missedReplies();
     setLocalStatus("UI replies were missed; check the pad and retry");

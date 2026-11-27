@@ -600,8 +600,30 @@ void undoRedoButtonsAndKeys()
     check(!f.session.canUndo() && !f.session.canRedo(), "empty history disables the buttons again");
 }
 
+void analysisToggleRouting()
+{
+    namespace L = midichopper::ui::layout;
+    Fixture f;
+    const auto toggle = center(L::analysisToggle);
+    f.click(toggle);
+    check(f.session.analysis().on && f.states.empty(), "the header toggle turns detection on");
+    f.session.openMainSample();
+    f.click(toggle);
+    check(!f.session.analysis().on, "it works in the Main Sample view");
+    f.session.closeMainSample();
+    f.readyEditor();
+    f.session.toggleDropdown(1);
+    f.click(toggle);
+    check(f.session.analysis().on, "it works in the Sample Editor with a list open");
+    f.states.clear();
+    f.input.mouse(center(L::tuneButton), InputButton::left, true);
+    f.input.mouse(center(L::tuneDropdown), InputButton::left, true);
+    check(f.states.empty(), "TUNE does nothing yet");
+}
+
 int main()
 {
+    analysisToggleRouting();
     padOwnershipAndSpace();
     padQuickEditGestures();
     undoRedoButtonsAndKeys();

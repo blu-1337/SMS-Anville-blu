@@ -82,11 +82,13 @@ Host-specific setup: [REAPER guide](Docs/REAPER.md).
 
 Use your DAW's MIDI Learn to bind hardware controls to global parameters. To
 record movements, arm the parameter envelopes and select the host's automation
-writing mode; return to playback mode afterward. Per-pad mixer/FX controls are
+writing mode; return to playback mode. Per-pad mixer/FX controls are
 not exposed for host MIDI Learn or automation. Follow the
 [REAPER MIDI Learn and automation steps](Docs/REAPER.md#midi-learn) for an example.
 
 ## Views and Menus
+
+[Sound detection](Docs/SOUND-ANALYSIS.md).
 
 ### ARM view
 

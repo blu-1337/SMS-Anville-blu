@@ -306,6 +306,7 @@ void drawMainHeader(const ViewRenderContext& ctx)
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
     ctx.canvas.fillColor(modeColor);
     text(ctx, 1160.0f, 43.0f, ctx.state.armed ? "ARMED" : "PLAY", nullptr);
+    drawAnalysisPanel(ctx);
 
     const bool menuHovered = hovered(ctx, InteractiveType::menuButton);
     sms::ui::dpf::drawRaisedControlSurface(ctx.canvas, uiLayout::menuButton,

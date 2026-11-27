@@ -77,7 +77,8 @@ Do not substitute an HTML mockup or bake plugin controls into the background.
 The plugin draws panels, pads, screws, labels, meters and overlays over it.
 Place strong artwork around the header, edges and panel gaps; use restrained
 detail under text. The upper-left header contains the title and subtitle; the
-upper-right contains mode text and the menu. Keep both readable.
+upper-right contains mode text and the menu, with the detection panel left of
+them. Keep all readable.
 
 Use the guide's canvas and logo dimensions/aspect ratios. A transparent logo
 should preserve alpha; without a halo its fixed rendering opacity reduces contrast. The

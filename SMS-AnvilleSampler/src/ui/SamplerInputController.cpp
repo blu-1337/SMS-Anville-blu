@@ -235,6 +235,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return true;
     }
     if (fMenu.press(fHost.applicationMenuContext(), clicked, Clock::now())) return true;
+        if (isTarget(clicked, InteractiveType::analysisToggle)) {
+            fSession.toggleAnalysis();
+            return true;
+        }
         if (chop.active()) {
             if (beginViewportDrag(clicked, position)) return true;
             if (isTarget(clicked, InteractiveType::chopBoundary)) chop.beginBoundaryDrag(clicked.index, x);

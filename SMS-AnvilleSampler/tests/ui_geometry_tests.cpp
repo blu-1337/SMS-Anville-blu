@@ -2885,10 +2885,68 @@ void mainSampleTargetPrecedence()
                    InteractiveType::menuMainSample), "menu offers Main Sample");
 }
 
+void analysisHeaderGeometry()
+{
+    namespace layout = midichopper::ui::layout;
+    using midichopper::ui::InteractiveType;
+    const auto panel = layout::analysisPanel;
+    const auto apart = [](const sms::ui::Rect l, const sms::ui::Rect r) {
+        return l.x + l.width <= r.x || r.x + r.width <= l.x ||
+               l.y + l.height <= r.y || r.y + r.height <= l.y;
+    };
+    // The logo starts 14 units after the title block and its glow ends before x 540.
+    // The PLAY / ARMED LED is centred on x 1146 and the menu button starts at x 1208.
+    check(panel.y == layout::menuButton.y && panel.height == layout::menuButton.height &&
+          panel.x >= 540.0f && panel.x + panel.width <= 1136.0f && apart(panel, layout::menuButton),
+          "analysis panel sits between the logo and PLAY, level with the menu button");
+    const std::array children{layout::analysisToggle, layout::analysisNote, layout::analysisChord,
+        layout::analysisKey, layout::analysisConfidence, layout::tuneButton, layout::tuneDropdown};
+    for (std::size_t i = 0; i < children.size(); ++i) {
+        check(children[i].x >= panel.x && children[i].x + children[i].width <= panel.x + panel.width &&
+              children[i].y == panel.y && children[i].height == panel.height,
+              "analysis controls stay inside the panel");
+        for (std::size_t j = i + 1; j < children.size(); ++j)
+            check(apart(children[i], children[j]), "analysis controls do not overlap");
+    }
+    // What the views draw nearest the header: panels, bank row, undo/redo pairs, side buttons.
+    for (const auto other : {layout::mainPanel, layout::sidePanel, layout::menuPanel, layout::footer,
+             layout::historyUndo, layout::historyRedo, layout::mainUndo, layout::mainRedo,
+             layout::midiBankHint, layout::mainBank(0), layout::closeEditor, layout::padChoke,
+             layout::mainSampleClose, layout::levelFader(0), layout::levelFader(1)})
+        check(apart(panel, other), "analysis panel clears every view's controls");
+
+    sms::dsp::SamplePlaybackSettings settings;
+    sms::audio::WaveformSummary waveform;
+    const auto envelope = sms::ui::waveform::envelopeGeometry(layout::envelopeGraph, waveform, settings);
+    for (int view = 0; view < 5; ++view) {
+        for (int padLayout = 0; padLayout < 4; ++padLayout) {
+            midichopper::ui::InteractionContext context;
+            context.padLayout = padLayout;
+            context.editorSettings = &settings;
+            context.envelope = &envelope;
+            context.editorMode = view == 1;
+            context.chopEditorMode = view == 2;
+            context.mainSampleMode = view == 3;
+            context.armed = view == 4;
+            const auto at = [&](const sms::ui::Rect r) {
+                return midichopper::ui::interactiveTargetAt(center(r), context);
+            };
+            check(midichopper::ui::isTarget(at(layout::analysisToggle), InteractiveType::analysisToggle),
+                  "the analysis toggle is reachable in every view");
+            check(!at(layout::tuneButton).valid() && !at(layout::tuneDropdown).valid(),
+                  "TUNE and its caret are inert");
+            context.menuOpen = true;
+            check(!midichopper::ui::isTarget(at(layout::analysisToggle), InteractiveType::analysisToggle),
+                  "the open application menu blocks the toggle");
+        }
+    }
+}
+
 } // namespace
 
 int main()
 {
+    analysisHeaderGeometry();
     mainSampleTargetPrecedence();
     logoGlow();
     padLayouts();

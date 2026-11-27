@@ -2,6 +2,8 @@
 #include "CaptureActionProtocol.hpp"
 #include "PadDirectionRequest.hpp"
 #include "StateKeys.hpp"
+#include "AnalysisPreference.hpp"
+#include "PadAnalysisProtocol.hpp"
 #include "State/SampleMixerSettingsCodec.hpp"
 #include "State/SamplePlaybackSettingsCodec.hpp"
 
@@ -59,6 +61,8 @@ struct Host final : SamplerUiHost {
         messages.emplace_back(key, value);
         trace.push_back(std::string("state:") + key);
     }
+    std::vector<bool> analysisPreferences;
+    void saveUiAnalysisPreference(const bool on) override { analysisPreferences.push_back(on); }
     void sendUiNote(const std::uint8_t note, const std::uint8_t velocity) override
     {
         notes.emplace_back(note, velocity);
@@ -449,6 +453,142 @@ void captureStorageFailureStatus()
           "a later capture exhaustion produces a new notification");
 }
 
+std::size_t analysisRequests(const Host &host)
+{
+    return static_cast<std::size_t>(std::count_if(host.messages.begin(), host.messages.end(),
+        [](const auto &m) { return m.first == kPadAnalysisRequestKey; }));
+}
+
+void padAnalysisRequests()
+{
+    Fixture f;
+    auto time = SamplerUiSession::Clock::now() + 1s;
+    // Two idles 200 ms apart: the first notices a change, the second is past the debounce.
+    const auto settle = [&] {
+        time = std::max(time, SamplerUiSession::Clock::now() + 1s);
+        f.session.idle(time, 0.0f);
+        time += 200ms;
+        f.session.idle(time, 0.0f);
+        time += 200ms;
+    };
+    const auto request = [&] {
+        PadAnalysisRequest decoded;
+        check(decodePadAnalysisRequest(f.host.latestMessage(kPadAnalysisRequestKey), decoded),
+              "analysis request decodes");
+        return decoded;
+    };
+    const auto reply = [&](const PadAnalysisRequest &to, const double midi,
+                           const PadAnalysisState state = PadAnalysisState::ready) {
+        PadAnalysisStatus status;
+        status.sequence = to.sequence;
+        status.pad = to.pad;
+        status.state = state;
+        status.result.note.valid = state == PadAnalysisState::ready;
+        status.result.note.midi = midi;
+        status.result.note.confidence = 0.9F;
+        check(f.session.acceptState(kPadAnalysisStatusKey, encodePadAnalysisStatus(status).c_str()),
+              "analysis status is handled");
+    };
+    const auto note = [&] { return analysisReadout(f.session.analysis(), 0); };
+    const std::string colours(kPadCount, '0');
+    const auto history = [&] {
+        check(f.session.acceptState(kUndoStatusKey, ("UD1;1;1;0;" + colours).c_str()), "UD1 accepted");
+    };
+
+    f.session.acceptState("selected_pad", "2");
+    settle();
+    check(analysisRequests(f.host) == 0 && note() == "-", "nothing is requested while OFF");
+
+    f.session.toggleAnalysis();
+    check(f.host.analysisPreferences == std::vector<bool>{true}, "ON is remembered");
+    f.session.idle(time, 0.0f);
+    check(analysisRequests(f.host) == 0 && note() == "...", "requests are debounced");
+    settle();
+    check(analysisRequests(f.host) == 1 && request().pad == 2, "ON analyses the selected pad");
+    const auto first = request();
+    auto stale = first;
+    --stale.sequence;
+    reply(stale, 60.0);
+    check(note() == "...", "a stale sequence is ignored");
+    reply(first, 60.0);
+    check(note() == "C4 +0c" && analysisReadout(f.session.analysis(), 1) == "-" &&
+          analysisReadout(f.session.analysis(), 2) == "-", "the reply is shown");
+    settle();
+    check(analysisRequests(f.host) == 1, "an unchanged pad is not requested again");
+
+    // The last played pad wins over the selection.
+    f.session.acceptParameter(kParameterPlaybackPadEvent, playbackPadEventValue(5U, true));
+    f.session.acceptState("selected_pad", "3");
+    settle();
+    check(analysisRequests(f.host) == 2 && request().pad == 5 && note() == "...",
+          "the last played pad is analysed");
+
+    // One request in flight; a change while waiting discards that reply and asks again.
+    const auto second = request();
+    f.session.acceptParameter(kParameterPlaybackPadEvent, playbackPadEventValue(6U, false));
+    settle();
+    check(analysisRequests(f.host) == 2, "no second request while one is in flight");
+    reply(second, 61.0);
+    check(note() == "...", "the reply for the previous pad is ignored");
+    settle();
+    check(analysisRequests(f.host) == 3 && request().pad == 6, "the new pad follows");
+    reply(request(), 62.0);
+
+    // Trim edits re-request; envelope edits do not.
+    auto playback = f.session.state().editorSettings;
+    playback.attackSeconds = 0.5F;
+    f.session.commitPlaybackSettings(playback);
+    settle();
+    check(analysisRequests(f.host) == 3, "an envelope edit does not re-analyse");
+    playback.start = 0.25F;
+    f.session.commitPlaybackSettings(playback);
+    check(note() == "...", "a trim edit shows busy");
+    f.session.idle(SamplerUiSession::Clock::now(), 0.0f);
+    check(analysisRequests(f.host) == 3, "trim edits are debounced");
+    settle();
+    check(analysisRequests(f.host) == 4, "a trim edit re-analyses after the debounce");
+    reply(request(), 63.0);
+
+    // Capture start and end on the analysed pad; an empty pad shows "-".
+    f.session.acceptParameter(kParameterCurrentCapturePad, 7.0f);
+    settle();
+    check(analysisRequests(f.host) == 5, "capturing the pad re-analyses");
+    reply(request(), 0.0, PadAnalysisState::busy);
+    check(note() == "...", "a recording pad stays busy");
+    f.session.acceptParameter(kParameterCurrentCapturePad, 0.0f);
+    settle();
+    check(analysisRequests(f.host) == 6, "the end of capture re-analyses");
+    reply(request(), 0.0, PadAnalysisState::noAudio);
+    check(note() == "-", "no audio shows a dash");
+
+    // Load, chop and undo arrive as an undo status: values stay until the new reply.
+    history();
+    settle();
+    check(analysisRequests(f.host) == 7, "a history change re-analyses");
+    reply(request(), 64.0);
+    check(note() == "E4 +0c", "the refreshed result is shown");
+
+    // A lost reply is retried.
+    history();
+    settle();
+    check(note() == "E4 +0c", "a quiet refresh keeps the shown values");
+    time += 11s;
+    settle();
+    check(analysisRequests(f.host) == 9, "an unanswered request times out and is sent again");
+
+    f.session.toggleAnalysis();
+    reply(request(), 65.0);
+    settle();
+    check(note() == "-" && analysisRequests(f.host) == 9 &&
+          f.host.analysisPreferences == std::vector<bool>({true, false}), "OFF stops and is remembered");
+
+    const auto path = std::filesystem::temp_directory_path() / "sms-analysis-preference.ini";
+    std::filesystem::remove(path);
+    check(!AnalysisPreference::read(path), "detection defaults to OFF");
+    check(AnalysisPreference::write(path, true) && AnalysisPreference::read(path), "ON round trips");
+    check(AnalysisPreference::write(path, false) && !AnalysisPreference::read(path), "OFF round trips");
+    std::filesystem::remove(path);
+}
 } // namespace
 
 void midiNoteAssignsMainSampleSelection()
@@ -513,6 +653,7 @@ void editorDropdownsSelectValues()
 
 int main()
 {
+    padAnalysisRequests();
     editorDropdownsSelectValues();
     midiNoteAssignsMainSampleSelection();
     optimisticParametersAndArmOrdering();

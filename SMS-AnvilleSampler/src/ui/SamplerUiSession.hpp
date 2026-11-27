@@ -7,6 +7,7 @@
 #include "EditorSnapshotSession.hpp"
 #include "MainSampleController.hpp"
 #include "MidichopperInteraction.hpp"
+#include "PadAnalysisSession.hpp"
 #include "PadActionController.hpp"
 #include "PlaybackIndicator.hpp"
 #include "WaveformDetailSession.hpp"
@@ -42,6 +43,8 @@ class SamplerUiHost
     virtual void repaintUi() = 0;
     virtual bool showUiPadFileBrowser(bool saving, const char *defaultName) = 0;
     virtual void invalidateUiInteraction(UiInteractionInvalidation reason) = 0;
+    /** Remembers header sound detection ON/OFF as a UI preference. */
+    virtual void saveUiAnalysisPreference(bool on) { static_cast<void>(on); }
 };
 
 struct SamplerUiCapabilities {
@@ -71,6 +74,12 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
         return fPlaybackIndicator;
     }
     [[nodiscard]] PadActionController &padActions() noexcept { return fPadActions; }
+    /** Header sound detection of the last played, else selected, pad. */
+    [[nodiscard]] const PadAnalysisView &analysis() const noexcept { return fAnalysis.view(); }
+    /** Restores the remembered preference without saving it again. */
+    void setAnalysisEnabled(bool on);
+    void toggleAnalysis();
+    void requestAnalysisIfNeeded(Time now);
     /** Main Sample AUTO COLOR / CLEAR COLORS: slice zones and pad colours together. */
     void autoColorPads();
     [[nodiscard]] bool isFavoritePad(int pad) const noexcept;
@@ -210,6 +219,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     Time fEditorSnapshotRetryDeadline{};
     WaveformDetailSession fWaveformDetail;
     PlaybackIndicator fPlaybackIndicator;
+    PadAnalysisSession fAnalysis;
     ChopEditorController fChopEditor;
     PadActionController fPadActions;
     MainSampleController fMainSample{*this};

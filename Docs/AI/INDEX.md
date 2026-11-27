@@ -12,10 +12,10 @@ Read [AGENTS.md](../../AGENTS.md), then the relevant row.
 | Engine, state, UI | [Plugin architecture](../../SMS-AnvilleSampler/Docs/ARCHITECTURE.md) | [Plugin source](../../SMS-AnvilleSampler/src/) |
 | Startup preferences | [Preferences](LAYOUT-PREFERENCE.md) | Host precedence |
 | Effects, resampling | [Mixing](MIXING.md), [Resampling](RESAMPLING.md), [Benchmarks](../../SMS-AnvilleSampler/Docs/RESAMPLING-BENCHMARKS.md) | [DSP](../../Common-Src/DSP/ColorEffects.hpp) |
-| Sound detection | [Contract](SOUND-ANALYSIS.md) | [Analysis](../../Common-Src/Analysis/) |
+| Sound detection | [Contract](SOUND-ANALYSIS.md), [guide](../../SMS-AnvilleSampler/Docs/SOUND-ANALYSIS.md) | [Analysis](../../Common-Src/Analysis/) |
 | Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md), [Auto-chop](AUTO-CHOP.md), [Spectrogram](SPECTROGRAM.md) | [Common-Src](../../Common-Src/) |
 | Shared UI | [Common-UI map](../../Common-UI/README.md) | [Common-UI](../../Common-UI/) |
-| Product direction | [Vision](../../SMS-AnvilleSampler/Docs/VISION.md) | Intended scope |
+| Product direction | [Vision](../../SMS-AnvilleSampler/Docs/VISION.md) | Scope |
 | Pad context menu and actions | [Context-menu design](PAD-CONTEXT-MENU.md), [Drag](PAD-QUICK-EDIT.md) | Action contract |
 | Cut Point Editor | [Cut Point Editor](CHOP-EDITOR.md) | Three-pad cuts, preview, limitations |
 | Pad storage, concurrency | [Storage handoff](PAD-STORAGE.md), [Main sample](MAIN-SAMPLE.md), [workflows](MAIN-SAMPLE-WORKFLOWS.md), [preview](MAIN-SAMPLE-PREVIEW.md), [UI](MAIN-SAMPLE-UI.md), [guide](../../SMS-AnvilleSampler/Docs/MAIN-SAMPLE.md) | [Engine](../../SMS-AnvilleSampler/src/core/SamplerEngine.hpp) |

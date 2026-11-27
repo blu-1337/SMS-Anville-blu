@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SMSAnvilleSampler VERSION 1.2.90 LANGUAGES C CXX)
+project(SMSAnvilleSampler VERSION 1.2.91 LANGUAGES C CXX)
 set(ANVILLESAMPLER_PRERELEASE "beta.1")
 set(ANVILLESAMPLER_RELEASE_VERSION "${PROJECT_VERSION}")
 if(NOT ANVILLESAMPLER_PRERELEASE STREQUAL "")
@@ -497,6 +497,10 @@ if(BUILD_TESTING)
   add_executable(anvillesampler_playback_voice_tests tests/playback_voice_tests.cpp)
   target_link_libraries(anvillesampler_playback_voice_tests PRIVATE anvillesampler_core)
   add_test(NAME playback-voice COMMAND anvillesampler_playback_voice_tests)
+
+  add_executable(anvillesampler_vintage_processor_tests tests/vintage_processor_tests.cpp)
+  target_link_libraries(anvillesampler_vintage_processor_tests PRIVATE anvillesampler_core)
+  add_test(NAME vintage-processor COMMAND anvillesampler_vintage_processor_tests)
 
   add_executable(anvillesampler_resampling_tests
     tests/resampling_tests.cpp

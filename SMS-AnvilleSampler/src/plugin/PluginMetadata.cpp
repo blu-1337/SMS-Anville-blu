@@ -3,6 +3,7 @@
 #include "CaptureActionProtocol.hpp"
 #include "PadDirectionRequest.hpp"
 #include "StateKeys.hpp"
+#include "State/VintageSettingsCodec.hpp"
 
 namespace midichopper::plugin {
 
@@ -53,7 +54,8 @@ constexpr std::uint32_t kUndoStatusState = kUndoRequestState + 1U;
 constexpr std::uint32_t kSpectrogramState = kUndoStatusState + 1U;
 constexpr std::uint32_t kPadAnalysisRequestState = kSpectrogramState + 1U;
 constexpr std::uint32_t kPadAnalysisStatusState = kPadAnalysisRequestState + 1U;
-constexpr std::uint32_t kStateCount = kPadAnalysisStatusState + 1U;
+constexpr std::uint32_t kGlobalVintageState = kPadAnalysisStatusState + 1U;
+constexpr std::uint32_t kStateCount = kGlobalVintageState + 1U;
 constexpr std::array<const char*, midichopper::kPadsPerBank> kPadOccupiedNames{{
     "Pad 1 Occupied", "Pad 2 Occupied", "Pad 3 Occupied", "Pad 4 Occupied", "Pad 5 Occupied", "Pad 6 Occupied", "Pad 7 Occupied", "Pad 8 Occupied",
     "Pad 9 Occupied", "Pad 10 Occupied", "Pad 11 Occupied", "Pad 12 Occupied", "Pad 13 Occupied", "Pad 14 Occupied", "Pad 15 Occupied", "Pad 16 Occupied",
@@ -401,6 +403,11 @@ void initPluginState(const uint32_t index, DISTRHO::State& state,
         state.label = "Pad Analysis Status";
         state.defaultValue = "";
         state.hints = kStateIsOnlyForUI;
+    } else if (index == kGlobalVintageState) {
+        state.key = kGlobalVintageKey;
+        state.label = "Global Vintage FX";
+        state.defaultValue = sms::state::encodeVintageSettings({}).c_str();
+        state.hints = 0; // Private durable DPF state, never a host parameter.
     } else if (index >= kGlobalControlStateOffset) {
         const auto control = index - kGlobalControlStateOffset;
         state.key = kGlobalControlStateKeys[control];

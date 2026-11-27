@@ -31,6 +31,7 @@
 #include "StateCodec.hpp"
 #include "WaveformDetailProtocol.hpp"
 #include "SamplerEngine.hpp"
+#include "State/VintageSettingsCodec.hpp"
 
 #include <algorithm>
 #include <array>
@@ -259,6 +260,8 @@ protected:
                 return String(encodeGlobalValueSettings(desiredGlobalValueSettings_[i]).c_str());
             }
         }
+        if (std::strcmp(key, kGlobalVintageKey) == 0)
+            return String(sms::state::encodeVintageSettings(sampler_.globalVintage()).c_str());
         // The workflows take the mutation mutex themselves.
         if (std::strcmp(key, kMainSampleAudioKey) == 0)
             return String(mainSampleWorkflows_.saveAudio().c_str());
@@ -412,6 +415,17 @@ protected:
                 sampler_.setFavoriteMask(0U);
             });
             publishUiState(kPadFileStatusKey, "Pads cleared");
+            return;
+        }
+        if (std::strcmp(key, kGlobalVintageKey) == 0) {
+            // Durable, not undoable; an empty or malformed value (older projects) means Off.
+            sms::dsp::VintageSettings settings;
+            if (!sms::state::decodeVintageSettings(value, settings))
+                settings = {};
+            const std::lock_guard lock(globalVintageMutex_);
+            sampler_.setGlobalVintage(settings);
+            const auto encoded = sms::state::encodeVintageSettings(settings);
+            publishUiState(key, encoded.c_str());
             return;
         }
         if (controls_.queueStateCommand(key, value))
@@ -961,6 +975,7 @@ private:
     midichopper::plugin::PluginControls controls_;
     std::array<std::atomic<int>, midichopper::kPadCount> padColors_{};
     mutable std::mutex globalValueSettingsMutex_;
+    std::mutex globalVintageMutex_; // serializes accepted global vintage and its UI echo
     GlobalSettingsArray desiredGlobalValueSettings_ = initialGlobalValueSettings_;
     GlobalSettingsArray activeGlobalValueSettings_ = initialGlobalValueSettings_; // Audio-owned.
     sms::audio::RealtimeLatestMailbox<GlobalSettingsArray> globalValueSettingsMailbox_;

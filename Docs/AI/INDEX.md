@@ -11,7 +11,7 @@ Read [AGENTS.md](../../AGENTS.md), then the relevant row.
 | Screenshots | [Images](DOC-IMAGES.md) | [Captures](../../SMS-AnvilleSampler/Docs/) |
 | Engine, state, UI | [Plugin architecture](../../SMS-AnvilleSampler/Docs/ARCHITECTURE.md) | [Plugin source](../../SMS-AnvilleSampler/src/) |
 | Startup preferences | [Preferences](LAYOUT-PREFERENCE.md) | Host precedence |
-| Effects, resampling | [Mixing](MIXING.md), [Resampling](RESAMPLING.md), [Benchmarks](../../SMS-AnvilleSampler/Docs/RESAMPLING-BENCHMARKS.md) | [DSP](../../Common-Src/DSP/ColorEffects.hpp) |
+| Effects, resampling | [Mixing](MIXING.md), [Vintage](VINTAGE-FX.md), [Resampling](RESAMPLING.md), [Benchmarks](../../SMS-AnvilleSampler/Docs/RESAMPLING-BENCHMARKS.md) | [DSP](../../Common-Src/DSP/ColorEffects.hpp) |
 | Sound detection | [Contract](SOUND-ANALYSIS.md), [guide](../../SMS-AnvilleSampler/Docs/SOUND-ANALYSIS.md) | [Analysis](../../Common-Src/Analysis/) |
 | Shared DSP, codecs, geometry | [Common-Src map](../../Common-Src/README.md), [Auto-chop](AUTO-CHOP.md), [Spectrogram](SPECTROGRAM.md) | [Common-Src](../../Common-Src/) |
 | Shared UI | [Common-UI map](../../Common-UI/README.md) | [Common-UI](../../Common-UI/) |

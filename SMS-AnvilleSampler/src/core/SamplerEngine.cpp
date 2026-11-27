@@ -44,6 +44,8 @@ SamplerEngine::SamplerEngine(double sampleRate, double maxRecordSeconds)
     captureResampler_.configure(sample_rate_, capture_rate_);
     for (auto& p : pads_) p.sourceSampleRate = capture_rate_;
     setSettings(settings_);
+    setGlobalVintage({});
+    for (auto& bus : busVintage_) bus.prepare(sample_rate_, true);
 }
 
 void SamplerEngine::setSampleRate(double sampleRate) {
@@ -138,6 +140,7 @@ void SamplerEngine::setSampleRate(double sampleRate) {
     }
     resetCaptureTarget(settings_.armed);
     setSettings(settings_);
+    for (auto& bus : busVintage_) bus.prepare(sample_rate_, true);
 }
 
 void SamplerEngine::reset() noexcept {
@@ -158,6 +161,7 @@ void SamplerEngine::reset() noexcept {
     playbackPositionHoldFrames_ = 0;
     playbackPositionOutput_ = 0.0f;
     playbackPositionWasActive_ = false;
+    for (auto& bus : busVintage_) bus.reset();
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
         auto& p = pads_[pad];
         const PadMutation publication(p);
@@ -941,6 +945,7 @@ void SamplerEngine::process(const float* inputLeft, const float* inputRight,
     }
     for (std::uint32_t pad = 0; pad < kPadCount; ++pad)
         refreshActiveVoiceSettings(pad);
+    applyGlobalVintage();
     MidiEvent nextEvent{};
     bool hasEvent = events.next != nullptr && events.next(events.context, nextEvent);
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
@@ -969,6 +974,13 @@ void SamplerEngine::process(const float* inputLeft, const float* inputRight,
             if (!p.voice.render(storagePool_, p.storage, frameCount, sourceRate, destL, destR))
                 p.publishedPlaying.store(false, std::memory_order_release);
         }
+        if (busVintageActive_) {
+            // Global vintage on each summed bus; Off is an exact bypass after its fade.
+            busVintage_[0].process(outL, outR);
+            if (auxOutputs_ != nullptr)
+                for (std::uint32_t bus = 0; bus < kAuxOutputCount; ++bus)
+                    busVintage_[bus + 1U].process(auxL[bus], auxR[bus]);
+        }
         if (auxOutputs_ != nullptr) {
             for (std::uint32_t bus = 0; bus < kAuxOutputCount; ++bus) {
                 auxOutputs_[bus * 2U][frame] = auxL[bus] * settings_.gain;
@@ -989,6 +1001,46 @@ void SamplerEngine::process(const float* inputLeft, const float* inputRight,
         }
     }
     updatePlaybackPositionOutput(frames);
+}
+
+void SamplerEngine::setGlobalVintage(const sms::dsp::VintageSettings& requested) noexcept {
+    const auto settings = sms::dsp::sanitize(requested);
+    const float values[8]{settings.model, settings.voicing, settings.bits, settings.rateHz,
+                          settings.driveDb, settings.toneOctaves, settings.mix, settings.resonance};
+    const std::lock_guard lock(globalVintageMutex_);
+    globalVintageSequence_.fetch_add(1U, std::memory_order_acq_rel); // odd: writing
+    for (std::size_t index = 0; index < globalVintageValues_.size(); ++index)
+        globalVintageValues_[index].store(values[index], std::memory_order_relaxed);
+    globalVintageSequence_.fetch_add(1U, std::memory_order_release); // even: complete
+}
+
+sms::dsp::VintageSettings SamplerEngine::globalVintage() const noexcept {
+    const std::lock_guard lock(globalVintageMutex_);
+    const auto value = [&](const std::size_t index) noexcept {
+        return globalVintageValues_[index].load(std::memory_order_relaxed);
+    };
+    return sms::dsp::VintageSettings{value(0), value(1), value(2), value(3),
+                                     value(4), value(5), value(6), value(7)};
+}
+
+void SamplerEngine::applyGlobalVintage() noexcept {
+    const auto first = globalVintageSequence_.load(std::memory_order_acquire);
+    if (first != appliedGlobalVintageSequence_ && (first & 1U) == 0U) {
+        float values[8];
+        for (std::size_t index = 0; index < 8U; ++index)
+            values[index] = globalVintageValues_[index].load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (globalVintageSequence_.load(std::memory_order_relaxed) == first) {
+            appliedGlobalVintageSequence_ = first; // a torn read retries next block
+            const sms::dsp::VintageSettings settings{values[0], values[1], values[2], values[3],
+                                                     values[4], values[5], values[6], values[7]};
+            for (auto& bus : busVintage_)
+                bus.setTarget(settings);
+        }
+    }
+    busVintageActive_ = false;
+    for (const auto& bus : busVintage_)
+        busVintageActive_ = busVintageActive_ || !bus.bypassed();
 }
 
 float SamplerEngine::playbackPosition() const noexcept {
@@ -2112,6 +2164,15 @@ sms::dsp::SampleMixerSettings SamplerEngine::padMixerSettings(
         p.mixerChokeGroup.load(std::memory_order_acquire),
         p.mixerOutputBus.load(std::memory_order_acquire),
         p.mixerHoldLoop.load(std::memory_order_acquire),
+        sms::dsp::VintageSettings{
+            p.mixerVintageModel.load(std::memory_order_acquire),
+            p.mixerVintageVoicing.load(std::memory_order_acquire),
+            p.mixerVintageBits.load(std::memory_order_acquire),
+            p.mixerVintageRateHz.load(std::memory_order_acquire),
+            p.mixerVintageDriveDb.load(std::memory_order_acquire),
+            p.mixerVintageToneOctaves.load(std::memory_order_acquire),
+            p.mixerVintageMix.load(std::memory_order_acquire),
+            p.mixerVintageResonance.load(std::memory_order_acquire)},
     });
 }
 
@@ -2135,7 +2196,15 @@ void SamplerEngine::setPadMixerSettingsDirect(
         p.mixerGlobalMixer.load(std::memory_order_acquire) != settings.globalMixer ||
         p.mixerChokeGroup.load(std::memory_order_acquire) != settings.chokeGroup ||
         p.mixerOutputBus.load(std::memory_order_acquire) != settings.outputBus ||
-        p.mixerHoldLoop.load(std::memory_order_acquire) != settings.holdLoop;
+        p.mixerHoldLoop.load(std::memory_order_acquire) != settings.holdLoop ||
+        p.mixerVintageModel.load(std::memory_order_acquire) != settings.vintage.model ||
+        p.mixerVintageVoicing.load(std::memory_order_acquire) != settings.vintage.voicing ||
+        p.mixerVintageBits.load(std::memory_order_acquire) != settings.vintage.bits ||
+        p.mixerVintageRateHz.load(std::memory_order_acquire) != settings.vintage.rateHz ||
+        p.mixerVintageDriveDb.load(std::memory_order_acquire) != settings.vintage.driveDb ||
+        p.mixerVintageToneOctaves.load(std::memory_order_acquire) != settings.vintage.toneOctaves ||
+        p.mixerVintageMix.load(std::memory_order_acquire) != settings.vintage.mix ||
+        p.mixerVintageResonance.load(std::memory_order_acquire) != settings.vintage.resonance;
     // Bypassing the master changes only its contribution to direction. Keep
     // the latched local direction, current source position, and envelope.
     if (redirectGlobal && settings_.reverse &&
@@ -2153,6 +2222,14 @@ void SamplerEngine::setPadMixerSettingsDirect(
     p.mixerChokeGroup.store(settings.chokeGroup, std::memory_order_release);
     p.mixerOutputBus.store(settings.outputBus, std::memory_order_release);
     p.mixerHoldLoop.store(settings.holdLoop, std::memory_order_release);
+    p.mixerVintageModel.store(settings.vintage.model, std::memory_order_release);
+    p.mixerVintageVoicing.store(settings.vintage.voicing, std::memory_order_release);
+    p.mixerVintageBits.store(settings.vintage.bits, std::memory_order_release);
+    p.mixerVintageRateHz.store(settings.vintage.rateHz, std::memory_order_release);
+    p.mixerVintageDriveDb.store(settings.vintage.driveDb, std::memory_order_release);
+    p.mixerVintageToneOctaves.store(settings.vintage.toneOctaves, std::memory_order_release);
+    p.mixerVintageMix.store(settings.vintage.mix, std::memory_order_release);
+    p.mixerVintageResonance.store(settings.vintage.resonance, std::memory_order_release);
     if (changed)
         p.generation.fetch_add(1U, std::memory_order_release);
 }

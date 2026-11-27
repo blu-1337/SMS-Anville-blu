@@ -10,7 +10,9 @@
 #include "PadDirectionRequest.hpp"
 #include "PadAnalysisProtocol.hpp"
 #include "PadQuickEditCodec.hpp"
+#include "State/VintageSettingsCodec.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -546,7 +548,7 @@ void mixerStateRoundTrip()
     original.chokeGroup = 5.0f;
     original.outputBus = 3.0f;
     const std::string encoded = midichopper::plugin::encodeMixerSettings(original);
-    check(encoded.rfind("MX7;", 0U) == 0U, "mixer settings use the MX7 state version");
+    check(encoded.rfind("MX8;", 0U) == 0U, "mixer settings use the MX8 state version");
     sms::dsp::SampleMixerSettings decoded;
     check(midichopper::plugin::decodeMixerSettings(encoded.c_str(), decoded),
           "sample mixer settings decode");
@@ -630,6 +632,128 @@ void mixerStateRoundTrip()
     check(decoded.lowpass == 0.0f && decoded.highpass == 0.0f &&
           decoded.filterSlope == 1.0f && decoded.dirty == 0.0f,
           "legacy mixer state restores with effects bypassed");
+}
+
+bool sameVintage(const sms::dsp::VintageSettings& a, const sms::dsp::VintageSettings& b)
+{
+    return a == b;
+}
+
+// MX8 appends the vintage FX fields; every older version decodes them Off.
+void vintageMixerCodec()
+{
+    sms::dsp::SampleMixerSettings original;
+    original.gainDecibels = -3.5f;
+    original.pan = -0.25f;
+    original.tuneSemitones = 0.23f;
+    original.chokeGroup = 2.0f;
+    original.outputBus = 7.0f;
+    original.holdLoop = 1.0f;
+    original.vintage = {2.0f, 1.0f, 9.5f, 31234.5f, 7.25f, -1.125f, 0.625f, 0.875f};
+    const auto encoded = midichopper::plugin::encodeMixerSettings(original);
+    check(encoded.rfind("MX8;", 0U) == 0U &&
+              std::count(encoded.begin(), encoded.end(), ';') == 20,
+          "MX8 carries twelve mixer fields and eight vintage fields");
+    sms::dsp::SampleMixerSettings decoded;
+    check(midichopper::plugin::decodeMixerSettings(encoded.c_str(), decoded) &&
+              sameVintage(decoded.vintage, original.vintage) &&
+              decoded.gainDecibels == original.gainDecibels && decoded.pan == original.pan &&
+              decoded.tuneSemitones == original.tuneSemitones &&
+              decoded.chokeGroup == 2.0f && decoded.outputBus == 7.0f && decoded.holdLoop == 1.0f,
+          "MX8 round-trips every vintage field exactly");
+    midichopper::plugin::PadQuickEditDelta quick;
+    quick.hasGain = quick.hasPan = true;
+    quick.gainDecibels = 2.0f;
+    quick.pan = 0.5f;
+    check(sameVintage(midichopper::plugin::applyPadQuickEdit(original, quick).vintage,
+                      original.vintage),
+          "a Main-view quick edit (QE1) keeps the pad's vintage fields");
+
+    struct Legacy {
+        const char* text;
+        float gain, pan, tune, lowpass, highpass, slope, dirty, reverse, globalMixer, choke, bus, hold;
+    };
+    const Legacy legacy[]{
+        {"MX1;-6;0.5;3", -6, 0.5f, 3, 0, 0, 1, 0, 0, 1, 0, 0, 1},
+        {"MX2;-6;0.5;3;0.25;0.5;2;1", -6, 0.5f, 3, 0.25f, 0.5f, 2, 1, 0, 1, 0, 0, 1},
+        {"MX3;-6;0.5;3;0.25;0.5;2;1;1", -6, 0.5f, 3, 0.25f, 0.5f, 2, 1, 1, 1, 0, 0, 1},
+        {"MX4;-6;0.5;3;0.25;0.5;2;1;1;0", -6, 0.5f, 3, 0.25f, 0.5f, 2, 1, 1, 0, 0, 0, 1},
+        {"MX5;-6;0.5;3;0.25;0.5;2;1;1;0;4", -6, 0.5f, 3, 0.25f, 0.5f, 2, 1, 1, 0, 4, 0, 1},
+        {"MX6;-6;0.5;3;0.25;0.5;2;1;1;0;4;9", -6, 0.5f, 3, 0.25f, 0.5f, 2, 1, 1, 0, 4, 9, 1},
+        {"MX7;-6;0.5;3;0.25;0.5;2;1;1;0;4;9;0", -6, 0.5f, 3, 0.25f, 0.5f, 2, 1, 1, 0, 4, 9, 0},
+    };
+    for (const auto& entry : legacy) {
+        sms::dsp::SampleMixerSettings restored;
+        restored.vintage = original.vintage; // a stale destination must not leak through
+        check(midichopper::plugin::decodeMixerSettings(entry.text, restored),
+              "every released mixer version still decodes");
+        check(sameVintage(restored.vintage, sms::dsp::VintageSettings{}) &&
+                  restored.vintage.model == 0.0f,
+              "MX1-MX7 decode with vintage FX Off");
+        check(restored.gainDecibels == entry.gain && restored.pan == entry.pan &&
+                  restored.tuneSemitones == entry.tune && restored.lowpass == entry.lowpass &&
+                  restored.highpass == entry.highpass && restored.filterSlope == entry.slope &&
+                  restored.dirty == entry.dirty && restored.reverse == entry.reverse &&
+                  restored.globalMixer == entry.globalMixer && restored.chokeGroup == entry.choke &&
+                  restored.outputBus == entry.bus && restored.holdLoop == entry.hold,
+              "MX1-MX7 other fields decode exactly as before MX8");
+    }
+
+    sms::dsp::SampleMixerSettings clamped;
+    check(midichopper::plugin::decodeMixerSettings(
+              "MX8;0;0;0;0;0;0;0;0;1;0;0;0;7;-3;40;100;99;-9;3;-1", clamped) &&
+              clamped.vintage.model == 2.0f && clamped.vintage.voicing == 0.0f &&
+              clamped.vintage.bits == 16.0f && clamped.vintage.rateHz == 4000.0f &&
+              clamped.vintage.driveDb == 24.0f && clamped.vintage.toneOctaves == -2.0f &&
+              clamped.vintage.mix == 1.0f && clamped.vintage.resonance == 0.0f,
+          "MX8 vintage values clamp to their ranges");
+    for (const char* const invalid : {
+             "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1",       // 19 fields
+             "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0;0",   // 21 fields
+             "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0;",    // trailing separator
+             "MX8;0;0;0;0;0;0;0;0;1;0;0;0;nan;3;12;26000;0;0;1;0",   // non-finite
+             "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0x",    // trailing junk
+             "MX9;0;0;0", "MX0;0;0;0", "MX8"}) {
+        sms::dsp::SampleMixerSettings untouched;
+        untouched.vintage = original.vintage;
+        check(!midichopper::plugin::decodeMixerSettings(invalid, untouched) &&
+                  sameVintage(untouched.vintage, original.vintage),
+              "malformed MX8 is rejected and leaves the destination unchanged");
+    }
+    check(sms::dsp::defaultRateHz(sms::dsp::VintageModel::drum12) == sms::dsp::kVintageDrumRateHz &&
+              sms::dsp::defaultRateHz(sms::dsp::VintageModel::rack12) == 40000.0f,
+          "each model has its own default rate");
+    sms::dsp::VintageSettings nonfinite{std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN(),
+        -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::quiet_NaN()};
+    check(sameVintage(sms::dsp::sanitize(nonfinite), sms::dsp::VintageSettings{}),
+          "non-finite vintage values fall back to the defaults (Off)");
+}
+
+void globalVintageCodec()
+{
+    const sms::dsp::VintageSettings original{1.0f, 0.0f, 8.0f, 12000.0f, 18.0f, 1.5f, 0.5f, 0.25f};
+    const auto encoded = sms::state::encodeVintageSettings(original);
+    check(encoded.rfind("VF1;", 0U) == 0U, "global vintage uses VF1");
+    sms::dsp::VintageSettings decoded;
+    check(sms::state::decodeVintageSettings(encoded.c_str(), decoded) &&
+              sameVintage(decoded, original),
+          "VF1 round-trips every field exactly");
+    check(sms::state::encodeVintageSettings({}) == "VF1;0;3;12;26041.6699;0;0;1;0",
+          "the VF1 default is Off");
+    for (const char* const invalid : {"", "VF1", "VF1;", "VF1;1;3;12;26000;0;0;1",
+                                      "VF1;1;3;12;26000;0;0;1;0;0", "VF1;1;3;12;26000;0;0;1;0;",
+                                      "VF1;1;3;12;inf;0;0;1;0", "VF2;1;3;12;26000;0;0;1;0",
+                                      "VF1;1;3;12;26000;0;0;1;0 "}) {
+        sms::dsp::VintageSettings untouched = original;
+        check(!sms::state::decodeVintageSettings(invalid, untouched) &&
+                  sameVintage(untouched, original),
+              "malformed VF1 is rejected and leaves the destination unchanged");
+    }
+    sms::dsp::VintageSettings untouched = original;
+    check(!sms::state::decodeVintageSettings(nullptr, untouched), "VF1 rejects null");
 }
 
 void editorSnapshotProtocolRoundTrip()
@@ -1147,6 +1271,8 @@ int main()
     playbackAndMixerRejectMalformedFields();
     editorStateRoundTrip();
     mixerStateRoundTrip();
+    vintageMixerCodec();
+    globalVintageCodec();
     editorSnapshotProtocolRoundTrip();
     chopProtocolRoundTrip();
     padStructureProtocolRoundTrip();

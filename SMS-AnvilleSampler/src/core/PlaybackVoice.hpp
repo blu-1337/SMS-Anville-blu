@@ -6,6 +6,7 @@
 #include "DSP/SampleMixerSettings.hpp"
 #include "DSP/SamplePlaybackSettings.hpp"
 #include "DSP/SincResampler.hpp"
+#include "DSP/VintageProcessor.hpp"
 
 #include <cstdint>
 
@@ -93,6 +94,16 @@ private:
     sms::dsp::ColorFilters padFilters_;
     sms::dsp::ColorFilters globalFilters_;
     sms::dsp::AdsrEnvelope envelope_;
+    // Pad vintage FX, first on the pad. While it is on, the read is a 2-tap
+    // linear read (pitched playback keeps its aliasing); readBlend_ crossfades
+    // the sinc and linear reads over 10 ms so a live model change does not click.
+    void configureVintage(const sms::dsp::VintageSettings& settings, double sampleRate,
+                          bool fresh) noexcept;
+    sms::dsp::VintageProcessor vintage_;
+    double vintageRate_ = 0.0;
+    float readBlend_ = 0.0f;  // 0 = sinc read, 1 = linear read
+    float readTarget_ = 0.0f;
+    float readStep_ = 1.0f / 480.0f;
 };
 
 } // namespace midichopper

@@ -10,6 +10,7 @@ void PlaybackVoice::start(const Parameters& parameters, const std::uint8_t veloc
                           const std::uint64_t order) noexcept {
     const auto& global = parameters.global;
     const auto sampleRate = parameters.sampleRate;
+    const bool fresh = !playing_; // a retrigger keeps the vintage filter states
     mode_ = mode;
     holdLoop_ = parameters.mixer.holdLoop >= 0.5f;
     triggerNote_ = triggerNote;
@@ -52,6 +53,8 @@ void PlaybackVoice::start(const Parameters& parameters, const std::uint8_t veloc
     playback.releaseSeconds = std::min(playback.releaseSeconds, regionSeconds * 0.5f);
     envelope_.configure(sampleRate, playback);
     envelope_.noteOn();
+    configureVintage(mixer.vintage, sampleRate, fresh);
+    vintage_.trigger();
     playing_ = true;
     order_ = order;
 }
@@ -105,6 +108,7 @@ bool PlaybackVoice::refresh(const Parameters& parameters) noexcept {
     if (!noteReleased_)
         playback.releaseSeconds = std::min(playback.releaseSeconds, regionSeconds * 0.5f);
     envelope_.updateSettings(playback);
+    configureVintage(mixer.vintage, sampleRate, false);
 
     const double remainingOutputFrames =
         (static_cast<double>(endFrame_) - position_) / step_;
@@ -114,6 +118,20 @@ bool PlaybackVoice::refresh(const Parameters& parameters) noexcept {
         releaseFromEnd_ = false;
     }
     return true;
+}
+
+void PlaybackVoice::configureVintage(const sms::dsp::VintageSettings& settings,
+                                     const double sampleRate, bool fresh) noexcept {
+    if (vintageRate_ != sampleRate) {
+        vintageRate_ = sampleRate;
+        vintage_.prepare(sampleRate, false);
+        readStep_ = static_cast<float>(1.0 / std::max(1.0, 0.01 * sampleRate));
+        fresh = true;
+    }
+    vintage_.setTarget(settings, fresh);
+    readTarget_ = sms::dsp::vintageAudible(settings) ? 1.0f : 0.0f;
+    if (fresh)
+        readBlend_ = readTarget_;
 }
 
 bool PlaybackVoice::release(const sms::dsp::SamplePlaybackSettings& playback) noexcept {
@@ -218,15 +236,37 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
         sampleL = sampleR = first * (1.0f - frac) + second * frac;
     } else {
         SampleStoragePool::StereoReader reader{pool, storage};
-        const auto sample = resampler_.read(pos, startFrame_, n, looping,
-            [&](const std::uint32_t index) noexcept {
-                const auto raw = sourceFrame(index);
-                const auto stereo = reader(raw);
-                return sms::dsp::StereoFrame{stereo[0], stereo[1]};
-            });
-        sampleL = sample.left;
-        sampleR = sample.right;
+        const bool linear = readBlend_ > 0.0f || readTarget_ > 0.0f;
+        const bool sinc = readBlend_ < 1.0f || readTarget_ < 1.0f;
+        sampleL = sampleR = 0.0f;
+        if (sinc) {
+            const auto sample = resampler_.read(pos, startFrame_, n, looping,
+                [&](const std::uint32_t index) noexcept {
+                    const auto raw = sourceFrame(index);
+                    const auto stereo = reader(raw);
+                    return sms::dsp::StereoFrame{stereo[0], stereo[1]};
+                });
+            sampleL = sample.left;
+            sampleR = sample.right;
+        }
+        if (linear) {
+            // Vintage read: 2-tap linear, so pitched playback keeps its aliasing.
+            const auto first = reader(sourceFrame(i));
+            const auto second = reader(sourceFrame(j));
+            const float linearL = first[0] + (second[0] - first[0]) * frac;
+            const float linearR = first[1] + (second[1] - first[1]) * frac;
+            if (!sinc) {
+                sampleL = linearL;
+                sampleR = linearR;
+            } else {
+                sampleL += readBlend_ * (linearL - sampleL);
+                sampleR += readBlend_ * (linearR - sampleR);
+            }
+            readBlend_ = readTarget_ > readBlend_ ? std::min(readBlend_ + readStep_, 1.0f)
+                                                  : std::max(readBlend_ - readStep_, 0.0f);
+        }
     }
+    vintage_.process(sampleL, sampleR); // first on the pad; exact bypass when Off
     padFilters_.process(sampleL, sampleR);
     globalFilters_.process(sampleL, sampleR);
     outL += sampleL * voiceGain * gainLeft_;

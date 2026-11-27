@@ -3,6 +3,7 @@
 #include "Parameters.hpp"
 #include "StateCodec.hpp"
 #include "StateKeys.hpp"
+#include "State/VintageSettingsCodec.hpp"
 #include "src/DistrhoPluginInternal.hpp"
 
 #include <algorithm>
@@ -306,14 +307,57 @@ void analysisStateMetadata()
 {
     PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
     const auto count = plugin.getStateCount();
-    check(plugin.getStateKey(count - 3U) == kMainSampleSpectrogramKey &&
-          plugin.getStateKey(count - 2U) == kPadAnalysisRequestKey &&
-          plugin.getStateKey(count - 1U) == kPadAnalysisStatusKey &&
-          plugin.getStateHints(count - 2U) == DISTRHO::kStateIsOnlyForDSP &&
-          plugin.getStateHints(count - 1U) == DISTRHO::kStateIsOnlyForUI &&
+    check(plugin.getStateKey(count - 4U) == kMainSampleSpectrogramKey &&
+          plugin.getStateKey(count - 3U) == kPadAnalysisRequestKey &&
+          plugin.getStateKey(count - 2U) == kPadAnalysisStatusKey &&
+          plugin.getStateHints(count - 3U) == DISTRHO::kStateIsOnlyForDSP &&
+          plugin.getStateHints(count - 2U) == DISTRHO::kStateIsOnlyForUI &&
           plugin.getStateValue(kPadAnalysisRequestKey) == "" &&
           plugin.getStateValue(kPadAnalysisStatusKey) == "",
-          "pad analysis keys are appended last and save empty values");
+          "pad analysis keys are appended and save empty values");
+}
+
+// global_vintage is appended last, durable (hints 0), defaults Off, garbage restores Off.
+void globalVintageState()
+{
+    PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
+    const auto count = plugin.getStateCount();
+    const auto off = sms::state::encodeVintageSettings({});
+    check(plugin.getStateKey(count - 1U) == kGlobalVintageKey && plugin.getStateHints(count - 1U) == 0U &&
+          plugin.getStateDefaultValue(count - 1U) == off.c_str() &&
+          plugin.getStateValue(kGlobalVintageKey) == off.c_str(),
+          "global vintage key is appended last, durable and Off by default");
+    const auto on = sms::state::encodeVintageSettings({2.0f, 3.0f, 10.0f, 30000.0f, 6.0f, -0.5f, 0.75f, 0.4f});
+    plugin.setState(kGlobalVintageKey, on.c_str());
+    check(plugin.getStateValue(kGlobalVintageKey) == on.c_str(), "global vintage saves what was restored");
+    plugin.setState(kGlobalVintageKey, "VF1;garbage");
+    check(plugin.getStateValue(kGlobalVintageKey) == off.c_str(), "a malformed global vintage restores Off");
+    plugin.setState(kGlobalVintageKey, on.c_str());
+    plugin.setState(kGlobalVintageKey, "");
+    check(plugin.getStateValue(kGlobalVintageKey) == off.c_str(), "an empty global vintage restores Off");
+}
+
+// A project saved before MX8 (pad mixer MX7) plays exactly like the MX8 save and re-saves as MX8 Off.
+void legacyMixerRestore(const SavedState& saved)
+{
+    std::string legacy = saved.values[2];
+    check(legacy.rfind("MX8;", 0U) == 0U, "fixture mixer is MX8");
+    legacy[2] = '7';
+    for (int field = 0; field < 8; ++field)
+        legacy.erase(legacy.rfind(';'));
+    PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
+    plugin.setParameterValue(kParameterInputMonitor, 0.0f);
+    plugin.setState(kKeys[0], saved.values[0].c_str());
+    plugin.setState(kKeys[1], saved.values[1].c_str());
+    plugin.setState(kKeys[2], legacy.c_str());
+    check(plugin.getStateValue(kKeys[2]) == saved.values[2].c_str(),
+          "an MX7 pad mixer restores unchanged with vintage Off");
+    const auto output = process(plugin, {}, kFrames, true);
+    for (std::uint32_t frame = 0U; frame < kFrames; ++frame)
+        for (std::uint32_t channel = 0U; channel < 2U; ++channel)
+            check(sameBits(output[channel][frame], saved.playback[channel][frame]),
+                  "an MX7 project plays bit-identically");
+    plugin.deactivateIfNeeded();
 }
 } // namespace
 
@@ -330,6 +374,8 @@ int main()
     mainSampleKeyOrders();
     mainSampleClearAndMismatch();
     analysisStateMetadata();
+    globalVintageState();
+    legacyMixerRestore(saved);
     DISTRHO::d_nextPluginIsDummy = false;
     std::cout << "Project state tests passed\n";
 }

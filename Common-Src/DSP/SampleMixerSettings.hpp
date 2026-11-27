@@ -1,5 +1,7 @@
 #pragma once
 
+#include "VintageSettings.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -30,6 +32,7 @@ struct SampleMixerSettings {
     float chokeGroup = 0.0f; // 0 = off, 1..8 = pads in one group cut each other
     float outputBus = 0.0f;  // 0 = main stereo out, 1..16 = auxiliary stereo out
     float holdLoop = 0.0f;   // HOLD mode: 1 = loop while held, 0 = play once (default; MX1-MX6 blobs decode as 1)
+    VintageSettings vintage{}; // pad vintage FX, first on the pad (MX8; older blobs decode Off)
 };
 
 [[nodiscard]] inline SampleMixerSettings sanitize(SampleMixerSettings value) noexcept
@@ -58,6 +61,7 @@ struct SampleMixerSettings {
     value.outputBus = std::clamp(std::round(finiteOr(value.outputBus, 0.0f)), 0.0f,
                                  static_cast<float>(kAuxOutputCount));
     value.holdLoop = finiteOr(value.holdLoop, 0.0f) >= 0.5f ? 1.0f : 0.0f;
+    value.vintage = sanitize(value.vintage);
     return value;
 }
 

@@ -12,6 +12,8 @@ host, or a specific plug-in's state model.
   semitone tune, filter, dirty-mode, playback direction, and global mixer routing.
 - `DSP/ColorEffects.hpp`: allocation-free per-voice stereo filters and 26.04 kHz,
   12-bit mono source conversion.
+- `DSP/VintageSettings.hpp`, `DSP/VintageProcessor.hpp`, `State/VintageSettingsCodec.hpp`:
+  12-bit vintage FX settings, real-time processor and VF1 codec ([contract](../Docs/AI/VINTAGE-FX.md)).
 - `DSP/SincResampler.hpp`: stereo windowed-sinc rate conversion and varispeed;
   [filter, real-time and boundary contract](../Docs/AI/RESAMPLING.md).
 - `DSP/StreamingDownsampler.hpp`: bounded FIR input history and edge flush for

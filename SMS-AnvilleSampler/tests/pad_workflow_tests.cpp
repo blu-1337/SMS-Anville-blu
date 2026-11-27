@@ -2327,10 +2327,58 @@ void padTuneUndoSteps()
     check(tune() == 0.0F && gainNow() == -6.0F, "undo the first TUNE");
 }
 
+// Pad vintage settings are mixer settings: undoable, kept by TUNE, moved by swap and paste.
+void padVintageTravelsWithPad()
+{
+    MainSampleFixture fixture;
+    std::array<std::atomic<int>, kPadCount> colors{};
+    std::mutex mutation;
+    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
+    const auto shortPad = [](const float level) {
+        PadData data;
+        data.sampleRate = 48000.0;
+        data.frames = 256U;
+        data.peak = level;
+        data.stereo.assign(512U, level);
+        return data;
+    };
+    check(fixture.engine.importPad(4U, shortPad(0.5f)) && fixture.engine.importPad(7U, shortPad(0.25f)),
+          "seed pads");
+    const auto now = UndoController::Clock::now();
+    const auto at = [&](const int ms) { return now + std::chrono::milliseconds(ms); };
+    const auto vintageOf = [&](const std::uint32_t pad) {
+        sms::dsp::SamplePlaybackSettings playback;
+        sms::dsp::SampleMixerSettings mixer;
+        fixture.engine.snapshotPadSettings(pad, playback, mixer);
+        return mixer.vintage;
+    };
+    const sms::dsp::VintageSettings drum{1.0f, 0.0f, 10.0f, 20000.0f, 6.0f, 0.5f, 0.75f, 0.0f};
+    auto mixer = fixture.engine.padMixerSettings(4U);
+    mixer.vintage = drum;
+    undo.record(UndoController::Kind::settings, at(0),
+                [&] { fixture.engine.restorePadMixerSettings(4U, mixer); });
+    check(undo.undoDepth() == 1U && vintageOf(4U) == drum, "a vintage edit is one undo step");
+    undo.applyPadTune(4U, 1.5F, mutation, at(50));
+    check(vintageOf(4U) == drum, "TUNE (TN1) keeps the pad's vintage fields");
+    fixture.engine.applyPendingState(); // the audio block that publishes staged settings
+    undo.record(UndoController::Kind::action, at(100),
+                [&] { fixture.pads.handlePadStructureRequest("PS1;W;4;7"); });
+    check(vintageOf(7U) == drum && vintageOf(4U) == sms::dsp::VintageSettings{},
+          "swap moves the vintage settings with the pad");
+    fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::copy, 7U));
+    fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::paste, 9U));
+    check(vintageOf(9U) == drum, "copy and paste carry the vintage settings");
+    undo.undo();
+    undo.undo();
+    undo.undo();
+    check(vintageOf(4U) == sms::dsp::VintageSettings{} && vintageOf(7U) == sms::dsp::VintageSettings{},
+          "undo restores vintage Off");
+}
+
 int main()
 {
-    padTuneUndoSteps();
-    clipboardSnapshotAndReplies();
+    padVintageTravelsWithPad();
+    padTuneUndoSteps();    clipboardSnapshotAndReplies();
     resetClearsPadsAndClipboard();
     clipboardEmptyAndSamePadReplies();
     splitPlanAndConflict();

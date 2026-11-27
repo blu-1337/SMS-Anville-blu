@@ -7,6 +7,7 @@
 #include "DSP/SampleMixerSettings.hpp"
 #include "DSP/SamplePlaybackSettings.hpp"
 #include "DSP/StreamingDownsampler.hpp"
+#include "DSP/VintageProcessor.hpp"
 
 #include <array>
 #include <atomic>
@@ -165,6 +166,11 @@ public:
     void setAuxOutputs(float* const* buffers) noexcept { auxOutputs_ = buffers; }
     void reset() noexcept;
     void setSettings(const EngineSettings& settings) noexcept;
+    /** Global vintage FX: one processor per stereo bus (main + each auxiliary output) on the
+     * summed bus after the voices, before raw previews and output gain. Any non-audio thread;
+     * the audio thread adopts it at its next block. Not undoable, not a host parameter. */
+    void setGlobalVintage(const sms::dsp::VintageSettings& settings) noexcept;
+    [[nodiscard]] sms::dsp::VintageSettings globalVintage() const noexcept;
     [[nodiscard]] EngineSettings settings() const noexcept { return settings_; }
 
     void process(const float* inputLeft, const float* inputRight,
@@ -480,6 +486,14 @@ private:
         std::atomic<float> mixerChokeGroup{0.0f};
         std::atomic<float> mixerOutputBus{0.0f};
         std::atomic<float> mixerHoldLoop{0.0f};
+        std::atomic<float> mixerVintageModel{0.0f};
+        std::atomic<float> mixerVintageVoicing{3.0f};
+        std::atomic<float> mixerVintageBits{12.0f};
+        std::atomic<float> mixerVintageRateHz{sms::dsp::kVintageDrumRateHz};
+        std::atomic<float> mixerVintageDriveDb{0.0f};
+        std::atomic<float> mixerVintageToneOctaves{0.0f};
+        std::atomic<float> mixerVintageMix{1.0f};
+        std::atomic<float> mixerVintageResonance{0.0f};
         Pad() = default;
         Pad(const Pad&) = delete;
         Pad& operator=(const Pad&) = delete;
@@ -544,6 +558,7 @@ private:
     void refreshActiveVoiceSettings(std::uint32_t pad) noexcept;
     void updatePlaybackPositionOutput(std::uint32_t processedFrames) noexcept;
     void enforceVoiceLimit(std::uint32_t excludedPad = kPadCount) noexcept;
+    void applyGlobalVintage() noexcept;
     void mixChopPreview(float& left, float& right) noexcept;
     void mixSourcePreview(float& left, float& right) noexcept;
     /** Linear interpolation shared by both raw previews; exact at whole frames. */
@@ -624,6 +639,13 @@ private:
     std::uint32_t sourcePreviewStart_ = 0;
     std::uint32_t sourcePreviewEnd_ = 0;
     double sourcePreviewFrame_ = 0.0;
+    // Global vintage: a seqlock of 8 floats (VintageSettings order); writers hold the mutex.
+    std::array<sms::dsp::VintageProcessor, 1U + sms::dsp::kAuxOutputCount> busVintage_{};
+    std::array<std::atomic<float>, 8> globalVintageValues_{};
+    std::atomic<std::uint32_t> globalVintageSequence_{0U};
+    mutable std::mutex globalVintageMutex_;
+    std::uint32_t appliedGlobalVintageSequence_ = 0U; // audio owner
+    bool busVintageActive_ = false;                    // audio owner, per block
 };
 
 } // namespace midichopper

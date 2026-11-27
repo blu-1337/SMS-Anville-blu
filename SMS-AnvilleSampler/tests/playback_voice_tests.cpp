@@ -2,6 +2,8 @@
 #include "reference_resampler.hpp"
 
 #include <array>
+#include <bit>
+#include <cstdint>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -128,11 +130,53 @@ void lifecycle_preserves_distinct_reset_contracts() {
           "hard stop clears ownership and age");
     check(source.storage->references.load() == 1U, "voice lifecycle never releases engine storage");
 }
+
+// Pad vintage FX: Off (any other vintage fields) is bit-identical; On changes the
+// sound and stays finite; switching back Off returns to the exact original output.
+void vintage_off_is_exact_and_on_is_finite() {
+    Source source;
+    source.parameters.mixer.tuneSemitones = 0.37f; // fractional reads exercise the sinc path
+    auto offVariant = source.parameters;
+    offVariant.mixer.vintage = {0.0f, 1.0f, 6.0f, 9000.0f, 18.0f, 1.0f, 0.5f, 1.0f};
+    auto on = source.parameters;
+    on.mixer.vintage.model = 1.0f; // drum model, Open
+    on.mixer.vintage.bits = 6.0f;
+    PlaybackVoice reference, off, wet, toggled;
+    reference.start(source.parameters, 127U, PlaybackVoice::Mode::Loop, -1, 1U);
+    off.start(offVariant, 127U, PlaybackVoice::Mode::Loop, -1, 1U);
+    wet.start(on, 127U, PlaybackVoice::Mode::Loop, -1, 1U);
+    toggled.start(on, 127U, PlaybackVoice::Mode::Loop, -1, 1U);
+    const auto renderOne = [&](PlaybackVoice& voice, float& left, float& right) {
+        left = right = 0.0f;
+        static_cast<void>(voice.render(source.pool, source.storage, source.parameters.frames,
+                                       source.parameters.sourceSampleRate, left, right));
+    };
+    bool differs = false;
+    for (unsigned frame = 0U; frame < 400U; ++frame) {
+        if (frame == 100U)
+            check(toggled.refresh(source.parameters), "vintage Off refresh keeps the voice");
+        float l0, r0, l1, r1, l2, r2, l3, r3;
+        renderOne(reference, l0, r0);
+        renderOne(off, l1, r1);
+        renderOne(wet, l2, r2);
+        renderOne(toggled, l3, r3);
+        check(std::bit_cast<std::uint32_t>(l0) == std::bit_cast<std::uint32_t>(l1) &&
+              std::bit_cast<std::uint32_t>(r0) == std::bit_cast<std::uint32_t>(r1),
+              "vintage Off is bit-identical whatever its other fields hold");
+        check(std::isfinite(l2) && std::isfinite(r2) && std::abs(l2) < 16.0f,
+              "vintage On output stays finite");
+        differs = differs || l2 != l0;
+        if (frame >= 200U) // 10 ms fade at 2 kHz = 20 frames; 100 frames is ample
+            check(l3 == l0 && r3 == r0, "switching vintage Off returns to the exact dry output");
+    }
+    check(differs, "vintage On changes the pad's sound");
+}
 } // namespace
 
 int main() {
     fractional_loop_and_direction();
     cut_edits_report_engine_actions();
     lifecycle_preserves_distinct_reset_contracts();
+    vintage_off_is_exact_and_on_is_finite();
     std::cout << "Playback voice tests passed\n";
 }

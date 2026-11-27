@@ -67,5 +67,7 @@ inline constexpr const char* kMainSampleSpectrogramKey = "main_sample_spectrogra
 // Pad sound detection: AQ1 request to the worker, AR1 status to the UI (Docs/AI/SOUND-ANALYSIS.md).
 inline constexpr const char* kPadAnalysisRequestKey = "pad_analysis_request";
 inline constexpr const char* kPadAnalysisStatusKey = "pad_analysis_status";
+// Global vintage FX (VF1), durable, not a host parameter, not undoable (Docs/AI/VINTAGE-FX.md).
+inline constexpr const char* kGlobalVintageKey = "global_vintage";
 
 } // namespace midichopper::plugin

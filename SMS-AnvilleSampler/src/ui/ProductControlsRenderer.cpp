@@ -413,6 +413,7 @@ void drawGlobalMixer(const ViewRenderContext& ctx)
     drawSlopeButton(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
                     ctx.state.globalFilterSlope);
     drawGlobalGspToggle(ctx, uiLayout::globalMixerGsp, 1);
+    drawVintageButton(ctx, false);
 }
 
 void drawControlPanelBacking(const ViewRenderContext& ctx)

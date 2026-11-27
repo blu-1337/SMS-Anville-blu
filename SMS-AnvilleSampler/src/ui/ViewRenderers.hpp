@@ -9,6 +9,8 @@ void drawLevelFaders(const ViewRenderContext& ctx);
 void drawMainHeader(const ViewRenderContext& ctx);
 void drawAnalysisPanel(const ViewRenderContext& ctx);
 void drawTuneMenu(const ViewRenderContext& ctx);
+void drawVintageButton(const ViewRenderContext& ctx, bool pad);
+void drawVintagePanel(const ViewRenderContext& ctx);
 void drawMainFooter(const ViewRenderContext& ctx);
 void drawMainView(const ViewRenderContext& ctx);
 void drawSampleEditorView(const ViewRenderContext& ctx);

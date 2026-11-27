@@ -1,6 +1,6 @@
-# Vintage FX (1.2.91: DSP and state; UI follows in 1.2.92)
+# Vintage FX (DSP and state 1.2.91, UI 1.2.94)
 
-Two 12-bit sampler colours. UI names: model 1 = "GSP1200 Sampler" (drum), model 2 = "GS950 Unit" (rack). Research and constants: `handoff/research/vintage-fx.md`; code: [VintageSettings](../../Common-Src/DSP/VintageSettings.hpp), [VintageProcessor](../../Common-Src/DSP/VintageProcessor.hpp).
+Two 12-bit sampler colours. UI names: model 1 = "GSP1200 Sampler" (drum), model 2 = "GS950 Unit" (rack). User page: [VINTAGE](../../SMS-AnvilleSampler/Docs/VINTAGE.md). Research and constants: `handoff/research/vintage-fx.md`; code: [VintageSettings](../../Common-Src/DSP/VintageSettings.hpp), [VintageProcessor](../../Common-Src/DSP/VintageProcessor.hpp).
 
 ## Settings
 
@@ -33,10 +33,16 @@ No allocation, lock, I/O or throw in `setTarget`/`process`; all state is fixed m
 - Pad: mixer codec **MX8** = MX7's 12 floats + the 8 fields above; MX1-MX7 decode Off. Engine `Pad` has 8 `mixerVintage*` atomics. Every path that moves whole `SampleMixerSettings` (clipboard, swap, gap collapse, split shift, undo, history imports) moves vintage like the other mixer fields; TUNE (TN1) and quick edits (QE1) edit the live settings and keep it. The UI re-sends what it decoded (MX8), so it cannot reset vintage.
 - Global: key `global_vintage` (last state, hints 0, default and garbage = Off), value `VF1;model;voicing;bits;rate;drive;tone;mix;resonance`. Not a host parameter, not undoable.
 
+## UI (1.2.94)
+
+- `src/ui/VintagePanel.hpp` (layout, knob mapping, labels), `VintagePanelController` (input), `VintagePanelRenderer.cpp`. `SamplerUiState::vintagePopup` is -1, a pad, or 64 (global).
+- Buttons: `globalVintage` (main view, hidden while armed), `padVintage` (Sample Editor, inert while armed). The popup is modal (no click-through; Escape, X or outside closes) and is dropped when its pad, view or ARMED state changes. An open list or note menu swallows the click first.
+- Pad clicks, knob-drag release and double/middle-click reset send `VF1;...` on `pad_mix_NN`: `UndoController::applyPadVintage` sets only vintage as its own step (no 500 ms coalescing). The wheel sends MX9 and coalesces. A pad drag is audible on release; a global drag is live.
+
 ## GSP pitch mode (1.2.93)
 
 - Read: `Common-Src/DSP/GspPitch.hpp`, in `PlaybackVoice::render` in place of the sinc/linear read. From elapsed source frames `d` since the region start: machine ticks `k = floor(d / (src/26041.67 * r))`, stored index `floor(k * r)` (drop/repeat), source frame `floor(stored * src/26041.67)` (no filter), 12-bit mid-tread, held until the next tick. `r` = pad TUNE + global TUNE (global gated by GLOBAL MIXER). Pure function of the position: reverse, loops and region ends need no state; a live `r` change moves the read by one step at most. Vintage, DIRTY (mono fold of the GSP read), filters, envelope follow. A live toggle crossfades 10 ms; Off is bit-identical.
 - Effective = global OR pad. Pad: `SampleMixerSettings::gsp`, mixer codec **MX9** = MX8 + flag (MX1-MX8 decode Off), engine atomic `mixerGsp`, undoable, moves with the other mixer fields. Global: key `global_gsp` ("1"/"0", last state, hints 0, garbage/empty = Off), `SamplerEngine::setGlobalGsp`; not a host parameter, not undoable.
 - UI: `layout::mainGsp` (main view, between the overview and bank A), `globalMixerGsp` (under global TUNE) share the global flag; `padGsp` (under pad TUNE) is lit when effective and, while global is on, only shows a status.
 
-Tests: `gsp-pitch`, `vintage-processor` (research checks, engine Off bit-identity, aux, zero allocation, CPU print), `playback-voice`, `state-codec`, `pad-workflows`, `project-state`.
+Tests: `ui-geometry`, `ui-input-routing`, `gsp-pitch`, `vintage-processor` (research checks, engine Off bit-identity, aux, zero allocation, CPU print), `playback-voice`, `state-codec`, `pad-workflows`, `project-state`.

@@ -554,6 +554,12 @@ protected:
                 undo_.applyPadTune(pad, tune, padWorkflows_.mutationMutex(), UndoClock::now());
                 return;
             }
+            // Vintage popup click or gesture: only those fields, one undo step.
+            sms::dsp::VintageSettings vintage;
+            if (sms::state::decodeVintageSettings(value, vintage)) {
+                undo_.applyPadVintage(pad, vintage, padWorkflows_.mutationMutex(), UndoClock::now());
+                return;
+            }
             sms::dsp::SampleMixerSettings settings;
             if (midichopper::plugin::decodeMixerSettings(value, settings)) {
                 undo_.record(UndoKind::settings, UndoClock::now(), [&] {

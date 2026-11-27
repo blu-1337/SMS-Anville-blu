@@ -171,6 +171,19 @@ void vintage_off_is_exact_and_on_is_finite() {
     }
     check(differs, "vintage On changes the pad's sound");
 }
+// A settled vintage read stays on the linear read; it must not drift back to the sinc.
+void vintage_read_blend_settles() {
+    Source source;
+    source.parameters.mixer.vintage.model = 1.0f;
+    PlaybackVoice voice;
+    voice.start(source.parameters, 127U, PlaybackVoice::Mode::Loop, -1, 1U);
+    for (unsigned frame = 0U; frame < 50U; ++frame) {
+        float left = 0.0f, right = 0.0f;
+        static_cast<void>(voice.render(source.pool, source.storage, source.parameters.frames,
+                                       source.parameters.sourceSampleRate, left, right));
+        check(voice.vintageReadBlend() == 1.0f, "a settled vintage read blend stays at 1");
+    }
+}
 } // namespace
 
 int main() {
@@ -178,5 +191,6 @@ int main() {
     cut_edits_report_engine_actions();
     lifecycle_preserves_distinct_reset_contracts();
     vintage_off_is_exact_and_on_is_finite();
+    vintage_read_blend_settles();
     std::cout << "Playback voice tests passed\n";
 }

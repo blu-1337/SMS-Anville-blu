@@ -34,6 +34,8 @@ struct SamplerUiState {
     float globalDirty = 0.0f;
     bool globalReverse = false;
     bool globalGsp = false; // durable global GSP flag (state key global_gsp)
+    sms::dsp::VintageSettings globalVintage{}; // durable (state key global_vintage)
+    int vintagePopup = -1; // -1 closed, 0-63 pad, 64 global
     int maxVoices = static_cast<int>(plugin::parameterRanges::maxVoices.defaultValue);
 
     int bank = 0;

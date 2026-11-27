@@ -72,7 +72,8 @@ public:
             reply.mixer.chokeGroup != fLocalMixer.chokeGroup ||
             reply.mixer.outputBus != fLocalMixer.outputBus ||
             reply.mixer.holdLoop != fLocalMixer.holdLoop ||
-            reply.mixer.gsp != fLocalMixer.gsp))
+            reply.mixer.gsp != fLocalMixer.gsp ||
+            reply.mixer.vintage != fLocalMixer.vintage))
             return false;
         fReply = reply;
         fReady = true;

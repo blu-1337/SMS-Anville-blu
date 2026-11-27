@@ -175,7 +175,7 @@ while the plugin shows the interpreted values.
 **EDITOR** opens waveform, ADSR, and pad mixing; **MAIN VIEW** returns.
 **SAMPLE**: [Main Sample](Docs/MAIN-SAMPLE.md).
 Selection cycles Play on Select (once), Loop on Select, Off. Loop repeats
-Start/End after release, restarting ADSR. Audition is independent of main playback. See the [mixing guide](Docs/MIXING.md) for controls.
+Start/End after release, restarting ADSR. Audition is independent of main playback. Controls: [mixing](Docs/MIXING.md), [vintage](Docs/VINTAGE.md).
 
 **Ctrl + wheel** zooms; **Shift + wheel** scrolls. Changing pads resets the view.
 

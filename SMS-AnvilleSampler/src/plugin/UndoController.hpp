@@ -128,6 +128,9 @@ public:
      * coalesces with a knob edit or another TUNE; an unchanged value leaves no step.
      */
     void applyPadTune(std::uint32_t pad, float semitones, std::mutex& mutation, Clock::time_point now);
+    /** Vintage popup: sets only the pad's vintage FX, as its own step like TUNE. */
+    void applyPadVintage(std::uint32_t pad, const sms::dsp::VintageSettings& vintage,
+                         std::mutex& mutation, Clock::time_point now);
     void undo() { step(true); }
     void redo() { step(false); }
     /** Host restored durable state: history no longer describes it. */

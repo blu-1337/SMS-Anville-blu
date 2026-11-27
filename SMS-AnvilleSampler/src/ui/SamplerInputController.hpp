@@ -7,6 +7,7 @@
 #include "ApplicationMenuController.hpp"
 #include "MixerInteractionController.hpp"
 #include "SamplerUiSession.hpp"
+#include "VintagePanelController.hpp"
 #include "WaveformEditor.hpp"
 
 namespace midichopper::ui {
@@ -80,6 +81,7 @@ private:
     SamplerUiSession& fSession;
     MixerInteractionController& fMixer;
     ApplicationMenuController& fMenu;
+    VintagePanelController fVintage{fSession};
     const int fColorCount;
     sms::ui::HoverState fHover;
     SpaceKeyTracker fSpaceKey;

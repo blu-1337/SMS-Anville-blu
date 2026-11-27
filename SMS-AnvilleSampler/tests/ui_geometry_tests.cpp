@@ -9,6 +9,9 @@
 #include "PlaybackIndicator.hpp"
 #include "SampleWaveform.hpp"
 #include "TuneTarget.hpp"
+#include "VintagePanel.hpp"
+#include <string>
+#include <vector>
 #include "EditorAuditionMode.hpp"
 #include "WaveformDetailSession.hpp"
 #include "DSP/SamplePlaybackSettings.hpp"
@@ -3026,8 +3029,78 @@ void gspGeometry()
         check(apart(pad, layout::mixerKnob(knob)), "Sample Editor GSP clears every mixer control");
 }
 
+void vintageGeometryAndMapping()
+{
+    using namespace midichopper::ui;
+    const auto apart = [](const sms::ui::Rect a, const sms::ui::Rect b) {
+        return a.x + a.width <= b.x || b.x + b.width <= a.x ||
+               a.y + a.height <= b.y || b.y + b.height <= a.y;
+    };
+    const auto within = [](const sms::ui::Rect inner, const sms::ui::Rect outer) {
+        return inner.x >= outer.x && inner.y >= outer.y &&
+               inner.x + inner.width <= outer.x + outer.width &&
+               inner.y + inner.height <= outer.y + outer.height;
+    };
+    const auto global = layout::globalVintage;
+    check(global.x == 994.0f && global.y == 608.0f && global.width == 222.0f && global.height == 32.0f &&
+          within(global, layout::sidePanel) && apart(global, layout::globalMixerGsp) &&
+          apart(global, layout::monitor), "global vintage button sits in its slot");
+    for (int knob = 1; knob < 7; ++knob)
+        check(apart(global, layout::globalMixerKnob(knob)), "global vintage clears the global mixer");
+    const auto pad = layout::padVintage;
+    check(pad.x == 650.0f && pad.y == 604.0f && pad.width == 150.0f && pad.height == 34.0f &&
+          within(pad, layout::mainPanel) && apart(pad, layout::padGsp) && apart(pad, layout::padLoop) &&
+          apart(pad, layout::padGlobalMixer) && apart(pad, layout::padDirection) &&
+          apart(pad, layout::padChoke) && apart(pad, layout::padOutput) &&
+          apart(pad, layout::envelopeGraph), "pad vintage button clears the editor controls");
+    for (int knob = 0; knob < 7; ++knob)
+        check(apart(pad, layout::mixerKnob(knob)) && apart(pad, layout::mixerValueLabel(knob)),
+              "pad vintage button clears the pad mixer");
+
+    std::vector<sms::ui::Rect> controls{layout::vintageClose};
+    for (int i = 0; i < 3; ++i) controls.push_back(layout::vintageModel(i));
+    for (int i = 0; i < 6; ++i) controls.push_back(layout::vintageVoicing(i));
+    for (int i = 0; i < 6; ++i) controls.push_back(layout::vintageKnob(i));
+    check(within(layout::vintagePanel, layout::mainPanel), "vintage popup stays inside the main panel");
+    for (std::size_t i = 0; i < controls.size(); ++i) {
+        check(within(controls[i], layout::vintagePanel), "popup control inside the popup");
+        for (std::size_t j = i + 1U; j < controls.size(); ++j)
+            check(apart(controls[i], controls[j]), "popup controls do not overlap");
+    }
+    for (int i = 0; i < 6; ++i)
+        check(within(layout::vintageValueLabel(i), layout::vintageKnob(i)), "value label under its knob");
+
+    sms::dsp::VintageSettings drum;
+    drum.model = 1.0f;
+    for (int knob = 0; knob < kVintageKnobCount; ++knob) {
+        check(vintageKnobShown(drum, knob) == (knob != 5), "resonance is for the GS950 Unit only");
+        for (const float fraction : {0.0f, 0.5f, 1.0f}) {
+            const auto set = vintageWithKnob(drum, knob, fraction);
+            check(std::abs(vintageKnobFraction(set, knob) - fraction) < 0.05f &&
+                  set == sms::dsp::sanitize(set), "knob mapping round-trips inside the range");
+        }
+    }
+    check(std::abs(vintageWithKnob(drum, 1, 0.5f).rateHz - std::sqrt(4000.0f * 48000.0f)) < 1.0f,
+          "rate knob is logarithmic");
+    drum.rateHz = 9000.0f;
+    const auto rack = vintageWithModel(drum, 2);
+    check(rack.model == 2.0f && rack.rateHz == 40000.0f && vintageKnobShown(rack, 5),
+          "a model change resets the rate to that model's default");
+    check(vintageWithModel(rack, 1).rateHz == sms::dsp::kVintageDrumRateHz, "drum default rate");
+    for (int knob = 0; knob < kVintageKnobCount; ++knob)
+        check(!vintageKnobShown({}, knob), "no knobs while the model is Off");
+    char label[48];
+    vintageButtonText(label, sizeof(label), {}, false);
+    check(std::string(label) == "VINTAGE: OFF", "off label");
+    vintageButtonText(label, sizeof(label), rack, false);
+    check(std::string(label) == "VINTAGE: GS950 Unit", "global label");
+    vintageButtonText(label, sizeof(label), drum, true);
+    check(std::string(label) == "FX: GSP1200 Sampler", "pad label uses a shorter prefix");
+}
+
 int main()
 {
+    vintageGeometryAndMapping();
     gspGeometry();
     analysisHeaderGeometry();
     tuneTargetTable();

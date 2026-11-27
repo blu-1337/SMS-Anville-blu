@@ -118,6 +118,8 @@ struct ViewState {
     int swapTargetPad = -1;     // global pad highlighted as the swap target, or -1
     PadAnalysisView analysis{}; // header sound detection panel
     bool globalGsp = false;     // global GSP pitch mode (main view + GLOBAL MIXER toggles)
+    sms::dsp::VintageSettings globalVintage{};
+    int vintagePopup = -1;      // open vintage FX popup target, -1 closed
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

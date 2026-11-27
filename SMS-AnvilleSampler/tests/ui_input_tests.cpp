@@ -1,6 +1,8 @@
 #include "SamplerInputController.hpp"
 #include "EditorSnapshotProtocol.hpp"
 #include "StateKeys.hpp"
+#include "State/VintageSettingsCodec.hpp"
+#include "VintagePanel.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -731,9 +733,97 @@ void gspLinkage()
           "while global GSP is on, the pad toggle keeps the stored flag and says why");
 }
 
+// Vintage FX popup: one at a time, modal; model/voicing clicks and knob gestures send one
+// VF1 write each (one undo step in the plug-in); global edits persist as global_vintage.
+void vintagePopup()
+{
+    const auto decoded = [](const std::string& value) {
+        sms::dsp::VintageSettings v;
+        check(sms::state::decodeVintageSettings(value.c_str(), v), "VF1 payload decodes");
+        return v;
+    };
+    Fixture e;
+    e.readyEditor();
+    e.states.clear();
+    e.click(center(layout::padVintage));
+    check(e.session.vintagePopup() == 0 && e.states.empty(), "pad button opens the popup");
+    e.click(center(layout::vintageModel(2)));
+    check(e.states.size() == 1U && e.states.back().first == kPadMixerStateKeys[0] &&
+          decoded(e.states.back().second).model == 2.0f && decoded(e.states.back().second).rateHz == 40000.0f &&
+          e.session.state().mixerSettings.vintage.model == 2.0f, "a model click sends one write");
+    e.click(center(layout::vintageModel(2)));
+    check(e.states.size() == 1U, "re-clicking the model sends nothing");
+    e.click(center(layout::vintageVoicing(1)));
+    check(e.states.size() == 1U, "voicing is not offered for the GS950 Unit");
+    e.click(center(layout::vintageModel(1)));
+    e.click(center(layout::vintageVoicing(1)));
+    check(e.states.size() == 3U && decoded(e.states.back().second).voicing == 1.0f &&
+          decoded(e.states.back().second).rateHz == sms::dsp::kVintageDrumRateHz, "voicing click");
+    const auto drive = center(layout::vintageKnob(2));
+    check(e.input.mouse(drive, InputButton::left, true), "knob press");
+    e.input.motion({drive.x, drive.y - 20.0f});
+    e.input.motion({drive.x, drive.y - 40.0f});
+    check(e.states.size() == 3U && e.session.state().mixerSettings.vintage.driveDb > 0.0f,
+          "a pad knob drag shows the value without writing yet");
+    e.input.mouse({drive.x, drive.y - 40.0f}, InputButton::left, false);
+    check(e.states.size() == 4U && decoded(e.states.back().second).driveDb > 0.0f,
+          "release sends one write for the gesture");
+    e.click(drive, InputButton::middle);
+    check(e.states.size() == 5U && decoded(e.states.back().second).driveDb == 0.0f, "middle click resets");
+    e.input.scroll(drive, 1.0f, false, false, KnobAdjustment::normal);
+    check(e.states.size() == 6U && e.states.back().second.rfind("MX9;", 0U) == 0U &&
+          e.session.state().mixerSettings.vintage.driveDb > 0.0f, "wheel writes a coalescing mixer edit");
+
+    // Outside click and Escape close without click-through.
+    e.states.clear();
+    e.click(center(layout::padGsp));
+    check(e.session.vintagePopup() < 0 && e.states.empty() && e.session.state().mixerSettings.gsp == 0.0f,
+          "an outside click only closes the popup");
+    e.click(center(layout::padVintage));
+    check(e.input.keyboard(InputKey::escape, true) && e.session.vintagePopup() < 0 &&
+          e.session.state().editorMode, "Escape closes the popup only");
+    e.click(center(layout::padVintage));
+    e.click(center(layout::vintageClose));
+    check(e.session.vintagePopup() < 0, "the close button closes it");
+    e.session.toggleDropdown(1);
+    e.click(center(layout::padVintage));
+    check(e.session.vintagePopup() < 0 && e.session.dropdown() == 0, "an open list swallows the click");
+    e.click(center(layout::padVintage));
+    e.session.selectEditorPad(1);
+    e.input.idle(std::chrono::steady_clock::now());
+    e.session.selectEditorPad(0);
+    check(e.session.vintagePopup() < 0, "selecting another pad closes the popup for good");
+
+    Fixture g;
+    check(g.session.acceptState("global_vintage",
+              sms::state::encodeVintageSettings({2.0f, 3.0f, 8.0f, 30000.0f, 0.0f, 0.0f, 1.0f, 0.4f}).c_str()) &&
+          g.session.state().globalVintage.model == 2.0f && g.session.state().globalVintage.bits == 8.0f,
+          "a restored global_vintage shows in the UI");
+    g.states.clear();
+    g.click(center(layout::globalVintage));
+    check(g.session.vintagePopup() == kVintageGlobalTarget, "global button opens the global popup");
+    g.click(center(layout::vintageModel(1)));
+    check(g.states.size() == 1U && g.states.back().first == "global_vintage" &&
+          decoded(g.states.back().second).model == 1.0f, "global model click persists");
+    const auto bits = center(layout::vintageKnob(0));
+    check(g.input.mouse(bits, InputButton::left, true), "global knob press");
+    g.input.motion({bits.x, bits.y - 40.0f});
+    g.input.mouse({bits.x, bits.y - 40.0f}, InputButton::left, false);
+    check(g.states.back().first == "global_vintage" && decoded(g.states.back().second).bits > 8.0f,
+          "global knob drag writes global_vintage");
+    g.click(center(layout::mainGsp));
+    check(g.session.vintagePopup() < 0 && !g.session.state().globalGsp, "no click-through to main GSP");
+    g.click(center(layout::globalVintage));
+    g.session.acceptParameter(kParameterMode, 1.0f);
+    check(g.session.vintagePopup() < 0, "ARMED closes the popup");
+    check(!isTarget(g.input.targetAt(center(layout::globalVintage)), InteractiveType::globalVintage),
+          "no global vintage button while ARMED");
+}
+
 int main()
 {
     gspLinkage();
+    vintagePopup();
     analysisToggleRouting();
     tuneRouting();
     padOwnershipAndSpace();

@@ -182,6 +182,23 @@ void UndoController::applyPadTune(const std::uint32_t pad, const float semitones
     });
 }
 
+void UndoController::applyPadVintage(const std::uint32_t pad,
+    const sms::dsp::VintageSettings& vintage, std::mutex& mutation, const Clock::time_point now)
+{
+    if (pad >= kPadCount)
+        return;
+    record(Kind::action, now, [&] {
+        const std::lock_guard lock(mutation);
+        sms::dsp::SamplePlaybackSettings playback;
+        sms::dsp::SampleMixerSettings mixer;
+        sampler_.snapshotPadSettings(pad, playback, mixer);
+        mixer.vintage = vintage;
+        mixer = sms::dsp::sanitize(mixer);
+        static_cast<void>(sampler_.restorePadMixerSettings(pad, mixer));
+        observer_.publishUiState(kPadMixerStateKeys[pad].c_str(), encodeMixerSettings(mixer).c_str());
+    });
+}
+
 void UndoController::clear()
 {
     const std::lock_guard lock(mutex_);

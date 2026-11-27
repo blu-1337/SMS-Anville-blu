@@ -2365,6 +2365,14 @@ void padVintageTravelsWithPad()
     undo.record(UndoController::Kind::settings, at(0),
                 [&] { fixture.engine.restorePadMixerSettings(4U, mixer); });
     check(undo.undoDepth() == 1U && vintageOf(4U) == drum, "a vintage edit is one undo step");
+    auto voiced = drum;
+    voiced.voicing = 2.0f;
+    undo.applyPadVintage(4U, voiced, mutation, at(10));
+    undo.applyPadVintage(4U, drum, mutation, at(20));
+    check(undo.undoDepth() == 3U && vintageOf(4U) == drum && gspOf(4U) == 1.0f,
+          "each vintage click is its own step, even inside the coalesce window");
+    undo.applyPadVintage(4U, drum, mutation, at(30));
+    check(undo.undoDepth() == 3U, "an unchanged vintage write adds no step");
     undo.applyPadTune(4U, 1.5F, mutation, at(50));
     check(vintageOf(4U) == drum && gspOf(4U) == 1.0f, "TUNE (TN1) keeps the pad's vintage fields and GSP");
     fixture.engine.applyPendingState(); // the audio block that publishes staged settings
@@ -2376,6 +2384,8 @@ void padVintageTravelsWithPad()
     fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::copy, 7U));
     fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::paste, 9U));
     check(vintageOf(9U) == drum && gspOf(9U) == 1.0f, "copy and paste carry the vintage settings and GSP");
+    undo.undo();
+    undo.undo();
     undo.undo();
     undo.undo();
     undo.undo();

@@ -67,6 +67,8 @@ public:
     [[nodiscard]] bool looping() const noexcept
     { return mode_ == Mode::Loop || (mode_ == Mode::Hold && holdLoop_); }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
+    /** 0 = sinc read, 1 = vintage linear read (tests). */
+    [[nodiscard]] float vintageReadBlend() const noexcept { return readBlend_; }
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
     [[nodiscard]] std::int16_t triggerNote() const noexcept { return triggerNote_; }
     [[nodiscard]] bool reverse() const noexcept { return reverse_; }

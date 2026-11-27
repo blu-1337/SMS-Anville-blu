@@ -1,4 +1,6 @@
 #include "SamplerUiSession.hpp"
+#include "State/VintageSettingsCodec.hpp"
+#include "VintagePanel.hpp"
 
 #include "BankModePreference.hpp"
 #include "LayoutPreference.hpp"
@@ -504,6 +506,15 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
             refreshPadWaveform();
         // Load, chop, paste, move and undo all land here; the shown values stay meanwhile.
         static_cast<void>(fAnalysis.invalidate(Clock::now(), false));
+        fHost.repaintUi();
+        return true;
+    }
+
+    if (std::strcmp(key, kGlobalVintageKey) == 0) {
+        sms::dsp::VintageSettings settings;
+        if (!sms::state::decodeVintageSettings(value, settings))
+            settings = {};
+        fState.globalVintage = settings;
         fHost.repaintUi();
         return true;
     }
@@ -1311,6 +1322,96 @@ void SamplerUiSession::toggleSampleHoldLoop()
     auto settings = fState.mixerSettings;
     settings.holdLoop = settings.holdLoop >= 0.5f ? 0.0f : 1.0f;
     commitMixerSettings(settings);
+    fHost.repaintUi();
+}
+
+int SamplerUiSession::vintagePopup() const noexcept
+{
+    const int target = fState.vintagePopup;
+    if (target < 0 || fState.armed || fChopEditor.active())
+        return -1;
+    const bool allowed = target == kVintageGlobalTarget
+        ? !fState.editorMode && !fState.mainSampleMode
+        : fState.editorMode && fState.selectedPad == target;
+    return allowed ? target : -1;
+}
+
+void SamplerUiSession::reconcileVintagePopup() noexcept
+{
+    fState.vintagePopup = vintagePopup();
+}
+
+void SamplerUiSession::openVintage(const int target)
+{
+    closeDropdown();
+    closeTuneMenu();
+    fState.vintagePopup = target;
+    reconcileVintagePopup();
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::closeVintage()
+{
+    fState.vintagePopup = -1;
+    fHost.repaintUi();
+}
+
+bool SamplerUiSession::vintageReady(const int target) const noexcept
+{
+    return target == kVintageGlobalTarget ||
+           (target >= 0 && target == fState.selectedPad && fState.editorSettingsPad == target &&
+            fState.mixerSettingsPad == target);
+}
+
+sms::dsp::VintageSettings SamplerUiSession::vintageSettings(const int target) const noexcept
+{
+    return target == kVintageGlobalTarget ? fState.globalVintage : fState.mixerSettings.vintage;
+}
+
+void SamplerUiSession::previewVintage(const int target, const sms::dsp::VintageSettings &settings)
+{
+    if (target == kVintageGlobalTarget) {
+        fState.globalVintage = sms::dsp::sanitize(settings);
+        if (fCapabilities.stateTransport)
+            fHost.sendUiState(kGlobalVintageKey,
+                              sms::state::encodeVintageSettings(fState.globalVintage));
+    } else if (vintageReady(target)) {
+        fState.mixerSettings.vintage = sms::dsp::sanitize(settings);
+    }
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::commitVintage(const int target, const sms::dsp::VintageSettings &settings)
+{
+    if (target == kVintageGlobalTarget) {
+        previewVintage(target, settings);
+        return;
+    }
+    if (target < 0 || target >= kVintageGlobalTarget)
+        return;
+    // Only the vintage fields are sent (as with TUNE), so the plug-in keeps the pad's other
+    // settings and records one step that never coalesces with its neighbours.
+    if (target == fState.selectedPad && fState.mixerSettingsPad == target) {
+        fState.mixerSettings.vintage = sms::dsp::sanitize(settings);
+        refreshPendingEditorSnapshot();
+    }
+    if (fCapabilities.stateTransport)
+        fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(target)].c_str(),
+                          sms::state::encodeVintageSettings(settings));
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::adjustVintage(const int target, const sms::dsp::VintageSettings &settings)
+{
+    if (target == kVintageGlobalTarget) {
+        previewVintage(target, settings);
+        return;
+    }
+    if (!vintageReady(target))
+        return;
+    auto mixer = fState.mixerSettings;
+    mixer.vintage = settings;
+    commitMixerSettings(mixer);
     fHost.repaintUi();
 }
 

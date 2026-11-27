@@ -7,6 +7,7 @@
 #include "DSP/SampleMixerSettings.hpp"
 #include "Interaction.hpp"
 #include "MidichopperLayout.hpp"
+#include "VintagePanel.hpp"
 #include "GlobalControlMenu.hpp"
 #include "PadLayout.hpp"
 #include "../plugin/Parameters.hpp"
@@ -111,6 +112,14 @@ enum class InteractiveType : int {
     tuneNoteItem, // index = pitch class, 0 = C
     globalGsp,    // index 0 = main view, 1 = GLOBAL MIXER; both show and set the global flag
     padGsp,       // Sample Editor: the pad's own GSP flag
+    globalVintage,
+    padVintage,
+    vintagePanel, // inert popup background
+    vintageClose,
+    vintageModel,
+    vintageVoicing,
+    vintageKnob,
+    vintageValueLabel,
 };
 
 class PadPressTracker {
@@ -483,6 +492,8 @@ struct InteractionContext {
     int dropdown = 0; // open Sample Editor list: 0 none, 1 CHOKE, 2 OUT
     bool tuneEnabled = false; // header TUNE and its caret have a note to work with
     bool tuneMenu = false;    // the note list under TUNE is open
+    int vintagePopup = -1;    // open vintage FX popup target, -1 closed
+    sms::dsp::VintageSettings vintageSettings{}; // the popup target's settings
     std::span<const plugin::MainSampleSlice> mainSampleSlices;
     sms::ui::waveform::Viewport mainSampleViewport;
     std::uint32_t mainSampleRangeStart = 0U; // source range, same frames as the slices
@@ -631,6 +642,29 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         if (uiLayout::tuneDropdown.contains(point))
             return target(InteractiveType::tuneDropdown);
         return sms::ui::kNoInteractiveTarget;
+    }
+
+    if (context.vintagePopup >= 0) { // modal: outside it there is no target
+        if (!uiLayout::vintagePanel.contains(point))
+            return sms::ui::kNoInteractiveTarget;
+        if (uiLayout::vintageClose.contains(point))
+            return target(InteractiveType::vintageClose);
+        for (int i = 0; i < 3; ++i)
+            if (uiLayout::vintageModel(i).contains(point))
+                return target(InteractiveType::vintageModel, i);
+        if (static_cast<int>(context.vintageSettings.model) == 1)
+            for (int i = 0; i < sms::dsp::kVintageVoicingCount; ++i)
+                if (uiLayout::vintageVoicing(i).contains(point))
+                    return target(InteractiveType::vintageVoicing, i);
+        for (int i = 0; i < kVintageKnobCount; ++i) {
+            if (!vintageKnobShown(context.vintageSettings, i))
+                continue;
+            if (uiLayout::vintageValueLabel(i).contains(point))
+                return target(InteractiveType::vintageValueLabel, i);
+            if (uiLayout::vintageKnob(i).contains(point))
+                return target(InteractiveType::vintageKnob, i);
+        }
+        return target(InteractiveType::vintagePanel);
     }
 
     if (context.globalControlMenu.active()) {
@@ -802,6 +836,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::padGlobalMixer);
         if (uiLayout::padLoop.contains(point))
             return target(InteractiveType::padLoop);
+        if (!context.armed && uiLayout::padVintage.contains(point))
+            return target(InteractiveType::padVintage);
         if (uiLayout::padGsp.contains(point))
             return target(InteractiveType::padGsp);
         if (uiLayout::padChoke.contains(point))
@@ -955,6 +991,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         return target(InteractiveType::monitor);
     if (!context.armed && uiLayout::globalDirection.contains(point))
         return target(InteractiveType::globalDirection);
+    if (!context.armed && uiLayout::globalVintage.contains(point))
+        return target(InteractiveType::globalVintage);
     if (!context.armed && uiLayout::globalMixerGsp.contains(point))
         return target(InteractiveType::globalGsp, 1);
     for (int knob = 1; !context.armed && knob < 7; ++knob) {

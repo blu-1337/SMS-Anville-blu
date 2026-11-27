@@ -63,6 +63,8 @@ sms::ui::InteractiveTarget SamplerInputController::targetAt(const sms::ui::Point
     context.dropdown = fSession.dropdown();
     context.tuneEnabled = fSession.tuneAvailable();
     context.tuneMenu = fSession.analysis().tuneMenu;
+    context.vintagePopup = fSession.vintagePopup();
+    context.vintageSettings = fSession.vintageSettings(context.vintagePopup);
     context.perBankMidi = fSession.state().midiBankMode == 0;
     context.mainSampleConfirm = fSession.mainSample().confirmPending();
     context.mainSampleModeMenu = fSession.mainSample().modeMenuOpen();
@@ -113,6 +115,21 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
     const auto& s = fSession.state();
     auto& actions = fSession.padActions();
     auto& chop = fSession.chopEditor();
+
+    fSession.reconcileVintagePopup();
+    if (!press && button == InputButton::left && fVintage.release()) {
+        fHost.repaintSamplerInput();
+        return true;
+    }
+    if (fSession.vintagePopup() >= 0) { // modal: no click-through
+        if (press) {
+            fVintage.press(targetAt(position), position, button == InputButton::left,
+                           button == InputButton::middle, adjustment);
+            static_cast<void>(fHover.update(sms::ui::kNoInteractiveTarget));
+            fHost.repaintSamplerInput();
+        }
+        return true;
+    }
 
     if (press && fSession.analysis().tuneMenu) {
         // The open note list swallows the click that picks from it or dismisses it.
@@ -311,6 +328,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fSession.toggleSampleHoldLoop();
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::padVintage)) {
+                fSession.openVintage(s.selectedPad);
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::padGsp)) {
                 fSession.toggleSampleGsp();
                 return true;
@@ -494,6 +515,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             fSession.togglePlayStop();
             return true;
         }
+        if (isTarget(clicked, InteractiveType::globalVintage)) {
+            fSession.openVintage(kVintageGlobalTarget);
+            return true;
+        }
         if (isTarget(clicked, InteractiveType::globalGsp)) {
             fSession.toggleGlobalGsp();
             return true;
@@ -620,6 +645,15 @@ bool SamplerInputController::motion(const sms::ui::Point position)
 {
     const auto& s = fSession.state();
     auto& chop = fSession.chopEditor();
+    fSession.reconcileVintagePopup();
+    if (fVintage.dragging()) {
+        fVintage.motion(position);
+        return true;
+    }
+    if (fSession.vintagePopup() >= 0) {
+        if (fHover.update(targetAt(position))) fHost.repaintSamplerInput();
+        return true;
+    }
     if (fMixer.faderDragging()) return fMixer.motion(mixerContext(), position);
     if (fViewportDrag >= 0) { updateViewportDrag(position); return true; }
     if (fMainSampleDrag != MainSampleDrag::none) { updateMainSampleDrag(position); return true; }
@@ -677,6 +711,11 @@ void SamplerInputController::wheelParameter(const std::uint32_t parameter, const
 bool SamplerInputController::scroll(const sms::ui::Point position, const float delta,
     const bool control, const bool shift, const KnobAdjustment adjustment)
 {
+    fSession.reconcileVintagePopup();
+    if (fSession.vintagePopup() >= 0) {
+        fVintage.wheel(targetAt(position), delta, adjustment);
+        return true;
+    }
     if (fMixer.menu().active() || fSession.analysis().tuneMenu) return true;
     const auto hovered = targetAt(position);
     if (fHover.update(hovered)) fHost.repaintSamplerInput();
@@ -754,6 +793,11 @@ bool SamplerInputController::scroll(const sms::ui::Point position, const float d
 
 bool SamplerInputController::keyboard(const InputKey key, const bool press, const bool backward)
 {
+    fSession.reconcileVintagePopup();
+    if (press && key == InputKey::escape && fSession.vintagePopup() >= 0) {
+        fSession.closeVintage();
+        return true;
+    }
     if (press && key == InputKey::escape && fSession.analysis().tuneMenu) {
         fSession.closeTuneMenu();
         return true;
@@ -863,6 +907,7 @@ void SamplerInputController::focus(const bool focused)
 
 void SamplerInputController::idle(const Clock::time_point now)
 {
+    fSession.reconcileVintagePopup();
     if (fClearArmed && now >= fClearDeadline) {
         fClearArmed = false;
         fHost.repaintSamplerInput();

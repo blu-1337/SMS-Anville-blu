@@ -280,8 +280,9 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
                 sampleL += readBlend_ * (linearL - sampleL);
                 sampleR += readBlend_ * (linearR - sampleR);
             }
-            readBlend_ = readTarget_ > readBlend_ ? std::min(readBlend_ + readStep_, 1.0f)
-                                                  : std::max(readBlend_ - readStep_, 0.0f);
+            if (readBlend_ != readTarget_)
+                readBlend_ = readTarget_ > readBlend_ ? std::min(readBlend_ + readStep_, 1.0f)
+                                                      : std::max(readBlend_ - readStep_, 0.0f);
         }
     }
     if (gspRead) {

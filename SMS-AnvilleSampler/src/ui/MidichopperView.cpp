@@ -40,6 +40,7 @@ void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state)
         drawMainView(ctx);
     drawMainFooter(ctx);
     drawTuneMenu(ctx);
+    drawVintagePanel(ctx);
     drawMenus(ctx);
     ctx.canvas.restore();
 }

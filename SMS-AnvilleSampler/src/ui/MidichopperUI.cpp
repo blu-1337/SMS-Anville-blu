@@ -285,6 +285,7 @@ protected:
             fInput.quickEditPad(), fInput.quickEditAxis(), fInput.quickEditVolume(), fInput.quickEditPan(),
             fInput.quickEditPoint().x, fInput.quickEditPoint().y, fInput.swapTargetPad(),
             fSession.analysisView(), fSession.state().globalGsp,
+            fSession.state().globalVintage, fSession.vintagePopup(),
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();

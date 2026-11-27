@@ -178,6 +178,20 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     /** GSP: the global flag (main view and GLOBAL MIXER) and the selected pad's own flag. */
     void toggleGlobalGsp();
     void toggleSampleGsp();
+    /** Vintage FX popup; -1 once its pad, view or ARMED state no longer allows it. */
+    [[nodiscard]] int vintagePopup() const noexcept;
+    /** Forgets a popup that is no longer allowed, so it does not reappear later. */
+    void reconcileVintagePopup() noexcept;
+    void openVintage(int target);
+    void closeVintage();
+    [[nodiscard]] bool vintageReady(int target) const noexcept;
+    [[nodiscard]] sms::dsp::VintageSettings vintageSettings(int target) const noexcept;
+    /** Knob drag: the global value is audible at once; a pad value is only shown. */
+    void previewVintage(int target, const sms::dsp::VintageSettings& settings);
+    /** Click or finished gesture: one write (one undo step for a pad). */
+    void commitVintage(int target, const sms::dsp::VintageSettings& settings);
+    /** Wheel notch: a pad edit that coalesces like other knob edits. */
+    void adjustVintage(int target, const sms::dsp::VintageSettings& settings);
 
   private:
     [[nodiscard]] static int clampPad(float value);

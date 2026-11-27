@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SMSAnvilleSampler VERSION 1.2.93 LANGUAGES C CXX)
+project(SMSAnvilleSampler VERSION 1.2.94 LANGUAGES C CXX)
 set(ANVILLESAMPLER_PRERELEASE "beta.1")
 set(ANVILLESAMPLER_RELEASE_VERSION "${PROJECT_VERSION}")
 if(NOT ANVILLESAMPLER_PRERELEASE STREQUAL "")
@@ -97,7 +97,8 @@ add_library(anvillesampler_ui_controllers STATIC
   src/ui/MixerInteractionController.cpp
   src/ui/PadActionController.cpp
   src/ui/SamplerInputController.cpp
-  src/ui/SamplerUiSession.cpp)
+  src/ui/SamplerUiSession.cpp
+  src/ui/VintagePanelController.cpp)
 target_include_directories(anvillesampler_ui_controllers PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin"
@@ -174,6 +175,7 @@ set(ANVILLESAMPLER_UI_SOURCES
   src/ui/MainSampleRenderer.cpp
   src/ui/MenuRenderer.cpp
   src/ui/ProductControlsRenderer.cpp
+  src/ui/VintagePanelRenderer.cpp
   src/ui/AnalysisPanelRenderer.cpp
   "${ANVILLESAMPLER_ARTWORK_DIR}/anvillesampler_artwork.cpp"
   "${ANVILLESAMPLER_ARTWORK_DIR}/anvillesampler_artwork.hpp")

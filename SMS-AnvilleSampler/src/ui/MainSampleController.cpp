@@ -686,10 +686,22 @@ void MainSampleController::dragTo(const std::uint32_t frame) noexcept
         const auto clamped = clampFrame(frame);
         const auto oldStart = fSelectionStart;
         const auto oldEnd = fSelectionEnd;
-        if (fSelectionEdge == 1)
-            fSelectionStart = std::min(clamped, fSelectionEnd - 1U);
-        else
-            fSelectionEnd = std::max(clamped, fSelectionStart + 1U);
+        // The other edge is the anchor. Passing it swaps the roles, as in a DAW; landing exactly on it
+        // keeps the orientation with a one-frame selection, so a zero-length selection never sticks.
+        const auto anchor = fSelectionEdge == 1 ? fSelectionEnd : fSelectionStart;
+        if (clamped < anchor) {
+            fSelectionStart = clamped;
+            fSelectionEnd = anchor;
+            fSelectionEdge = 1;
+        } else if (clamped > anchor) {
+            fSelectionStart = anchor;
+            fSelectionEnd = clamped;
+            fSelectionEdge = 2;
+        } else if (fSelectionEdge == 1) {
+            fSelectionStart = anchor - 1U;
+        } else {
+            fSelectionEnd = anchor + 1U;
+        }
         retargetPreview(oldStart, oldEnd);
         fHost.repaintMainSample();
         return;

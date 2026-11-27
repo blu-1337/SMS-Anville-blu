@@ -511,6 +511,60 @@ void markerHitGapAndOverlapAtZooms()
     }
 }
 
+void selectionEdgeDragCrossesTheAnchor()
+{
+    Host host;
+    MainSampleController controller(host);
+    controller.acceptStatus(status(1U), Clock::now());
+    SourcePreviewRequest preview;
+    auto last = [&] { return decodeSourcePreviewRequest(host.sent.back().second, preview); };
+    const auto is = [&](const std::uint32_t start, const std::uint32_t end) {
+        return controller.selectionStart() == start && controller.selectionEnd() == end;
+    };
+    controller.beginSelection(300U);
+    controller.extendSelection(500U);
+
+    // START dragged past END: the old end becomes the start, the dragged edge continues as the end.
+    check(controller.beginEdgeDrag(300U, 8U), "grab the start edge");
+    controller.dragTo(450U);
+    check(is(450U, 500U), "before the anchor it is still the start");
+    controller.dragTo(500U);
+    check(is(499U, 500U), "on the anchor: one frame, same orientation, never empty");
+    controller.dragTo(650U);
+    check(is(500U, 650U), "past the end the roles swap");
+    controller.dragTo(700U);
+    check(is(500U, 700U), "the dragged edge continues as the end");
+    controller.dragTo(500U);
+    check(is(500U, 501U), "on the anchor from the other side keeps the new orientation");
+    controller.dragTo(200U);
+    check(is(200U, 500U), "crossing back swaps again");
+    controller.endDrag();
+
+    // END dragged past START (mirror).
+    check(controller.beginEdgeDrag(500U, 8U), "grab the end edge");
+    controller.dragTo(100U);
+    check(is(100U, 200U), "past the start the old start becomes the end");
+    controller.dragTo(0U);
+    check(is(0U, 200U), "and the dragged edge continues as the start");
+    controller.endDrag();
+
+    // The looping preview follows across a swap.
+    controller.toggleLoop();
+    controller.beginSelection(300U);
+    controller.extendSelection(500U);
+    controller.togglePlay();
+    controller.acceptPreviewPosition(1.1f);
+    check(controller.beginSelectionHalfDrag(310U), "grab near the start");
+    controller.dragTo(700U);
+    check(is(500U, 700U) && last() && preview.update && preview.loop && preview.start == 500U && preview.end == 700U,
+          "the loop retargets to the swapped region");
+    controller.dragTo(600U);
+    check(last() && preview.update && preview.start == 500U && preview.end == 600U, "and keeps following");
+    controller.dragTo(100U);
+    check(last() && preview.update && preview.start == 100U && preview.end == 500U, "also across a second swap");
+    controller.endDrag();
+}
+
 void firstEdgeDragSnaps()
 {
     Host host;
@@ -1113,7 +1167,8 @@ void rightDragEdges()
     check(controller.beginEdgeDrag(298U, 10U), "selection end edge is grabbed");
     controller.dragTo(100U);
     controller.endDrag();
-    check(controller.selectionEnd() == 151U, "selection keeps one frame");
+    check(controller.selectionStart() == 100U && controller.selectionEnd() == 150U,
+          "dragging the end past the start swaps the edges");
 
     controller.beginSelection(100U);
     controller.extendSelection(900U);
@@ -1281,6 +1336,7 @@ int main()
     sliceLabelsFollowPads();
     markerHoverEqualsGrab();
     firstEdgeDragSnaps();
+    selectionEdgeDragCrossesTheAnchor();
     markerHitGapAndOverlapAtZooms();
     selectionPreviewFollowsEdits();
     zoomHelpers();

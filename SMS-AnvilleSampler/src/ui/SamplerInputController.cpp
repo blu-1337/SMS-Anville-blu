@@ -462,10 +462,6 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
             fSession.togglePlayStop();
             return true;
         }
-        if (isTarget(clicked, InteractiveType::chokeAll)) {
-            fSession.chokeAll();
-            return true;
-        }
         if (isTarget(clicked, InteractiveType::globalDirection)) {
             fHost.editSamplerParameter(kParameterGlobalReverse, true);
             fSession.setControlValue(kParameterGlobalReverse, s.globalReverse ? 0.0f : 1.0f);

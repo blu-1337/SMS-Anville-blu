@@ -77,8 +77,6 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void setPadFavorite(int pad, bool favorite);
     void sendPadColorValue(std::size_t index);
     void clearPadColors();
-    /** GLOBAL MIXER CHOKE ALL: one request; the plug-in toggles group 1 / Off on every loaded pad. */
-    void chokeAll();
     [[nodiscard]] const PadActionController &padActions() const noexcept { return fPadActions; }
     [[nodiscard]] ChopEditorController &chopEditor() noexcept { return fChopEditor; }
     [[nodiscard]] const ChopEditorController &chopEditor() const noexcept { return fChopEditor; }

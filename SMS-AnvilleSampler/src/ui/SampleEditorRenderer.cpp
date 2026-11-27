@@ -170,7 +170,7 @@ void drawSampleEditor(const ViewRenderContext& ctx)
                   ctx.state.mixerSettings.lowpass, 0.0f, 1.0f, low);
     drawMixerKnob(ctx, uiLayout::mixerKnob(4), InteractiveType::mixerKnob, 4, "HIGHPASS",
                   ctx.state.mixerSettings.highpass, 0.0f, 1.0f, high);
-    drawSlopeSlider(ctx, uiLayout::mixerKnob(5), InteractiveType::mixerKnob,
+    drawSlopeButton(ctx, uiLayout::mixerKnob(5), InteractiveType::mixerKnob,
                     ctx.state.mixerSettings.filterSlope);
     ctx.canvas.beginPath();
     ctx.canvas.moveTo(uiLayout::padGlobalMixerSeparator.x, uiLayout::padGlobalMixerSeparator.y);

@@ -285,15 +285,7 @@ void MixerInteractionController::updateGlobalDrag(const sms::ui::Point position)
 void MixerInteractionController::updateSampleDrag(const MixerInteractionContext& context, const sms::ui::Point position)
 {
     auto mixer = context.mixer;
-    const float x = position.x;
     const float y = position.y;
-    if (fSampleDrag == 5) {
-        mixer.filterSlope = midichopper::ui::slopeValueAtX(
-            x, uiLayout::mixerKnob(5));
-        fHost.commitPadMixer(context.selectedPad, mixer);
-        fHost.repaintMixer();
-        return;
-    }
     if (fSampleDrag < 0 || fSampleDrag >= 5)
         return;
     float startValue = 0.0f;
@@ -545,14 +537,12 @@ bool MixerInteractionController::sampleMixerPress(const MixerInteractionContext&
     const bool knob = isTarget(clicked, InteractiveType::mixerKnob);
     const bool label = isTarget(clicked, InteractiveType::mixerValueLabel);
     if ((knob || label) && clicked.index >= 5) {
-        if (clicked.index == 5) {
-            fSampleDrag = 5;
-            updateSampleDrag(context, position);
-        } else {
-            auto mixer = context.mixer;
+        auto mixer = context.mixer;
+        if (clicked.index == 5) // SLOPE button: each click cycles 6 / 12 / 24 dB
+            mixer.filterSlope = static_cast<float>((std::lround(mixer.filterSlope) + 1) % 3);
+        else
             mixer.dirty = mixer.dirty >= 0.5f ? 0.0f : 1.0f;
-            fHost.commitPadMixer(context.selectedPad, sms::dsp::sanitize(mixer));
-        }
+        fHost.commitPadMixer(context.selectedPad, sms::dsp::sanitize(mixer));
         fHost.repaintMixer();
         return true;
     }

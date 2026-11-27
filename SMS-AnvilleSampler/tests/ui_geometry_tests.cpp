@@ -601,7 +601,7 @@ void interactionTargets()
               interaction::InteractiveType::monitor) &&
           !interaction::isTarget(interaction::interactiveTargetAt(center(layout::finalizeAction), context),
                                 interaction::InteractiveType::finalizeAction),
-          "play mode keeps the bottom monitor and hides chop actions (CHOKE ALL may use the spot)");
+          "play mode keeps the bottom monitor and hides chop actions");
     for (int knob = 1; knob < 7; ++knob) {
         check(interaction::isTarget(
                   interaction::interactiveTargetAt(center(layout::globalMixerKnob(knob)), context),
@@ -827,11 +827,19 @@ void interactionTargets()
           layout::mixerKnob(1).x + layout::mixerKnob(1).width <
               layout::padMixerSeparator.x &&
           layout::padMixerSeparator.x < layout::mixerKnob(6).x &&
-          layout::mixerKnob(5).y > layout::mixerKnob(4).y +
-              layout::mixerKnob(4).height &&
-          layout::mixerKnob(5).y + layout::mixerKnob(5).height <=
-              layout::mainPanel.y + layout::mainPanel.height,
-          "pad controls share a row with a vertical divider and lower slope slider");
+          layout::mixerKnob(5).y + layout::mixerKnob(5).height <= layout::mixerKnob(4).y &&
+          layout::mixerKnob(5).x >= layout::mixerKnob(3).x &&
+          layout::mixerKnob(5).x + layout::mixerKnob(5).width <=
+              layout::mixerKnob(4).x + layout::mixerKnob(4).width,
+          "pad controls share a row with a vertical divider and the slope button over LP/HP");
+    for (int first = 0; first < 7; ++first)
+        for (int second = first + 1; second < 7; ++second) {
+            const auto a = layout::mixerKnob(first);
+            const auto b = layout::mixerKnob(second);
+            check(a.x + a.width <= b.x || b.x + b.width <= a.x ||
+                  a.y + a.height <= b.y || b.y + b.height <= a.y,
+                  "pad mixer controls do not overlap");
+        }
     check(!layout::envelopeGraph.contains(center(layout::mixerKnob(0))) &&
           !layout::editorSlider(0).contains(center(layout::mixerKnob(2))),
           "mixer controls remain separate from ADSR controls");
@@ -1612,16 +1620,8 @@ void waveformGeometry()
           midichopper::ui::bipolarKnobPosition(0.5f, 0.0f, 1.0f) == 0.5f &&
           midichopper::ui::bipolarKnobPosition(1.0f, 0.0f, 1.0f) == 1.0f,
           "filter knob marker follows its full unipolar sweep");
-    const auto slope = midichopper::ui::layout::mixerKnob(5);
+    const auto slope = midichopper::ui::layout::globalMixerKnob(5);
     const auto slopeTrack = midichopper::ui::layout::slopeTrack(slope);
-    check(slopeTrack.x == midichopper::ui::layout::mixerKnob(3).x +
-              midichopper::ui::layout::mixerKnob(3).width * 0.5f - 24.0f &&
-          slopeTrack.x + slopeTrack.width ==
-              midichopper::ui::layout::mixerKnob(4).x +
-                  midichopper::ui::layout::mixerKnob(4).width * 0.5f + 24.0f &&
-          slope.contains({slopeTrack.x, slopeTrack.y + 3.0f}) &&
-          slope.contains({slopeTrack.x + slopeTrack.width, slopeTrack.y + 3.0f}),
-          "pad slope track aligns with knob artwork and both ends stay clickable");
     check(midichopper::ui::slopeValueAtX(slopeTrack.x, slope) == 0.0f &&
           midichopper::ui::slopeValueAtX(slopeTrack.x + slopeTrack.width * 0.5f, slope) == 1.0f &&
           midichopper::ui::slopeValueAtX(slopeTrack.x + slopeTrack.width, slope) == 2.0f,

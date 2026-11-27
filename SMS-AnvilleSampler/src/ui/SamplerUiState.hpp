@@ -40,7 +40,6 @@ struct SamplerUiState {
     int selectedPad = -1;
     int undoDepth = 0;
     int redoDepth = 0;
-    bool chokeAllOn = false; // every pad with audio is in choke group 1 (from the UD1 status)
     int lastPlayedPad = -1;
     int currentPad = -1;
     bool editorMode = false;

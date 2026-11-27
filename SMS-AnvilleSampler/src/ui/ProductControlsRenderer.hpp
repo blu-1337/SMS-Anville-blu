@@ -29,6 +29,8 @@ void drawEditorDropdown(const ViewRenderContext& ctx);
 
 void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
                      const InteractiveType type, const float slope);
+void drawSlopeButton(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
+                     const InteractiveType type, const float slope);
 
 void drawGlobalMixer(const ViewRenderContext& ctx);
 

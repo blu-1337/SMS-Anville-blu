@@ -115,7 +115,6 @@ struct ViewState {
     float quickEditX = 0.0f;    // pointer while swapping pads (axis 3)
     float quickEditY = 0.0f;
     int swapTargetPad = -1;     // global pad highlighted as the swap target, or -1
-    bool chokeAllOn = false;    // every loaded pad is in choke group 1 (lights CHOKE ALL)
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

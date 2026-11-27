@@ -558,28 +558,6 @@ void applicationMenuOpensMainSample()
     check(f.session.state().mainSampleMode && !f.menu.open(), "menu item opens the view and closes the menu");
 }
 
-void chokeAllButton()
-{
-    Fixture f;
-    namespace L = midichopper::ui::layout;
-    const std::string zeros(64, '0');
-    check(L::chokeAll.y >= L::globalMixerKnob(5).y + L::globalMixerKnob(5).height &&
-          L::chokeAll.y + L::chokeAll.height <= L::monitor.y && L::chokeAll.x == L::monitor.x &&
-          L::chokeAll.width == L::monitor.width, "CHOKE ALL sits under the global mixer, panel width");
-    f.states.clear();
-    check(isTarget(f.input.targetAt(center(L::chokeAll)), InteractiveType::chokeAll), "CHOKE ALL is hit-testable");
-    f.click(center(L::chokeAll));
-    check(!f.states.empty() && f.states.back().first == "undo_request" && f.states.back().second == "chokeall",
-          "CHOKE ALL sends one batched request");
-    check(!f.session.state().chokeAllOn, "button starts off");
-    f.session.acceptState("undo_status", ("UD1;1;1;0;" + zeros + ";K1").c_str());
-    check(f.session.state().chokeAllOn, "K1 lights the button");
-    f.session.acceptState("undo_status", ("UD1;2;2;0;" + zeros + ";K0").c_str());
-    check(!f.session.state().chokeAllOn, "K0 unlights it");
-    f.session.acceptState("undo_status", ("UD1;3;0;0;" + zeros).c_str());
-    check(!f.session.state().chokeAllOn, "an older status without the flag leaves it off");
-}
-
 void undoRedoButtonsAndKeys()
 {
     Fixture f;
@@ -627,7 +605,6 @@ int main()
     padOwnershipAndSpace();
     padQuickEditGestures();
     undoRedoButtonsAndKeys();
-    chokeAllButton();
     overviewWaveformClicks();
     overlaysAndFaderCapture();
     editorWheelAndPointerRoutes();

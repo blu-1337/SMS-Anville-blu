@@ -166,11 +166,9 @@ inline constexpr sms::ui::Rect mainPlayStop{1049.0f, 342.0f, 112.0f, 32.0f};
     return {994.0f, fixedCapture ? 352.0f : 298.0f, 222.0f, 28.0f};
 }
 
-// CHOKE ALL, under the global mixer's slope slider (full panel width: x 994..1216).
-inline constexpr sms::ui::Rect chokeAll{994.0f, 608.0f, 222.0f, 32.0f};
 inline constexpr sms::ui::Rect monitor{994.0f, 651.0f, 222.0f, 34.0f};
 inline constexpr float globalMixerLabelY = 386.0f;
-inline constexpr sms::ui::Rect padMixerSeparator{354.0f, 586.0f, 1.0f, 77.0f};
+inline constexpr sms::ui::Rect padMixerSeparator{280.0f, 586.0f, 1.0f, 77.0f};
 inline constexpr sms::ui::Rect padGlobalMixerSeparator{854.0f, 586.0f, 1.0f, 77.0f};
 inline constexpr sms::ui::Rect padGlobalMixer{879.0f, 604.0f, 42.0f, 34.0f};
 // CHOKE and OUT chips on the Sample Editor heading line, well left of CLOSE (x 994): 74 units clear, 16 between the chips.
@@ -199,7 +197,7 @@ inline constexpr int dropdownColumns = 3;
             box.y + dropdownInset + static_cast<float>(index / dropdownColumns) * dropdownCellHeight,
             dropdownCellWidth, dropdownCellHeight};
 }
-inline constexpr sms::ui::Rect padDirection{64.0f, 604.0f, 42.0f, 34.0f};
+inline constexpr sms::ui::Rect padDirection{56.0f, 604.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect globalDirection{1007.0f, 428.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect finalizeAction{994.0f, 610.0f, 70.0f, 34.0f};
 inline constexpr sms::ui::Rect undoAction{1070.0f, 610.0f, 70.0f, 34.0f};
@@ -239,13 +237,13 @@ inline constexpr sms::ui::Rect mainRedo{802.0f, 138.0f, 106.0f, 28.0f};
 [[nodiscard]] constexpr sms::ui::Rect mixerKnob(const int index) noexcept
 {
     switch (index) {
-    case 0: return {145.0f, 590.0f, 80.0f, 72.0f}; // Gain
-    case 1: return {255.0f, 590.0f, 80.0f, 72.0f}; // Pan
-    case 6: return {380.0f, 590.0f, 80.0f, 72.0f}; // Dirty
-    case 2: return {500.0f, 590.0f, 80.0f, 72.0f}; // Tune
-    case 3: return {630.0f, 590.0f, 80.0f, 72.0f}; // Lowpass
-    case 4: return {760.0f, 590.0f, 80.0f, 72.0f}; // Highpass
-    case 5: return {636.0f, 663.0f, 198.0f, 28.0f}; // Slope hit area
+    case 0: return {104.0f, 590.0f, 80.0f, 72.0f}; // Gain
+    case 1: return {190.0f, 590.0f, 80.0f, 72.0f}; // Pan
+    case 6: return {290.0f, 590.0f, 80.0f, 72.0f}; // Dirty
+    case 2: return {376.0f, 590.0f, 80.0f, 72.0f}; // Tune
+    case 3: return {462.0f, 590.0f, 80.0f, 72.0f}; // Lowpass
+    case 4: return {548.0f, 590.0f, 80.0f, 72.0f}; // Highpass
+    case 5: return {495.0f, 562.0f, 100.0f, 22.0f}; // Slope cycle button over LP/HP
     default: return {};
     }
 }

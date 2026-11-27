@@ -375,6 +375,15 @@ void drawSlopeSlider(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
     }
 }
 
+void drawSlopeButton(const ViewRenderContext& ctx, const sms::ui::Rect bounds,
+                     const InteractiveType type, const float slope)
+{
+    const int index = std::clamp(static_cast<int>(std::lround(slope)), 0, 2);
+    const char* label = index == 0 ? "SLOPE 6 dB" : index == 1 ? "SLOPE 12 dB" : "SLOPE 24 dB";
+    sms::ui::dpf::drawSegment(ctx.canvas, bounds, label, false, sms::ui::dpf::theme().controlAccent,
+                              hovered(ctx, type, 5));
+}
+
 void drawGlobalMixer(const ViewRenderContext& ctx)
 {
     if (ctx.state.armed)
@@ -420,8 +429,6 @@ void drawGlobalMixer(const ViewRenderContext& ctx)
                   ctx.state.globalValueSettings[4].maximum, high);
     drawSlopeSlider(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
                     ctx.state.globalFilterSlope);
-    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::chokeAll, "CHOKE ALL", ctx.state.chokeAllOn,
-                              colors.controlAccent, hovered(ctx, InteractiveType::chokeAll), true);
 }
 
 void drawControlPanelBacking(const ViewRenderContext& ctx)

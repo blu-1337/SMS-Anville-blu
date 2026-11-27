@@ -492,9 +492,6 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
                 fState.padFavorites[pad] = fav;
             }
         }
-        fState.chokeAllOn = std::strlen(digits) >= fState.padColors.size() + 3U &&
-                            digits[fState.padColors.size()] == ';' && digits[fState.padColors.size() + 1U] == 'K' &&
-                            digits[fState.padColors.size() + 2U] == '1';
         if (fState.editorMode)
             refreshPadWaveform();
         fHost.repaintUi();
@@ -1308,12 +1305,6 @@ std::string SamplerUiSession::encodedPadColors() const
         text.push_back(static_cast<char>((fState.padFavorites[pad] ? 'a' : '0') +
                                          std::clamp(fState.padColors[pad], 0, 9)));
     return text;
-}
-
-/** One request sets every pad colour on the plugin: one undo step, one status after the apply. */
-void SamplerUiSession::chokeAll()
-{
-    fHost.sendUiState(midichopper::plugin::kUndoRequestKey, "chokeall");
 }
 
 void SamplerUiSession::sendPadColorBatch()

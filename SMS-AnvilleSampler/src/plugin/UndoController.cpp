@@ -165,49 +165,6 @@ bool UndoController::applyColorBatch(const std::string_view digits, const Clock:
     return true;
 }
 
-int UndoController::chokeOf(const std::uint32_t pad) const
-{
-    sms::dsp::SamplePlaybackSettings playback; // the pending-aware snapshot: an undo may not be applied yet
-    sms::dsp::SampleMixerSettings mixer;
-    sampler_.snapshotPadSettings(pad, playback, mixer);
-    return static_cast<int>(mixer.chokeGroup + 0.5f);
-}
-
-bool UndoController::allChoked() const
-{
-    bool any = false;
-    for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
-        if (!sampler_.padMetadata(pad).occupied)
-            continue;
-        any = true;
-        if (chokeOf(pad) != 1)
-            return false;
-    }
-    return any;
-}
-
-bool UndoController::toggleChokeAll(const Clock::time_point now)
-{
-    bool any = false;
-    for (std::uint32_t pad = 0; pad < kPadCount; ++pad)
-        any = any || sampler_.padMetadata(pad).occupied;
-    if (!any)
-        return false;
-    record(Kind::action, now, [&] {
-        const float group = allChoked() ? 0.0f : 1.0f;
-        for (std::uint32_t pad = 0; pad < kPadCount; ++pad) {
-            if (!sampler_.padMetadata(pad).occupied)
-                continue;
-            sms::dsp::SamplePlaybackSettings playback;
-            sms::dsp::SampleMixerSettings mixer;
-            sampler_.snapshotPadSettings(pad, playback, mixer);
-            mixer.chokeGroup = group;
-            sampler_.setPadMixerSettings(pad, mixer);
-        }
-    });
-    return true;
-}
-
 void UndoController::clear()
 {
     const std::lock_guard lock(mutex_);
@@ -237,7 +194,6 @@ void UndoController::publishLocked()
         const int index = std::clamp(value & 255, 0, 9);
         text.push_back(static_cast<char>(((value & kPadFavoriteBit) != 0 ? 'a' : '0') + index));
     }
-    text += allChoked() ? ";K1" : ";K0"; // after the colour digits; the UI shows CHOKE ALL lit
     observer_.publishUiState(kUndoStatusKey, text.c_str());
 }
 

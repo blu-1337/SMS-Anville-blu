@@ -246,6 +246,21 @@ void knobAndWheelGestures()
     check(!f.mixer.sampleDragging(), "pad release commits and ends drag");
 }
 
+void slopeButtonCycles()
+{
+    Fixture f;
+    f.context.view = MixerValueEntryView::sampleEditor;
+    f.context.mixer.filterSlope = 0.0f;
+    for (const float expected : {1.0f, 2.0f, 0.0f}) {
+        f.host.effects.clear();
+        f.mixer.sampleMixerPress(f.context, target(InteractiveType::mixerKnob, 5),
+                                 {100.0f, 100.0f}, KnobAdjustment::normal);
+        check(f.context.mixer.filterSlope == expected && f.host.effects.size() == 1 &&
+              !f.mixer.sampleDragging(),
+              "each slope button click sends one edit and cycles 6/12/24 dB");
+    }
+}
+
 void staleSampleDragRoutesToGlobal()
 {
     Fixture f;
@@ -439,6 +454,7 @@ int main()
     numericEntry();
     keyboardNavigation();
     knobAndWheelGestures();
+    slopeButtonCycles();
     staleSampleDragRoutesToGlobal();
     faderAndCapture();
     doubleClickHistory();

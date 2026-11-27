@@ -1275,47 +1275,6 @@ void trimWorkflow()
     std::filesystem::remove(path);
 }
 
-void chokeAllWorkflow()
-{
-    MainSampleFixture fixture(12.0);
-    std::array<std::atomic<int>, kPadCount> colors{};
-    UndoController undo(fixture.engine, fixture.main, fixture.observer, colors);
-    const auto now = UndoController::Clock::now();
-    check(!undo.toggleChokeAll(now), "CHOKE ALL does nothing without loaded pads");
-    const auto path = writeSourceWav("sms-chokeall.wav", 4000U);
-    auto load = mainRequest(MainSampleVerb::load);
-    load.path = utf8(path);
-    fixture.send(load, 2U);
-    check(fixture.send(assignRequest(0U, 0U, 500U)).state == MainSampleState::ready, "pad 0");
-    check(fixture.send(assignRequest(5U, 800U, 1200U)).state == MainSampleState::ready, "pad 5");
-    check(fixture.send(assignRequest(70U % 64U, 1500U, 2000U)).state == MainSampleState::ready, "pad 6");
-    fixture.engine.setFavoriteMask(std::uint64_t{1} << 5U);
-    const auto group = [&](const std::uint32_t pad) {
-        sms::dsp::SamplePlaybackSettings playback;
-        sms::dsp::SampleMixerSettings mixer;
-        fixture.engine.snapshotPadSettings(pad, playback, mixer);
-        return static_cast<int>(mixer.chokeGroup + 0.5f);
-    };
-    const auto depth = undo.undoDepth();
-    check(undo.toggleChokeAll(now) && undo.undoDepth() == depth + 1U, "one undo step");
-    check(group(0U) == 1 && group(5U) == 1 && group(6U) == 1 && group(1U) == 0,
-          "every loaded pad (favourite included) is in group 1; empty pads untouched");
-    check(fixture.engine.padMetadata(5U).occupied && padHoldsSlice(fixture.engine, 5U, 800U, 1200U),
-          "audio is not overwritten");
-    check(undo.toggleChokeAll(now + std::chrono::seconds(60)) && group(0U) == 0 && group(5U) == 0 &&
-          group(6U) == 0, "second click sets every pad back to Off");
-    undo.undo();
-    check(group(0U) == 1 && group(6U) == 1, "undo restores group 1");
-    undo.undo();
-    check(group(0U) == 0 && group(5U) == 0, "undo restores Off");
-    auto mixer = fixture.engine.padMixerSettings(0U);
-    mixer.chokeGroup = 3.0f;
-    fixture.engine.setPadMixerSettings(0U, mixer);
-    check(undo.toggleChokeAll(now + std::chrono::seconds(120)) && group(0U) == 1 && group(5U) == 1,
-          "mixed groups: first click sets all to 1");
-    std::filesystem::remove(path);
-}
-
 void sourceRangeWorkflow()
 {
     MainSampleFixture fixture(12.0);
@@ -1861,7 +1820,7 @@ void undoColorStatusCarriesNewColours()
     check(status.size() >= 2U && status.find(';', status.find(';', status.find(';', 4) + 1) + 1) != std::string::npos,
           "status has a header");
     auto digitsAt = status.find(';', status.find(';', status.find(';', status.find(';') + 1) + 1) + 1) + 1;
-    const auto digits = status.substr(digitsAt, 64U); // the colour digits; a ";K<0|1>" CHOKE ALL flag may follow
+    const auto digits = status.substr(digitsAt, 64U); // the colour digits
     check(digits.size() >= 2U && digits[0] == '2' && digits[1] == '3',
           "the colour status published for a step shows the colours after the edit");
 }
@@ -2238,7 +2197,6 @@ int main()
     padDragCleanupAndGesture();
     cutAndCropWorkflow();
     trimWorkflow();
-    chokeAllWorkflow();
     autoChopWorkflow();
     mainSampleArrange();
     favoriteGuards();

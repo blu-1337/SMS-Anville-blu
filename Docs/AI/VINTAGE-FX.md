@@ -33,4 +33,10 @@ No allocation, lock, I/O or throw in `setTarget`/`process`; all state is fixed m
 - Pad: mixer codec **MX8** = MX7's 12 floats + the 8 fields above; MX1-MX7 decode Off. Engine `Pad` has 8 `mixerVintage*` atomics. Every path that moves whole `SampleMixerSettings` (clipboard, swap, gap collapse, split shift, undo, history imports) moves vintage like the other mixer fields; TUNE (TN1) and quick edits (QE1) edit the live settings and keep it. The UI re-sends what it decoded (MX8), so it cannot reset vintage.
 - Global: key `global_vintage` (last state, hints 0, default and garbage = Off), value `VF1;model;voicing;bits;rate;drive;tone;mix;resonance`. Not a host parameter, not undoable.
 
-Tests: `vintage-processor` (research checks, engine Off bit-identity, aux, zero allocation, CPU print), `playback-voice`, `state-codec`, `pad-workflows`, `project-state`.
+## GSP pitch mode (1.2.93)
+
+- Read: `Common-Src/DSP/GspPitch.hpp`, in `PlaybackVoice::render` in place of the sinc/linear read. From elapsed source frames `d` since the region start: machine ticks `k = floor(d / (src/26041.67 * r))`, stored index `floor(k * r)` (drop/repeat), source frame `floor(stored * src/26041.67)` (no filter), 12-bit mid-tread, held until the next tick. `r` = pad TUNE + global TUNE (global gated by GLOBAL MIXER). Pure function of the position: reverse, loops and region ends need no state; a live `r` change moves the read by one step at most. Vintage, DIRTY (mono fold of the GSP read), filters, envelope follow. A live toggle crossfades 10 ms; Off is bit-identical.
+- Effective = global OR pad. Pad: `SampleMixerSettings::gsp`, mixer codec **MX9** = MX8 + flag (MX1-MX8 decode Off), engine atomic `mixerGsp`, undoable, moves with the other mixer fields. Global: key `global_gsp` ("1"/"0", last state, hints 0, garbage/empty = Off), `SamplerEngine::setGlobalGsp`; not a host parameter, not undoable.
+- UI: `layout::mainGsp` (main view, between the overview and bank A), `globalMixerGsp` (under global TUNE) share the global flag; `padGsp` (under pad TUNE) is lit when effective and, while global is on, only shows a status.
+
+Tests: `gsp-pitch`, `vintage-processor` (research checks, engine Off bit-identity, aux, zero allocation, CPU print), `playback-voice`, `state-codec`, `pad-workflows`, `project-state`.

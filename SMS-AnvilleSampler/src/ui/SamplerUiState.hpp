@@ -33,6 +33,7 @@ struct SamplerUiState {
     float globalFilterSlope = 0.0f;
     float globalDirty = 0.0f;
     bool globalReverse = false;
+    bool globalGsp = false; // durable global GSP flag (state key global_gsp)
     int maxVoices = static_cast<int>(plugin::parameterRanges::maxVoices.defaultValue);
 
     int bank = 0;

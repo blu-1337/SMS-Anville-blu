@@ -284,6 +284,22 @@ void drawLoopToggle(const ViewRenderContext& ctx)
          on ? "LOOP" : "ONCE", nullptr);
 }
 
+void drawPadGspToggle(const ViewRenderContext& ctx)
+{
+    // Lit when GSP is effective for this pad: its own flag, or the global flag.
+    const bool on = ctx.state.globalGsp || ctx.state.mixerSettings.gsp >= 0.5f;
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::padGsp, "GSP", on,
+                              sms::ui::dpf::theme().controlAccent,
+                              hovered(ctx, InteractiveType::padGsp));
+}
+
+void drawGlobalGspToggle(const ViewRenderContext& ctx, const sms::ui::Rect bounds, const int index)
+{
+    sms::ui::dpf::drawSegment(ctx.canvas, bounds, "GSP", ctx.state.globalGsp,
+                              sms::ui::dpf::theme().controlAccent,
+                              hovered(ctx, InteractiveType::globalGsp, index));
+}
+
 void drawOutputSelector(const ViewRenderContext& ctx)
 {
     const auto& colors = sms::ui::dpf::theme();
@@ -396,6 +412,7 @@ void drawGlobalMixer(const ViewRenderContext& ctx)
                   ctx.state.globalValueSettings[4].maximum, high);
     drawSlopeButton(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
                     ctx.state.globalFilterSlope);
+    drawGlobalGspToggle(ctx, uiLayout::globalMixerGsp, 1);
 }
 
 void drawControlPanelBacking(const ViewRenderContext& ctx)

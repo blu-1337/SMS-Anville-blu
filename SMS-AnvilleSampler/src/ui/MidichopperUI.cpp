@@ -284,7 +284,7 @@ protected:
             fSpectrogramImage ? &*fSpectrogramImage : nullptr,
             fInput.quickEditPad(), fInput.quickEditAxis(), fInput.quickEditVolume(), fInput.quickEditPan(),
             fInput.quickEditPoint().x, fInput.quickEditPoint().y, fInput.swapTargetPad(),
-            fSession.analysisView(),
+            fSession.analysisView(), fSession.state().globalGsp,
         };
         midichopper::ui::draw(*this, view);
         endLogicalDisplay();

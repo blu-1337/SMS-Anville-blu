@@ -175,6 +175,9 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     /** Applies list item `index` to the selected pad and closes the list. */
     void chooseDropdown(int index);
     void toggleSampleHoldLoop();
+    /** GSP: the global flag (main view and GLOBAL MIXER) and the selected pad's own flag. */
+    void toggleGlobalGsp();
+    void toggleSampleGsp();
 
   private:
     [[nodiscard]] static int clampPad(float value);

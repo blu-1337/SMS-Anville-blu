@@ -70,6 +70,7 @@ void drawPadPanel(const ViewRenderContext& ctx)
         text(ctx, rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f,
              "MIDI: THIS BANK ONLY - CLICK FOR A-D", nullptr);
     }
+    drawGlobalGspToggle(ctx, uiLayout::mainGsp, 0);
     sms::ui::dpf::drawWaveform(
         ctx.canvas, uiLayout::overviewWaveform, ctx.state.waveform, ctx.state.hasWaveform,
         ctx.state.currentPad >= 0 ? colors.activityCapture : colors.activityPlayback);

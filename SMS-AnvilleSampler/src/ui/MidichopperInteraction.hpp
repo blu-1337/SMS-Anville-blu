@@ -109,6 +109,8 @@ enum class InteractiveType : int {
     tuneButton,
     tuneDropdown,
     tuneNoteItem, // index = pitch class, 0 = C
+    globalGsp,    // index 0 = main view, 1 = GLOBAL MIXER; both show and set the global flag
+    padGsp,       // Sample Editor: the pad's own GSP flag
 };
 
 class PadPressTracker {
@@ -800,6 +802,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
             return target(InteractiveType::padGlobalMixer);
         if (uiLayout::padLoop.contains(point))
             return target(InteractiveType::padLoop);
+        if (uiLayout::padGsp.contains(point))
+            return target(InteractiveType::padGsp);
         if (uiLayout::padChoke.contains(point))
             return target(InteractiveType::padChoke);
         if (uiLayout::padOutput.contains(point))
@@ -905,6 +909,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
                 return target(InteractiveType::bank, bank);
         }
     }
+    if (!context.captureActive && uiLayout::mainGsp.contains(point))
+        return target(InteractiveType::globalGsp, 0);
     if (!context.captureActive && !context.armed) {
         if (uiLayout::mainUndo.contains(point))
             return target(InteractiveType::historyUndo);
@@ -949,6 +955,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         return target(InteractiveType::monitor);
     if (!context.armed && uiLayout::globalDirection.contains(point))
         return target(InteractiveType::globalDirection);
+    if (!context.armed && uiLayout::globalMixerGsp.contains(point))
+        return target(InteractiveType::globalGsp, 1);
     for (int knob = 1; !context.armed && knob < 7; ++knob) {
         if (knob != 5 && uiLayout::globalMixerValueLabel(knob).contains(point))
             return target(InteractiveType::globalMixerValueLabel, knob);

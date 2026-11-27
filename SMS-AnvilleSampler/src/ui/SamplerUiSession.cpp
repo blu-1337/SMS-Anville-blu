@@ -508,6 +508,12 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
         return true;
     }
 
+    if (std::strcmp(key, kGlobalGspKey) == 0) {
+        fState.globalGsp = value != nullptr && std::strcmp(value, "1") == 0;
+        fHost.repaintUi();
+        return true;
+    }
+
     if (std::strcmp(key, kPadAnalysisStatusKey) == 0) {
         PadAnalysisStatus status;
         if (!decodePadAnalysisStatus(value, status))
@@ -1304,6 +1310,30 @@ void SamplerUiSession::toggleSampleHoldLoop()
         return;
     auto settings = fState.mixerSettings;
     settings.holdLoop = settings.holdLoop >= 0.5f ? 0.0f : 1.0f;
+    commitMixerSettings(settings);
+    fHost.repaintUi();
+}
+
+void SamplerUiSession::toggleGlobalGsp()
+{
+    fState.globalGsp = !fState.globalGsp;
+    if (fCapabilities.stateTransport)
+        fHost.sendUiState(kGlobalGspKey, fState.globalGsp ? "1" : "0");
+    setLocalStatus(fState.globalGsp ? "GSP on for all pads" : "GSP off globally");
+}
+
+void SamplerUiSession::toggleSampleGsp()
+{
+    if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
+        fState.mixerSettingsPad != fState.selectedPad)
+        return;
+    if (fState.globalGsp) {
+        // The stored pad flag stays as it is; the global flag already applies to this pad.
+        setLocalStatus("GSP is on globally; turn it off in GLOBAL MIXER to set it per pad");
+        return;
+    }
+    auto settings = fState.mixerSettings;
+    settings.gsp = settings.gsp >= 0.5f ? 0.0f : 1.0f;
     commitMixerSettings(settings);
     fHost.repaintUi();
 }

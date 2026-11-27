@@ -696,7 +696,8 @@ PlaybackVoice::Parameters SamplerEngine::voiceParameters(const std::uint32_t pad
     parameters.sourceSampleRate = pads_[pad].sourceSampleRate.load(std::memory_order_relaxed);
     parameters.sampleRate = sample_rate_;
     parameters.global = {settings_.pan, settings_.tuneSemitones, settings_.lowpass,
-        settings_.highpass, settings_.filterSlope, settings_.dirty, settings_.reverse};
+        settings_.highpass, settings_.filterSlope, settings_.dirty, settings_.reverse,
+        globalGsp_.load(std::memory_order_acquire)};
     return parameters;
 }
 
@@ -2173,6 +2174,7 @@ sms::dsp::SampleMixerSettings SamplerEngine::padMixerSettings(
             p.mixerVintageToneOctaves.load(std::memory_order_acquire),
             p.mixerVintageMix.load(std::memory_order_acquire),
             p.mixerVintageResonance.load(std::memory_order_acquire)},
+        p.mixerGsp.load(std::memory_order_acquire),
     });
 }
 
@@ -2204,7 +2206,8 @@ void SamplerEngine::setPadMixerSettingsDirect(
         p.mixerVintageDriveDb.load(std::memory_order_acquire) != settings.vintage.driveDb ||
         p.mixerVintageToneOctaves.load(std::memory_order_acquire) != settings.vintage.toneOctaves ||
         p.mixerVintageMix.load(std::memory_order_acquire) != settings.vintage.mix ||
-        p.mixerVintageResonance.load(std::memory_order_acquire) != settings.vintage.resonance;
+        p.mixerVintageResonance.load(std::memory_order_acquire) != settings.vintage.resonance ||
+        p.mixerGsp.load(std::memory_order_acquire) != settings.gsp;
     // Bypassing the master changes only its contribution to direction. Keep
     // the latched local direction, current source position, and envelope.
     if (redirectGlobal && settings_.reverse &&
@@ -2230,6 +2233,7 @@ void SamplerEngine::setPadMixerSettingsDirect(
     p.mixerVintageToneOctaves.store(settings.vintage.toneOctaves, std::memory_order_release);
     p.mixerVintageMix.store(settings.vintage.mix, std::memory_order_release);
     p.mixerVintageResonance.store(settings.vintage.resonance, std::memory_order_release);
+    p.mixerGsp.store(settings.gsp, std::memory_order_release);
     if (changed)
         p.generation.fetch_add(1U, std::memory_order_release);
 }

@@ -71,7 +71,8 @@ public:
             reply.mixer.dirty != fLocalMixer.dirty ||
             reply.mixer.chokeGroup != fLocalMixer.chokeGroup ||
             reply.mixer.outputBus != fLocalMixer.outputBus ||
-            reply.mixer.holdLoop != fLocalMixer.holdLoop))
+            reply.mixer.holdLoop != fLocalMixer.holdLoop ||
+            reply.mixer.gsp != fLocalMixer.gsp))
             return false;
         fReply = reply;
         fReady = true;

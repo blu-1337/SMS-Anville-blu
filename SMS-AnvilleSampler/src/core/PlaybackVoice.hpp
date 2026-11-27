@@ -3,6 +3,7 @@
 #include "SampleStoragePool.hpp"
 #include "DSP/AdsrEnvelope.hpp"
 #include "DSP/ColorEffects.hpp"
+#include "DSP/GspPitch.hpp"
 #include "DSP/SampleMixerSettings.hpp"
 #include "DSP/SamplePlaybackSettings.hpp"
 #include "DSP/SincResampler.hpp"
@@ -24,6 +25,7 @@ public:
         float filterSlope = 0.0f;
         float dirty = 0.0f;
         bool reverse = false;
+        bool gsp = false; // global GSP: applies to every pad, not gated by GLOBAL MIXER
     };
     struct Parameters {
         std::uint32_t frames = 0;
@@ -104,6 +106,13 @@ private:
     float readBlend_ = 0.0f;  // 0 = sinc read, 1 = linear read
     float readTarget_ = 0.0f;
     float readStep_ = 1.0f / 480.0f;
+    // GSP pitch mode (global OR pad) replaces the interpolating read; computed from the
+    // position alone (Common-Src/DSP/GspPitch.hpp). gspBlend_ fades a live toggle over 10 ms.
+    void configureGsp(const Parameters& parameters, double tuneRatio, bool fresh) noexcept;
+    float gspBlend_ = 0.0f;  // 0 = normal read, 1 = GSP read
+    float gspTarget_ = 0.0f;
+    double gspRatio_ = 1.0;
+    double gspSourceRate_ = 48000.0;
 };
 
 } // namespace midichopper

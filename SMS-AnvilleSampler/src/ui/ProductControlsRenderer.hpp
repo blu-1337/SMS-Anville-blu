@@ -23,6 +23,9 @@ void drawDirectionToggle(const ViewRenderContext& ctx, const sms::ui::Rect bound
 void drawGlobalMixerToggle(const ViewRenderContext& ctx);
 void drawChokeSelector(const ViewRenderContext& ctx);
 void drawLoopToggle(const ViewRenderContext& ctx);
+/** GSP toggles: the pad's own (lit when effective) and the global one (index 0 main view, 1 GLOBAL MIXER). */
+void drawPadGspToggle(const ViewRenderContext& ctx);
+void drawGlobalGspToggle(const ViewRenderContext& ctx, sms::ui::Rect bounds, int index);
 void drawOutputSelector(const ViewRenderContext& ctx);
 /** The open CHOKE/OUT list, drawn last so it sits over the editor. */
 void drawEditorDropdown(const ViewRenderContext& ctx);

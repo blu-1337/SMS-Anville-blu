@@ -69,5 +69,7 @@ inline constexpr const char* kPadAnalysisRequestKey = "pad_analysis_request";
 inline constexpr const char* kPadAnalysisStatusKey = "pad_analysis_status";
 // Global vintage FX (VF1), durable, not a host parameter, not undoable (Docs/AI/VINTAGE-FX.md).
 inline constexpr const char* kGlobalVintageKey = "global_vintage";
+// Global GSP pitch mode, "1" or "0"; durable, not a host parameter, not undoable (Docs/AI/VINTAGE-FX.md).
+inline constexpr const char* kGlobalGspKey = "global_gsp";
 
 } // namespace midichopper::plugin

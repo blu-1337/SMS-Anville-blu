@@ -54,6 +54,7 @@ void PlaybackVoice::start(const Parameters& parameters, const std::uint8_t veloc
     envelope_.configure(sampleRate, playback);
     envelope_.noteOn();
     configureVintage(mixer.vintage, sampleRate, fresh);
+    configureGsp(parameters, tuneRatio, true);
     vintage_.trigger();
     playing_ = true;
     order_ = order;
@@ -109,6 +110,7 @@ bool PlaybackVoice::refresh(const Parameters& parameters) noexcept {
         playback.releaseSeconds = std::min(playback.releaseSeconds, regionSeconds * 0.5f);
     envelope_.updateSettings(playback);
     configureVintage(mixer.vintage, sampleRate, false);
+    configureGsp(parameters, tuneRatio, false);
 
     const double remainingOutputFrames =
         (static_cast<double>(endFrame_) - position_) / step_;
@@ -132,6 +134,18 @@ void PlaybackVoice::configureVintage(const sms::dsp::VintageSettings& settings,
     readTarget_ = sms::dsp::vintageAudible(settings) ? 1.0f : 0.0f;
     if (fresh)
         readBlend_ = readTarget_;
+}
+
+void PlaybackVoice::configureGsp(const Parameters& parameters, const double tuneRatio,
+                                 const bool fresh) noexcept {
+    // Both the pad TUNE and the global TUNE (gated by GLOBAL MIXER, as for the normal read)
+    // drive the drop/repeat ratio. A live ratio change moves the read by at most one step.
+    gspRatio_ = tuneRatio;
+    gspSourceRate_ = parameters.sourceSampleRate > 1.0 ? parameters.sourceSampleRate
+                                                       : parameters.sampleRate;
+    gspTarget_ = parameters.mixer.gsp >= 0.5f || parameters.global.gsp ? 1.0f : 0.0f;
+    if (fresh)
+        gspBlend_ = gspTarget_;
 }
 
 bool PlaybackVoice::release(const sms::dsp::SamplePlaybackSettings& playback) noexcept {
@@ -224,8 +238,12 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
         if (--chokeLeft_ == 0U)
             chokeFinished = true;
     }
-    float sampleL, sampleR;
-    if (dirty_) {
+    float sampleL = 0.0f, sampleR = 0.0f;
+    const bool gspRead = gspBlend_ > 0.0f || gspTarget_ > 0.0f;
+    const bool normalRead = gspBlend_ < 1.0f || gspTarget_ < 1.0f;
+    if (!normalRead) {
+        readBlend_ = readTarget_; // the vintage read fade has nothing to fade while GSP owns the read
+    } else if (dirty_) {
         const auto sourceRate = sourceSampleRate;
         const auto sourceI = sourceFrame(sms::dsp::dirtySourceFrame(i, sourceRate));
         const auto sourceJ = sourceFrame(sms::dsp::dirtySourceFrame(j, sourceRate));
@@ -265,6 +283,30 @@ bool PlaybackVoice::render(const SampleStoragePool& pool,
             readBlend_ = readTarget_ > readBlend_ ? std::min(readBlend_ + readStep_, 1.0f)
                                                   : std::max(readBlend_ - readStep_, 0.0f);
         }
+    }
+    if (gspRead) {
+        // Elapsed playback from the region start, in source frames; reverse is already
+        // folded into the playback coordinates, and each loop pass restarts the grid.
+        const double offset = sms::dsp::gspSourceOffset(
+            pos - static_cast<double>(startFrame_), gspRatio_, gspSourceRate_);
+        const auto index = static_cast<std::uint32_t>(std::min(
+            static_cast<double>(startFrame_) + offset, static_cast<double>(n - 1U)));
+        SampleStoragePool::StereoReader reader{pool, storage};
+        const auto held = reader(sourceFrame(index));
+        float gspL = sms::dsp::gspQuantize(held[0]);
+        float gspR = sms::dsp::gspQuantize(held[1]);
+        if (dirty_)
+            gspL = gspR = sms::dsp::dirtyMono(gspL, gspR); // DIRTY keeps its mono fold
+        if (!normalRead) {
+            sampleL = gspL;
+            sampleR = gspR;
+        } else {
+            sampleL += gspBlend_ * (gspL - sampleL);
+            sampleR += gspBlend_ * (gspR - sampleR);
+        }
+        if (gspBlend_ != gspTarget_)
+            gspBlend_ = gspTarget_ > gspBlend_ ? std::min(gspBlend_ + readStep_, 1.0f)
+                                               : std::max(gspBlend_ - readStep_, 0.0f);
     }
     vintage_.process(sampleL, sampleR); // first on the pad; exact bypass when Off
     padFilters_.process(sampleL, sampleR);

@@ -548,7 +548,7 @@ void mixerStateRoundTrip()
     original.chokeGroup = 5.0f;
     original.outputBus = 3.0f;
     const std::string encoded = midichopper::plugin::encodeMixerSettings(original);
-    check(encoded.rfind("MX8;", 0U) == 0U, "mixer settings use the MX8 state version");
+    check(encoded.rfind("MX9;", 0U) == 0U, "mixer settings use the MX9 state version");
     sms::dsp::SampleMixerSettings decoded;
     check(midichopper::plugin::decodeMixerSettings(encoded.c_str(), decoded),
           "sample mixer settings decode");
@@ -651,9 +651,9 @@ void vintageMixerCodec()
     original.holdLoop = 1.0f;
     original.vintage = {2.0f, 1.0f, 9.5f, 31234.5f, 7.25f, -1.125f, 0.625f, 0.875f};
     const auto encoded = midichopper::plugin::encodeMixerSettings(original);
-    check(encoded.rfind("MX8;", 0U) == 0U &&
-              std::count(encoded.begin(), encoded.end(), ';') == 20,
-          "MX8 carries twelve mixer fields and eight vintage fields");
+    check(encoded.rfind("MX9;", 0U) == 0U &&
+              std::count(encoded.begin(), encoded.end(), ';') == 21,
+          "MX9 carries twelve mixer fields, eight vintage fields and the GSP flag");
     sms::dsp::SampleMixerSettings decoded;
     check(midichopper::plugin::decodeMixerSettings(encoded.c_str(), decoded) &&
               sameVintage(decoded.vintage, original.vintage) &&
@@ -699,6 +699,38 @@ void vintageMixerCodec()
               "MX1-MX7 other fields decode exactly as before MX8");
     }
 
+    // MX9 appends the GSP flag after the vintage fields; MX1-MX8 decode it Off.
+    auto gspOn = original;
+    gspOn.gsp = 1.0f;
+    const auto gspEncoded = midichopper::plugin::encodeMixerSettings(gspOn);
+    sms::dsp::SampleMixerSettings gspDecoded;
+    check(gspEncoded.size() > 2U && gspEncoded.compare(gspEncoded.size() - 2U, 2U, ";1") == 0 &&
+              midichopper::plugin::decodeMixerSettings(gspEncoded.c_str(), gspDecoded) &&
+              gspDecoded.gsp == 1.0f && sameVintage(gspDecoded.vintage, original.vintage),
+          "MX9 round-trips the GSP flag and keeps the vintage fields");
+    sms::dsp::SampleMixerSettings fromMx8;
+    fromMx8.gsp = 1.0f; // a stale destination must not leak through
+    check(midichopper::plugin::decodeMixerSettings(
+              "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0", fromMx8) &&
+              fromMx8.gsp == 0.0f && fromMx8.vintage.model == 1.0f,
+          "MX8 decodes with GSP Off and its vintage fields intact");
+    for (const auto& entry : legacy) {
+        sms::dsp::SampleMixerSettings restored;
+        restored.gsp = 1.0f;
+        check(midichopper::plugin::decodeMixerSettings(entry.text, restored) && restored.gsp == 0.0f,
+              "MX1-MX7 decode with GSP Off");
+    }
+    sms::dsp::SampleMixerSettings quickGsp = gspOn;
+    check(midichopper::plugin::applyPadQuickEdit(gspOn, quick).gsp == 1.0f && quickGsp.gsp == 1.0f,
+          "a Main-view quick edit (QE1) keeps the pad's GSP flag");
+    for (const char* const invalid : {"MX9;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0",
+                                      "MX9;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0;1;0"}) {
+        sms::dsp::SampleMixerSettings untouched;
+        untouched.gsp = 1.0f;
+        check(!midichopper::plugin::decodeMixerSettings(invalid, untouched) && untouched.gsp == 1.0f,
+              "MX9 with a wrong field count is rejected");
+    }
+
     sms::dsp::SampleMixerSettings clamped;
     check(midichopper::plugin::decodeMixerSettings(
               "MX8;0;0;0;0;0;0;0;0;1;0;0;0;7;-3;40;100;99;-9;3;-1", clamped) &&
@@ -713,7 +745,7 @@ void vintageMixerCodec()
              "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0;",    // trailing separator
              "MX8;0;0;0;0;0;0;0;0;1;0;0;0;nan;3;12;26000;0;0;1;0",   // non-finite
              "MX8;0;0;0;0;0;0;0;0;1;0;0;0;1;3;12;26000;0;0;1;0x",    // trailing junk
-             "MX9;0;0;0", "MX0;0;0;0", "MX8"}) {
+             "MX9;0;0;0", "MXA;0;0;0", "MX0;0;0;0", "MX8"}) {
         sms::dsp::SampleMixerSettings untouched;
         untouched.vintage = original.vintage;
         check(!midichopper::plugin::decodeMixerSettings(invalid, untouched) &&

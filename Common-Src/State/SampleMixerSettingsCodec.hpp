@@ -10,7 +10,8 @@
 
 namespace sms::state {
 
-/** MX8 = the twelve MX7 fields, then the eight VintageSettings fields in declaration order. */
+/** MX9 = the twelve MX7 fields, the eight VintageSettings fields in declaration order (MX8),
+ * then the GSP flag. */
 [[nodiscard]] inline std::string encodeSampleMixerSettings(
     const dsp::SampleMixerSettings& requested)
 {
@@ -18,14 +19,14 @@ namespace sms::state {
     const auto& v = settings.vintage;
     char encoded[512]{};
     std::snprintf(encoded, sizeof(encoded),
-                  "MX8;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;"
-                  "%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g",
+                  "MX9;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;"
+                  "%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g;%.9g",
                   settings.gainDecibels, settings.pan, settings.tuneSemitones,
                   settings.lowpass, settings.highpass, settings.filterSlope, settings.dirty,
                   settings.reverse, settings.globalMixer, settings.chokeGroup,
                   settings.outputBus, settings.holdLoop,
                   v.model, v.voicing, v.bits, v.rateHz, v.driveDb, v.toneOctaves, v.mix,
-                  v.resonance);
+                  v.resonance, settings.gsp);
     return encoded;
 }
 
@@ -33,17 +34,18 @@ namespace sms::state {
     const char* const encoded, dsp::SampleMixerSettings& destination) noexcept
 {
     if (encoded == nullptr || std::strncmp(encoded, "MX", 2U) != 0 ||
-        encoded[2] < '1' || encoded[2] > '8' || encoded[3] != ';')
+        encoded[2] < '1' || encoded[2] > '9' || encoded[3] != ';')
         return false;
     const int version = encoded[2] - '0';
     const char* cursor = encoded + 4U;
     // Slot 11 = hold loop: states older than MX7 had no such field and always looped, so they decode as On.
     // Slots 12-19 = vintage FX: states older than MX8 decode Off (the defaults).
+    // Slot 20 = GSP: states older than MX9 decode Off.
     const dsp::VintageSettings off{};
-    float values[20]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+    float values[21]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
                      off.model, off.voicing, off.bits, off.rateHz, off.driveDb,
-                     off.toneOctaves, off.mix, off.resonance};
-    constexpr std::size_t kCounts[9]{0U, 3U, 7U, 8U, 9U, 10U, 11U, 12U, 20U};
+                     off.toneOctaves, off.mix, off.resonance, 0.0f};
+    constexpr std::size_t kCounts[10]{0U, 3U, 7U, 8U, 9U, 10U, 11U, 12U, 20U, 21U};
     const std::size_t count = kCounts[version];
     for (std::size_t index = 0; index < count; ++index) {
         char* end = nullptr;
@@ -74,6 +76,7 @@ namespace sms::state {
     decoded.holdLoop = values[11];
     decoded.vintage = {values[12], values[13], values[14], values[15], values[16], values[17],
                        values[18], values[19]};
+    decoded.gsp = values[20];
     destination = dsp::sanitize(decoded);
     return true;
 }

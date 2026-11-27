@@ -2,13 +2,13 @@
 
 The main PLAY view has a **Global Mixer**: Direction, Pan and Dirty, then Tune, Lowpass,
 and Highpass. ARM hides it. **SAMPLE EDITOR** has a **Pad Mixer** for the selected
-pad: Direction, Gain and Pan beside Dirty, Tune, Lowpass, and Highpass, with a divider
-between Pan and Dirty. Slope sits under the filters.
+pad: Direction, Gain and Pan beside Dirty, Tune, Lowpass, and Highpass. Slope sits under
+the filters.
 
 After Highpass, a divider and **Global Mixer** power button control whether the
 selected pad uses global Direction, Pan, Dirty, Tune, Lowpass, and Highpass.
 It defaults to enabled, including in older projects, and saves with the pad.
-Bypassing takes effect during playback; pad controls and the separate OUT
+Pad controls and the separate OUT
 master fader remain active. With Global Direction reversed, toggling bypass
 also turns the playing sample at its current source position.
 
@@ -20,13 +20,12 @@ from the current level and keeps looping through its tail without retriggering
 the envelope. One Shot plays its envelope once.
 
 **Direction** shows dim ▶▶ for Forward and lit ◀◀ for Reverse in the theme
-accent color. Click anywhere on it to toggle. Each pad saves its own direction,
+accent color. Each pad saves its own direction,
 defaulting to Forward.
-Older projects also load Forward. Reverse flips the entire waveform in Sample
-Editor and mirrors the cut points, preserving the selected raw audio region:
-Start 20% / End 70% becomes Start 30% / End 80%. Flipping a playing pad takes
-effect immediately at the corresponding mirrored position: one-third becomes
-two-thirds. Playback continues from the same source position in the opposite
+Reverse flips the entire waveform in Sample
+Editor and mirrors the cut points, preserving the selected raw audio region.
+Flipping a playing pad takes
+effect immediately at the corresponding mirrored position. Playback continues from the same source position in the opposite
 direction, without restarting ADSR or filters, including an existing release.
 One Shot finishes once and ignores note-off; Hold repeats until note-off and
 release finish. Cut Point Editor and Split Sample always show and preview the
@@ -98,3 +97,8 @@ disabled, that pad is silent.
 ## Hold looping
 
 The Sample Editor LOOP button is always shown (dimmed outside HOLD) and is off for new pads. Saved pads keep their setting; pads saved before it existed still loop.
+
+## GSP pitch mode
+
+**GSP** plays a pad like a 12-bit 26 kHz drum machine: pitch drops or repeats samples, so down is grittier, up crunchier. Set it per pad under the editor's
+Tune, or for all pads beside the banks or under Global Tune.

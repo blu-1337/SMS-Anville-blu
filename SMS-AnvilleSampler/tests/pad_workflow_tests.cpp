@@ -2353,26 +2353,35 @@ void padVintageTravelsWithPad()
         return mixer.vintage;
     };
     const sms::dsp::VintageSettings drum{1.0f, 0.0f, 10.0f, 20000.0f, 6.0f, 0.5f, 0.75f, 0.0f};
+    const auto gspOf = [&](const std::uint32_t pad) {
+        sms::dsp::SamplePlaybackSettings playback;
+        sms::dsp::SampleMixerSettings mixer;
+        fixture.engine.snapshotPadSettings(pad, playback, mixer);
+        return mixer.gsp;
+    };
     auto mixer = fixture.engine.padMixerSettings(4U);
     mixer.vintage = drum;
+    mixer.gsp = 1.0f;
     undo.record(UndoController::Kind::settings, at(0),
                 [&] { fixture.engine.restorePadMixerSettings(4U, mixer); });
     check(undo.undoDepth() == 1U && vintageOf(4U) == drum, "a vintage edit is one undo step");
     undo.applyPadTune(4U, 1.5F, mutation, at(50));
-    check(vintageOf(4U) == drum, "TUNE (TN1) keeps the pad's vintage fields");
+    check(vintageOf(4U) == drum && gspOf(4U) == 1.0f, "TUNE (TN1) keeps the pad's vintage fields and GSP");
     fixture.engine.applyPendingState(); // the audio block that publishes staged settings
     undo.record(UndoController::Kind::action, at(100),
                 [&] { fixture.pads.handlePadStructureRequest("PS1;W;4;7"); });
     check(vintageOf(7U) == drum && vintageOf(4U) == sms::dsp::VintageSettings{},
           "swap moves the vintage settings with the pad");
+    check(gspOf(7U) == 1.0f && gspOf(4U) == 0.0f, "swap moves the GSP flag with the pad");
     fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::copy, 7U));
     fixture.pads.handlePadClipboardRequest(encodePadClipboardRequest(PadClipboardAction::paste, 9U));
-    check(vintageOf(9U) == drum, "copy and paste carry the vintage settings");
+    check(vintageOf(9U) == drum && gspOf(9U) == 1.0f, "copy and paste carry the vintage settings and GSP");
     undo.undo();
     undo.undo();
     undo.undo();
     check(vintageOf(4U) == sms::dsp::VintageSettings{} && vintageOf(7U) == sms::dsp::VintageSettings{},
           "undo restores vintage Off");
+    check(gspOf(4U) == 0.0f && gspOf(7U) == 0.0f, "undo restores GSP Off");
 }
 
 int main()

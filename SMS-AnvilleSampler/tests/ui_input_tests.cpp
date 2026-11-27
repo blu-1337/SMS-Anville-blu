@@ -695,8 +695,45 @@ void tuneRouting()
     check(midichopper::ui::analysisReadout(f.session.analysis(), 0) == "A2 +0c", "the picked note sounds");
 }
 
+// GSP: the main-view and GLOBAL MIXER toggles set one durable global flag; the Sample Editor
+// toggle sets the pad's flag, and does nothing but explain while the global flag is on.
+void gspLinkage()
+{
+    Fixture f;
+    check(isTarget(f.input.targetAt(center(layout::mainGsp)), InteractiveType::globalGsp, 0) &&
+          isTarget(f.input.targetAt(center(layout::globalMixerGsp)), InteractiveType::globalGsp, 1),
+          "both global GSP toggles are reachable in the main view");
+    f.click(center(layout::mainGsp));
+    check(f.session.state().globalGsp && !f.states.empty() && f.states.back().first == "global_gsp" &&
+          f.states.back().second == "1", "main-view GSP turns the global flag on");
+    f.click(center(layout::globalMixerGsp));
+    check(!f.session.state().globalGsp && f.states.back().second == "0",
+          "GLOBAL MIXER GSP shows and sets the same flag");
+    check(f.session.acceptState("global_gsp", "1") && f.session.state().globalGsp,
+          "the plug-in's global_gsp echo lights both global toggles");
+
+    Fixture e;
+    e.readyEditor();
+    check(isTarget(e.input.targetAt(center(layout::padGsp)), InteractiveType::padGsp),
+          "the Sample Editor GSP toggle is reachable");
+    e.click(center(layout::padGsp));
+    check(e.session.state().mixerSettings.gsp == 1.0f && e.states.back().first == kPadMixerStateKeys[0] &&
+          e.states.back().second.rfind("MX9;", 0U) == 0U &&
+          e.states.back().second.compare(e.states.back().second.size() - 2U, 2U, ";1") == 0,
+          "the pad GSP toggle commits the pad's MX9 mixer flag");
+    e.click(center(layout::padGsp));
+    check(e.session.state().mixerSettings.gsp == 0.0f, "the pad GSP toggle turns it off again");
+    const auto sent = e.states.size();
+    check(e.session.acceptState("global_gsp", "1"), "global GSP echo accepted in the editor");
+    e.click(center(layout::padGsp));
+    check(e.session.state().mixerSettings.gsp == 0.0f && e.states.size() == sent &&
+          std::string(e.session.state().status).find("GSP is on globally") != std::string::npos,
+          "while global GSP is on, the pad toggle keeps the stored flag and says why");
+}
+
 int main()
 {
+    gspLinkage();
     analysisToggleRouting();
     tuneRouting();
     padOwnershipAndSpace();

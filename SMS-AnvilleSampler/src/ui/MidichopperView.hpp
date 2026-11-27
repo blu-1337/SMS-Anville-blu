@@ -117,6 +117,7 @@ struct ViewState {
     float quickEditY = 0.0f;
     int swapTargetPad = -1;     // global pad highlighted as the swap target, or -1
     PadAnalysisView analysis{}; // header sound detection panel
+    bool globalGsp = false;     // global GSP pitch mode (main view + GLOBAL MIXER toggles)
 };
 
 void draw(DGL_NAMESPACE::NanoVG& canvas, const ViewState& state);

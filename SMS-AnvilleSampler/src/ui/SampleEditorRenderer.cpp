@@ -184,6 +184,7 @@ void drawSampleEditor(const ViewRenderContext& ctx)
     drawChokeSelector(ctx);
     drawOutputSelector(ctx);
     drawLoopToggle(ctx);
+    drawPadGspToggle(ctx);
 }
 
 void drawEditorPadPanel(const ViewRenderContext& ctx)

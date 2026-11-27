@@ -311,6 +311,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fSession.toggleSampleHoldLoop();
                 return true;
             }
+            if (isTarget(clicked, InteractiveType::padGsp)) {
+                fSession.toggleSampleGsp();
+                return true;
+            }
             if (isTarget(clicked, InteractiveType::padChoke)) {
                 fSession.toggleDropdown(1);
                 return true;
@@ -488,6 +492,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         if (isTarget(clicked, InteractiveType::playStop)) {
             fPlayButtonPressCaptured = true;
             fSession.togglePlayStop();
+            return true;
+        }
+        if (isTarget(clicked, InteractiveType::globalGsp)) {
+            fSession.toggleGlobalGsp();
             return true;
         }
         if (isTarget(clicked, InteractiveType::globalDirection)) {

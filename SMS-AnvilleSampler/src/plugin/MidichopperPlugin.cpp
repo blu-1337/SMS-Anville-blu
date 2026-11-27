@@ -262,6 +262,8 @@ protected:
         }
         if (std::strcmp(key, kGlobalVintageKey) == 0)
             return String(sms::state::encodeVintageSettings(sampler_.globalVintage()).c_str());
+        if (std::strcmp(key, kGlobalGspKey) == 0)
+            return String(sampler_.globalGsp() ? "1" : "0");
         // The workflows take the mutation mutex themselves.
         if (std::strcmp(key, kMainSampleAudioKey) == 0)
             return String(mainSampleWorkflows_.saveAudio().c_str());
@@ -426,6 +428,14 @@ protected:
             sampler_.setGlobalVintage(settings);
             const auto encoded = sms::state::encodeVintageSettings(settings);
             publishUiState(key, encoded.c_str());
+            return;
+        }
+        if (std::strcmp(key, kGlobalGspKey) == 0) {
+            // Durable, not undoable; anything but "1" (older projects, garbage) means Off.
+            const bool enabled = value != nullptr && std::strcmp(value, "1") == 0;
+            const std::lock_guard lock(globalVintageMutex_);
+            sampler_.setGlobalGsp(enabled);
+            publishUiState(key, enabled ? "1" : "0");
             return;
         }
         if (controls_.queueStateCommand(key, value))

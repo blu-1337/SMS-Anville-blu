@@ -307,11 +307,11 @@ void analysisStateMetadata()
 {
     PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
     const auto count = plugin.getStateCount();
-    check(plugin.getStateKey(count - 4U) == kMainSampleSpectrogramKey &&
-          plugin.getStateKey(count - 3U) == kPadAnalysisRequestKey &&
-          plugin.getStateKey(count - 2U) == kPadAnalysisStatusKey &&
-          plugin.getStateHints(count - 3U) == DISTRHO::kStateIsOnlyForDSP &&
-          plugin.getStateHints(count - 2U) == DISTRHO::kStateIsOnlyForUI &&
+    check(plugin.getStateKey(count - 5U) == kMainSampleSpectrogramKey &&
+          plugin.getStateKey(count - 4U) == kPadAnalysisRequestKey &&
+          plugin.getStateKey(count - 3U) == kPadAnalysisStatusKey &&
+          plugin.getStateHints(count - 4U) == DISTRHO::kStateIsOnlyForDSP &&
+          plugin.getStateHints(count - 3U) == DISTRHO::kStateIsOnlyForUI &&
           plugin.getStateValue(kPadAnalysisRequestKey) == "" &&
           plugin.getStateValue(kPadAnalysisStatusKey) == "",
           "pad analysis keys are appended and save empty values");
@@ -323,10 +323,10 @@ void globalVintageState()
     PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
     const auto count = plugin.getStateCount();
     const auto off = sms::state::encodeVintageSettings({});
-    check(plugin.getStateKey(count - 1U) == kGlobalVintageKey && plugin.getStateHints(count - 1U) == 0U &&
-          plugin.getStateDefaultValue(count - 1U) == off.c_str() &&
+    check(plugin.getStateKey(count - 2U) == kGlobalVintageKey && plugin.getStateHints(count - 2U) == 0U &&
+          plugin.getStateDefaultValue(count - 2U) == off.c_str() &&
           plugin.getStateValue(kGlobalVintageKey) == off.c_str(),
-          "global vintage key is appended last, durable and Off by default");
+          "global vintage key is appended before global_gsp, durable and Off by default");
     const auto on = sms::state::encodeVintageSettings({2.0f, 3.0f, 10.0f, 30000.0f, 6.0f, -0.5f, 0.75f, 0.4f});
     plugin.setState(kGlobalVintageKey, on.c_str());
     check(plugin.getStateValue(kGlobalVintageKey) == on.c_str(), "global vintage saves what was restored");
@@ -337,13 +337,30 @@ void globalVintageState()
     check(plugin.getStateValue(kGlobalVintageKey) == off.c_str(), "an empty global vintage restores Off");
 }
 
+// global_gsp is appended last, durable (hints 0), defaults Off; anything but "1" restores Off.
+void globalGspState()
+{
+    PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
+    const auto count = plugin.getStateCount();
+    check(plugin.getStateKey(count - 1U) == kGlobalGspKey && plugin.getStateHints(count - 1U) == 0U &&
+          plugin.getStateDefaultValue(count - 1U) == "0" && plugin.getStateValue(kGlobalGspKey) == "0",
+          "global GSP key is appended last, durable and Off by default");
+    plugin.setState(kGlobalGspKey, "1");
+    check(plugin.getStateValue(kGlobalGspKey) == "1", "global GSP saves what was restored");
+    plugin.setState(kGlobalGspKey, "garbage");
+    check(plugin.getStateValue(kGlobalGspKey) == "0", "a malformed global GSP restores Off");
+    plugin.setState(kGlobalGspKey, "1");
+    plugin.setState(kGlobalGspKey, "");
+    check(plugin.getStateValue(kGlobalGspKey) == "0", "an empty global GSP (older project) restores Off");
+}
+
 // A project saved before MX8 (pad mixer MX7) plays exactly like the MX8 save and re-saves as MX8 Off.
 void legacyMixerRestore(const SavedState& saved)
 {
     std::string legacy = saved.values[2];
-    check(legacy.rfind("MX8;", 0U) == 0U, "fixture mixer is MX8");
+    check(legacy.rfind("MX9;", 0U) == 0U, "fixture mixer is MX9");
     legacy[2] = '7';
-    for (int field = 0; field < 8; ++field)
+    for (int field = 0; field < 9; ++field)
         legacy.erase(legacy.rfind(';'));
     PluginExporter plugin(nullptr, nullptr, nullptr, nullptr);
     plugin.setParameterValue(kParameterInputMonitor, 0.0f);
@@ -351,7 +368,7 @@ void legacyMixerRestore(const SavedState& saved)
     plugin.setState(kKeys[1], saved.values[1].c_str());
     plugin.setState(kKeys[2], legacy.c_str());
     check(plugin.getStateValue(kKeys[2]) == saved.values[2].c_str(),
-          "an MX7 pad mixer restores unchanged with vintage Off");
+          "an MX7 pad mixer restores unchanged with vintage and GSP Off");
     const auto output = process(plugin, {}, kFrames, true);
     for (std::uint32_t frame = 0U; frame < kFrames; ++frame)
         for (std::uint32_t channel = 0U; channel < 2U; ++channel)
@@ -375,6 +392,7 @@ int main()
     mainSampleClearAndMismatch();
     analysisStateMetadata();
     globalVintageState();
+    globalGspState();
     legacyMixerRestore(saved);
     DISTRHO::d_nextPluginIsDummy = false;
     std::cout << "Project state tests passed\n";

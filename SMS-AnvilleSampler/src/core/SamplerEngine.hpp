@@ -171,6 +171,10 @@ public:
      * the audio thread adopts it at its next block. Not undoable, not a host parameter. */
     void setGlobalVintage(const sms::dsp::VintageSettings& settings) noexcept;
     [[nodiscard]] sms::dsp::VintageSettings globalVintage() const noexcept;
+    /** Global GSP pitch mode: every pad reads GSP-style (effective = global OR pad). Any thread;
+     * voices adopt it at the next block. Not undoable, not a host parameter. */
+    void setGlobalGsp(bool enabled) noexcept { globalGsp_.store(enabled, std::memory_order_release); }
+    [[nodiscard]] bool globalGsp() const noexcept { return globalGsp_.load(std::memory_order_acquire); }
     [[nodiscard]] EngineSettings settings() const noexcept { return settings_; }
 
     void process(const float* inputLeft, const float* inputRight,
@@ -494,6 +498,7 @@ private:
         std::atomic<float> mixerVintageToneOctaves{0.0f};
         std::atomic<float> mixerVintageMix{1.0f};
         std::atomic<float> mixerVintageResonance{0.0f};
+        std::atomic<float> mixerGsp{0.0f};
         Pad() = default;
         Pad(const Pad&) = delete;
         Pad& operator=(const Pad&) = delete;
@@ -646,6 +651,7 @@ private:
     mutable std::mutex globalVintageMutex_;
     std::uint32_t appliedGlobalVintageSequence_ = 0U; // audio owner
     bool busVintageActive_ = false;                    // audio owner, per block
+    std::atomic<bool> globalGsp_{false};
 };
 
 } // namespace midichopper

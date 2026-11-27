@@ -2984,8 +2984,51 @@ void analysisHeaderGeometry()
 
 } // namespace
 
+// GSP toggles: main view slot, under the global TUNE knob, under the pad TUNE knob; none overlap.
+void gspGeometry()
+{
+    namespace layout = midichopper::ui::layout;
+    const auto apart = [](const sms::ui::Rect a, const sms::ui::Rect b) {
+        return a.x + a.width <= b.x || b.x + b.width <= a.x ||
+               a.y + a.height <= b.y || b.y + b.height <= a.y;
+    };
+    const auto within = [](const sms::ui::Rect inner, const sms::ui::Rect outer) {
+        return inner.x >= outer.x && inner.y >= outer.y &&
+               inner.x + inner.width <= outer.x + outer.width &&
+               inner.y + inner.height <= outer.y + outer.height;
+    };
+    const auto main = layout::mainGsp;
+    check(within(main, layout::mainPanel) && apart(main, layout::overviewWaveform) &&
+          apart(main, layout::mainUndo) && apart(main, layout::mainRedo) &&
+          apart(main, layout::midiBankHint) && apart(main, layout::analysisPanel) &&
+          apart(main, layout::tuneDropdownBox) && apart(main, layout::mainPadBounds),
+          "main-view GSP sits in a free slot, clear of the detection panel and its TUNE");
+    for (int bank = 0; bank < 4; ++bank)
+        check(apart(main, layout::mainBank(bank)), "main-view GSP clears the bank buttons");
+    const auto global = layout::globalMixerGsp;
+    const auto tune = layout::globalMixerKnob(2);
+    check(global.x == 1000.0f && global.y == 569.0f && global.width == 56.0f && global.height == 22.0f &&
+          global.x >= tune.x && global.x + global.width <= tune.x + tune.width &&
+          within(global, layout::sidePanel) && apart(global, layout::monitor) &&
+          apart(global, layout::globalMixerValueLabel(2)),
+          "GLOBAL MIXER GSP sits under its TUNE knob");
+    for (int knob = 1; knob < 7; ++knob)
+        check(apart(global, layout::globalMixerKnob(knob)), "GLOBAL MIXER GSP clears every control");
+    const auto pad = layout::padGsp;
+    const auto padTune = layout::mixerKnob(2);
+    check(pad.x == 388.0f && pad.y == 664.0f && pad.width == 56.0f && pad.height == 24.0f &&
+          pad.x >= padTune.x && pad.x + pad.width <= padTune.x + padTune.width &&
+          within(pad, layout::mainPanel) && apart(pad, layout::mixerValueLabel(2)) &&
+          apart(pad, layout::padLoop) && apart(pad, layout::padGlobalMixer) &&
+          apart(pad, layout::padDirection) && apart(pad, layout::envelopeGraph),
+          "Sample Editor GSP sits under the pad TUNE knob");
+    for (int knob = 0; knob < 7; ++knob)
+        check(apart(pad, layout::mixerKnob(knob)), "Sample Editor GSP clears every mixer control");
+}
+
 int main()
 {
+    gspGeometry();
     analysisHeaderGeometry();
     tuneTargetTable();
     mainSampleTargetPrecedence();

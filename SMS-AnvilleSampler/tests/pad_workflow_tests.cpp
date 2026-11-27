@@ -2392,6 +2392,32 @@ void padVintageTravelsWithPad()
     check(vintageOf(4U) == sms::dsp::VintageSettings{} && vintageOf(7U) == sms::dsp::VintageSettings{},
           "undo restores vintage Off");
     check(gspOf(4U) == 0.0f && gspOf(7U) == 0.0f, "undo restores GSP Off");
+
+    // The pad GSP buttons (GS1) flip only the flag, one step per click.
+    const auto mixerOf = [&](const std::uint32_t pad) {
+        sms::dsp::SamplePlaybackSettings playback;
+        sms::dsp::SampleMixerSettings mixer;
+        fixture.engine.snapshotPadSettings(pad, playback, mixer);
+        return mixer;
+    };
+    fixture.engine.applyPendingState(); // publish what the undos staged first
+    auto kept = mixerOf(4U);
+    kept.gsp = 0.0f;
+    kept.pan = 0.5f;
+    kept.tuneSemitones = 3.0f;
+    kept.vintage = drum;
+    fixture.engine.restorePadMixerSettings(4U, kept);
+    const auto depth = undo.undoDepth();
+    undo.togglePadGsp(4U, mutation, at(5000));
+    undo.togglePadGsp(4U, mutation, at(5001));
+    undo.togglePadGsp(4U, mutation, at(5002));
+    const auto toggled = mixerOf(4U);
+    check(undo.undoDepth() == depth + 3U && toggled.gsp == 1.0f && toggled.pan == 0.5f &&
+          toggled.tuneSemitones == 3.0f && toggled.vintage == drum &&
+          fixture.observer.latest(kPadMixerStateKeys[4].c_str()) == "GS1;1",
+          "each GSP click is one step and keeps the pad's other settings");
+    undo.undo();
+    check(gspOf(4U) == 0.0f && mixerOf(4U).pan == 0.5f, "undo flips it back");
 }
 
 int main()

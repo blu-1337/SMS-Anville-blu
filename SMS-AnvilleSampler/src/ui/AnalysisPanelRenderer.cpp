@@ -30,6 +30,11 @@ void drawAnalysisPanel(const ViewRenderContext& ctx)
     sms::ui::dpf::drawInsetSurface(ctx.canvas, uiLayout::analysisPanel, 6.0f);
     sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::analysisToggle, view.on ? "ON" : "OFF", view.on,
                               colors.activityPlayback, hovered(ctx, InteractiveType::analysisToggle));
+    ctx.canvas.globalAlpha(ctx.state.topGspEnabled ? 1.0f : colors.disabledAlpha);
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::topGsp, "GSP", ctx.state.topGspOn,
+                              colors.controlAccent,
+                              ctx.state.topGspEnabled && hovered(ctx, InteractiveType::topGsp));
+    ctx.canvas.globalAlpha(1.0f);
     ctx.canvas.fontFace(NANOVG_DEJAVU_SANS_TTF);
     readout(ctx, uiLayout::analysisNote, "NOTE", 0);
     readout(ctx, uiLayout::analysisChord, "CHORD", 1);

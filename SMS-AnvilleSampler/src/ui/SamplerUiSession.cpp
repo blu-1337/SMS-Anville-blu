@@ -504,6 +504,7 @@ bool SamplerUiSession::acceptState(const char *key, const char *value)
         }
         if (fState.editorMode)
             refreshPadWaveform();
+        fGspQueried = -1;
         // Load, chop, paste, move and undo all land here; the shown values stay meanwhile.
         static_cast<void>(fAnalysis.invalidate(Clock::now(), false));
         fHost.repaintUi();
@@ -1156,14 +1157,84 @@ void SamplerUiSession::requestAnalysisIfNeeded(const Time now)
 {
     if (!fCapabilities.stateTransport)
         return;
-    const int pad = fState.lastPlayedPad >= 0 ? fState.lastPlayedPad : fState.selectedPad;
     bool changed = false;
-    const auto request = fAnalysis.poll(
-        pad >= 0 && pad < static_cast<int>(midichopper::kPadCount) ? pad : -1, now, changed);
+    const auto request = fAnalysis.poll(targetPad(), now, changed);
     if (request)
         fHost.sendUiState(kPadAnalysisRequestKey, encodePadAnalysisRequest(*request).c_str());
     if (changed)
         fHost.repaintUi();
+}
+
+int SamplerUiSession::targetPad() const noexcept
+{
+    const int pad = fState.lastPlayedPad >= 0 ? fState.lastPlayedPad : fState.selectedPad;
+    return pad >= 0 && pad < static_cast<int>(midichopper::kPadCount) ? pad : -1;
+}
+
+// Independent of detection ON/OFF: the header GSP button follows the same pad.
+void SamplerUiSession::requestTargetGsp()
+{
+    const int pad = targetPad();
+    if (!fCapabilities.stateTransport || pad == fGspQueried)
+        return;
+    fGspQueried = pad;
+    if (pad >= 0)
+        fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(pad)].c_str(),
+                          midichopper::plugin::kPadGspQuery);
+    fHost.repaintUi();
+}
+
+bool SamplerUiSession::padGspFlag(const int pad) const noexcept
+{
+    if (pad < 0 || pad >= static_cast<int>(midichopper::kPadCount))
+        return false;
+    return fState.mixerSettingsPad == pad ? fState.mixerSettings.gsp >= 0.5f
+                                          : fState.padGsp[static_cast<std::size_t>(pad)];
+}
+
+bool SamplerUiSession::targetGspEnabled() const noexcept
+{
+    const int pad = targetPad();
+    if (!fCapabilities.stateTransport || pad < 0)
+        return false;
+    for (int local = 0; local < visiblePadCount(); ++local)
+        if (globalPad(local) == pad)
+            return fState.padState[static_cast<std::size_t>(local)] != '0';
+    return true; // occupancy is only reported for the visible pads
+}
+
+bool SamplerUiSession::targetGspOn() const noexcept
+{
+    return targetGspEnabled() && (fState.globalGsp || padGspFlag(targetPad()));
+}
+
+void SamplerUiSession::toggleTargetGsp()
+{
+    if (targetGspEnabled())
+        sendPadGspToggle(targetPad());
+}
+
+// Only the toggle is sent, so the plugin keeps the pad's other settings, which the UI may not know.
+void SamplerUiSession::sendPadGspToggle(const int pad)
+{
+    if (fState.globalGsp) {
+        // The stored pad flag stays as it is; the global flag already applies to this pad.
+        setLocalStatus("GSP is on globally; turn it off in GLOBAL MIXER to set it per pad");
+        return;
+    }
+    const bool on = !padGspFlag(pad);
+    fState.padGsp[static_cast<std::size_t>(pad)] = on;
+    fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(pad)].c_str(),
+                      midichopper::plugin::kPadGspToggle);
+    if (pad == fState.selectedPad) {
+        if (fState.mixerSettingsPad == pad) {
+            fState.mixerSettings.gsp = on ? 1.0f : 0.0f;
+            refreshPendingEditorSnapshot();
+        } else if (fEditorSnapshot.pending()) {
+            sendEditorSnapshotRequest(Clock::now()); // an older reply would show the old flag
+        }
+    }
+    fHost.repaintUi();
 }
 
 bool SamplerUiSession::tuneAvailable() const noexcept
@@ -1426,17 +1497,9 @@ void SamplerUiSession::toggleGlobalGsp()
 void SamplerUiSession::toggleSampleGsp()
 {
     if (!hasSelectedPad() || fState.editorSettingsPad != fState.selectedPad ||
-        fState.mixerSettingsPad != fState.selectedPad)
+        fState.mixerSettingsPad != fState.selectedPad || !fCapabilities.stateTransport)
         return;
-    if (fState.globalGsp) {
-        // The stored pad flag stays as it is; the global flag already applies to this pad.
-        setLocalStatus("GSP is on globally; turn it off in GLOBAL MIXER to set it per pad");
-        return;
-    }
-    auto settings = fState.mixerSettings;
-    settings.gsp = settings.gsp >= 0.5f ? 0.0f : 1.0f;
-    commitMixerSettings(settings);
-    fHost.repaintUi();
+    sendPadGspToggle(fState.selectedPad);
 }
 
 void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &settings)
@@ -1492,9 +1555,20 @@ bool SamplerUiSession::parseMixerState(const char *const key, const char *const 
     for (std::size_t pad = 0; pad < kPadMixerStateKeys.size(); ++pad) {
         if (std::strcmp(key, kPadMixerStateKeys[pad].c_str()) != 0)
             continue;
+        if (std::strncmp(value, "GS1;", 4) == 0) {
+            const bool on = std::strcmp(value, midichopper::plugin::encodePadGsp(true)) == 0;
+            if (!on && std::strcmp(value, midichopper::plugin::encodePadGsp(false)) != 0)
+                return true;
+            fState.padGsp[pad] = on;
+            if (fState.mixerSettingsPad == static_cast<int>(pad))
+                fState.mixerSettings.gsp = on ? 1.0f : 0.0f;
+            fHost.repaintUi();
+            return true;
+        }
         sms::dsp::SampleMixerSettings decoded;
         if (sms::state::decodeSampleMixerSettings(value, decoded)) {
             const int decodedPad = static_cast<int>(pad);
+            fState.padGsp[pad] = decoded.gsp >= 0.5f;
             if (decodedPad == fAnalysis.pad()) {
                 fAnalysis.setTune(decoded.tuneSemitones);
                 fHost.repaintUi();
@@ -1622,6 +1696,7 @@ void SamplerUiSession::idle(const Time now, const float effectiveGlobalTune)
     if (fCapabilities.stateTransport)
         fMainSample.idle(now);
     requestAnalysisIfNeeded(now);
+    requestTargetGsp();
 }
 
 void SamplerUiSession::rendered(const Time now) noexcept
@@ -1637,6 +1712,7 @@ void SamplerUiSession::missedReplies()
         fChopEditor.cancel();
     requestWaveform();
     fAnalysis.retry(Clock::now());
+    fGspQueried = -1;
     if (fCapabilities.stateTransport)
         fMainSample.missedReplies();
     setLocalStatus("UI replies were missed; check the pad and retry");

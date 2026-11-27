@@ -265,6 +265,10 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return true;
     }
     if (fMenu.press(fHost.applicationMenuContext(), clicked, Clock::now())) return true;
+        if (isTarget(clicked, InteractiveType::topGsp)) {
+            fSession.toggleTargetGsp();
+            return true;
+        }
         if (isTarget(clicked, InteractiveType::analysisToggle)) {
             fSession.toggleAnalysis();
             return true;

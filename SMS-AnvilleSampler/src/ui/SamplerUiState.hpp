@@ -63,6 +63,7 @@ struct SamplerUiState {
     std::array<char, kPadsPerBank> padStatus{};
     std::array<int, kPadCount> padColors{};
     std::array<bool, kPadCount> padFavorites{}; // protected from auto-chop and overwrite
+    std::array<bool, kPadCount> padGsp{};       // pad GSP flags as last reported (GS1 / MX)
     char status[160]{};
 };
 

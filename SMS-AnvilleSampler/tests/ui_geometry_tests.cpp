@@ -2987,7 +2987,7 @@ void analysisHeaderGeometry()
 
 } // namespace
 
-// GSP toggles: main view slot, under the global TUNE knob, under the pad TUNE knob; none overlap.
+// GSP toggles: header slot, under the global TUNE knob, under the pad TUNE knob; none overlap.
 void gspGeometry()
 {
     namespace layout = midichopper::ui::layout;
@@ -3000,14 +3000,12 @@ void gspGeometry()
                inner.x + inner.width <= outer.x + outer.width &&
                inner.y + inner.height <= outer.y + outer.height;
     };
-    const auto main = layout::mainGsp;
-    check(within(main, layout::mainPanel) && apart(main, layout::overviewWaveform) &&
-          apart(main, layout::mainUndo) && apart(main, layout::mainRedo) &&
-          apart(main, layout::midiBankHint) && apart(main, layout::analysisPanel) &&
-          apart(main, layout::tuneDropdownBox) && apart(main, layout::mainPadBounds),
-          "main-view GSP sits in a free slot, clear of the detection panel and its TUNE");
-    for (int bank = 0; bank < 4; ++bank)
-        check(apart(main, layout::mainBank(bank)), "main-view GSP clears the bank buttons");
+    const auto top = layout::topGsp;
+    check(top.x == 510.0f && top.y == 25.0f && top.width == 46.0f && top.height == 32.0f &&
+          top.x >= 502.0f && top.x + top.width <= layout::analysisToggle.x &&
+          apart(top, layout::analysisPanel) && apart(top, layout::analysisToggle) &&
+          apart(top, layout::tuneButton) && apart(top, layout::tuneDropdown),
+          "header GSP sits between the logo glow and the detection ON/OFF button");
     const auto global = layout::globalMixerGsp;
     const auto tune = layout::globalMixerKnob(2);
     check(global.x == 1000.0f && global.y == 569.0f && global.width == 56.0f && global.height == 22.0f &&

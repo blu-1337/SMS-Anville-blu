@@ -549,6 +549,16 @@ protected:
                 }
                 return;
             }
+            if (value != nullptr && std::strcmp(value, midichopper::plugin::kPadGspToggle) == 0) {
+                undo_.togglePadGsp(pad, padWorkflows_.mutationMutex(), UndoClock::now());
+                return;
+            }
+            if (value != nullptr && std::strcmp(value, midichopper::plugin::kPadGspQuery) == 0) {
+                const std::lock_guard lock(padWorkflows_.mutationMutex());
+                publishUiState(key, midichopper::plugin::encodePadGsp(
+                    sampler_.padMixerSettings(pad).gsp >= 0.5f));
+                return;
+            }
             float tune = 0.0F;
             if (midichopper::plugin::decodePadTune(value, tune)) {
                 undo_.applyPadTune(pad, tune, padWorkflows_.mutationMutex(), UndoClock::now());

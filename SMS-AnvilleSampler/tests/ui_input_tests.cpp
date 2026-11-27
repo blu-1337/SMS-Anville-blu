@@ -1,5 +1,6 @@
 #include "SamplerInputController.hpp"
 #include "EditorSnapshotProtocol.hpp"
+#include "PadQuickEditCodec.hpp"
 #include "StateKeys.hpp"
 #include "State/VintageSettingsCodec.hpp"
 #include "VintagePanel.hpp"
@@ -697,40 +698,74 @@ void tuneRouting()
     check(midichopper::ui::analysisReadout(f.session.analysis(), 0) == "A2 +0c", "the picked note sounds");
 }
 
-// GSP: the main-view and GLOBAL MIXER toggles set one durable global flag; the Sample Editor
-// toggle sets the pad's flag, and does nothing but explain while the global flag is on.
+// GSP: GLOBAL MIXER sets the global flag; the header and Sample Editor buttons flip one pad's own
+// flag (GS1, never the other mixer settings) and only explain while the global flag is on.
 void gspLinkage()
 {
+    using midichopper::plugin::kPadGspQuery;
+    using midichopper::plugin::kPadGspToggle;
+    const auto top = center(layout::topGsp);
+    const auto tick = [](Fixture& f) {
+        f.session.idle(SamplerUiSession::Clock::now() + std::chrono::seconds(1), 0.0f);
+    };
+    const auto sentTo = [](const Fixture& f, const std::size_t pad, const char* value) {
+        return std::count_if(f.states.begin(), f.states.end(), [&](const auto& state) {
+            return state.first == kPadMixerStateKeys[pad] && state.second == value;
+        });
+    };
     Fixture f;
-    check(isTarget(f.input.targetAt(center(layout::mainGsp)), InteractiveType::globalGsp, 0) &&
-          isTarget(f.input.targetAt(center(layout::globalMixerGsp)), InteractiveType::globalGsp, 1),
-          "both global GSP toggles are reachable in the main view");
-    f.click(center(layout::mainGsp));
-    check(f.session.state().globalGsp && !f.states.empty() && f.states.back().first == "global_gsp" &&
-          f.states.back().second == "1", "main-view GSP turns the global flag on");
-    f.click(center(layout::globalMixerGsp));
-    check(!f.session.state().globalGsp && f.states.back().second == "0",
-          "GLOBAL MIXER GSP shows and sets the same flag");
-    check(f.session.acceptState("global_gsp", "1") && f.session.state().globalGsp,
-          "the plug-in's global_gsp echo lights both global toggles");
+    check(isTarget(f.input.targetAt(top), InteractiveType::topGsp) &&
+          isTarget(f.input.targetAt(center(layout::globalMixerGsp)), InteractiveType::globalGsp),
+          "the header and GLOBAL MIXER toggles are reachable in the main view");
+    check(!f.session.targetGspEnabled(), "no target pad: the header button is disabled");
+    f.click(top);
+    check(f.states.empty(), "and a click does nothing");
 
     Fixture e;
     e.readyEditor();
-    check(isTarget(e.input.targetAt(center(layout::padGsp)), InteractiveType::padGsp),
+    e.session.acceptParameter(kFirstPadStatusParameter, 1.0f);
+    e.session.acceptParameter(kFirstPadStatusParameter + 1U, 1.0f);
+    tick(e);
+    check(!e.session.analysis().on && sentTo(e, 0U, kPadGspQuery) == 1 && e.session.targetGspEnabled(),
+          "with detection OFF the target's flag is still asked for");
+    // Pad 2 plays while pad 1's settings are loaded (pad 2's are not): the button follows.
+    e.session.closeSampleEditor();
+    e.session.acceptParameter(kParameterPlaybackPadEvent, playbackPadEventValue(1, false));
+    check(e.session.state().lastPlayedPad == 1, "pad 2 is the target");
+    e.states.clear();
+    tick(e);
+    check(sentTo(e, 1U, kPadGspQuery) == 1, "the new target is asked for");
+    check(e.session.acceptState(kPadMixerStateKeys[1].c_str(), "GS1;1") && e.session.targetGspOn(),
+          "the button shows the target's flag");
+    e.states.clear();
+    e.click(top);
+    check(sentTo(e, 1U, kPadGspToggle) == 1 && sentTo(e, 0U, kPadGspToggle) == 0 && !e.session.targetGspOn() &&
+          !e.session.state().globalGsp, "a click flips only the target's flag, never global_gsp");
+
+    Fixture s;
+    s.readyEditor();
+    s.session.acceptParameter(kFirstPadStatusParameter, 1.0f);
+    check(isTarget(s.input.targetAt(center(layout::padGsp)), InteractiveType::padGsp),
           "the Sample Editor GSP toggle is reachable");
-    e.click(center(layout::padGsp));
-    check(e.session.state().mixerSettings.gsp == 1.0f && e.states.back().first == kPadMixerStateKeys[0] &&
-          e.states.back().second.rfind("MX9;", 0U) == 0U &&
-          e.states.back().second.compare(e.states.back().second.size() - 2U, 2U, ";1") == 0,
-          "the pad GSP toggle commits the pad's MX9 mixer flag");
-    e.click(center(layout::padGsp));
-    check(e.session.state().mixerSettings.gsp == 0.0f, "the pad GSP toggle turns it off again");
-    const auto sent = e.states.size();
-    check(e.session.acceptState("global_gsp", "1"), "global GSP echo accepted in the editor");
-    e.click(center(layout::padGsp));
-    check(e.session.state().mixerSettings.gsp == 0.0f && e.states.size() == sent &&
-          std::string(e.session.state().status).find("GSP is on globally") != std::string::npos,
-          "while global GSP is on, the pad toggle keeps the stored flag and says why");
+    s.states.clear();
+    s.click(center(layout::padGsp));
+    check(s.states.size() == 1U && sentTo(s, 0U, kPadGspToggle) == 1 &&
+          s.session.state().mixerSettings.gsp == 1.0f && s.session.targetGspOn(),
+          "the editor toggle flips the same flag and both buttons light");
+    s.click(top);
+    check(s.session.state().mixerSettings.gsp == 0.0f && sentTo(s, 0U, kPadGspToggle) == 2,
+          "the header button flips it back");
+    s.session.closeSampleEditor();
+    s.session.acceptParameter(kParameterPlaybackPadEvent, playbackPadEventValue(0, false));
+    s.states.clear();
+    s.click(center(layout::globalMixerGsp));
+    check(s.session.state().globalGsp && s.states.size() == 1U && s.states.back().first == "global_gsp" &&
+          s.session.state().mixerSettings.gsp == 0.0f && !s.session.state().padGsp[0] && s.session.targetGspOn(),
+          "the global switch leaves pad flags alone and lights the pad button");
+    s.states.clear();
+    s.click(top);
+    check(s.states.empty() && std::string(s.session.state().status).find("GSP is on globally") !=
+          std::string::npos, "while global GSP is on, a pad button only says why");
 }
 
 // Vintage FX popup: one at a time, modal; model/voicing clicks and knob gestures send one
@@ -811,8 +846,9 @@ void vintagePopup()
     g.input.mouse({bits.x, bits.y - 40.0f}, InputButton::left, false);
     check(g.states.back().first == "global_vintage" && decoded(g.states.back().second).bits > 8.0f,
           "global knob drag writes global_vintage");
-    g.click(center(layout::mainGsp));
-    check(g.session.vintagePopup() < 0 && !g.session.state().globalGsp, "no click-through to main GSP");
+    const auto before = g.states.size();
+    g.click(center(layout::topGsp));
+    check(g.session.vintagePopup() < 0 && g.states.size() == before, "no click-through to header GSP");
     g.click(center(layout::globalVintage));
     g.session.acceptParameter(kParameterMode, 1.0f);
     check(g.session.vintagePopup() < 0, "ARMED closes the popup");

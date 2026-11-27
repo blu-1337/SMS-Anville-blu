@@ -80,6 +80,11 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void setAnalysisEnabled(bool on);
     void toggleAnalysis();
     void requestAnalysisIfNeeded(Time now);
+    /** The detection/TUNE target: last played, else selected; -1 none. */
+    [[nodiscard]] int targetPad() const noexcept;
+    void requestTargetGsp();
+    [[nodiscard]] bool padGspFlag(int pad) const noexcept;
+    void sendPadGspToggle(int pad);
     /** TUNE acts on the analysed pad, and only on a current, firm enough note. */
     [[nodiscard]] bool tuneAvailable() const noexcept;
     /** The analysis view for drawing, with `tunable` filled in. */
@@ -175,9 +180,13 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     /** Applies list item `index` to the selected pad and closes the list. */
     void chooseDropdown(int index);
     void toggleSampleHoldLoop();
-    /** GSP: the global flag (main view and GLOBAL MIXER) and the selected pad's own flag. */
+    /** GSP: the global flag (GLOBAL MIXER), the selected pad's own flag (Sample Editor) and the
+     * detection/TUNE target's own flag (header). */
     void toggleGlobalGsp();
     void toggleSampleGsp();
+    void toggleTargetGsp();
+    [[nodiscard]] bool targetGspEnabled() const noexcept;
+    [[nodiscard]] bool targetGspOn() const noexcept; // effective: global or the target's flag
     /** Vintage FX popup; -1 once its pad, view or ARMED state no longer allows it. */
     [[nodiscard]] int vintagePopup() const noexcept;
     /** Forgets a popup that is no longer allowed, so it does not reappear later. */
@@ -252,6 +261,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     MainSampleController fMainSample{*this};
     bool fMainSampleBrowsing = false;
     bool fMeterRepaintPending = false;
+    int fGspQueried = -1; // target whose flag was asked for; -1 asks again
     bool fColorBatchPending = false; // a batched colour request awaits its UD1 echo
     Time fColorBatchDeadline{};
     [[nodiscard]] std::string encodedPadColors() const;

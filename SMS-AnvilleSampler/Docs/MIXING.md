@@ -100,5 +100,5 @@ The Sample Editor LOOP button is always shown (dimmed outside HOLD) and is off f
 
 ## GSP pitch mode
 
-**GSP** plays a pad like a 12-bit 26 kHz drum machine: pitch drops or repeats samples, so down is grittier, up crunchier. Set it per pad under the editor's
-Tune, or for all pads beside the banks or under Global Tune.
+**GSP** plays a pad like a 12-bit 26 kHz drum machine: pitch drops or repeats samples, so down is grittier, up crunchier. Per pad:
+editor button under Tune, or header button (the detection panel's pad). All pads: under Global Tune.

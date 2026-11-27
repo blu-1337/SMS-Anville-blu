@@ -110,7 +110,8 @@ enum class InteractiveType : int {
     tuneButton,
     tuneDropdown,
     tuneNoteItem, // index = pitch class, 0 = C
-    globalGsp,    // index 0 = main view, 1 = GLOBAL MIXER; both show and set the global flag
+    globalGsp,    // GLOBAL MIXER: the global flag
+    topGsp,       // header: the detection/TUNE target pad's own GSP flag
     padGsp,       // Sample Editor: the pad's own GSP flag
     globalVintage,
     padVintage,
@@ -746,6 +747,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         return sms::ui::kNoInteractiveTarget;
     }
 
+    if (uiLayout::topGsp.contains(point))
+        return target(InteractiveType::topGsp);
     if (uiLayout::analysisToggle.contains(point))
         return target(InteractiveType::analysisToggle); // the header is shared by every view
     if (context.tuneEnabled && uiLayout::tuneButton.contains(point))
@@ -945,8 +948,6 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
                 return target(InteractiveType::bank, bank);
         }
     }
-    if (!context.captureActive && uiLayout::mainGsp.contains(point))
-        return target(InteractiveType::globalGsp, 0);
     if (!context.captureActive && !context.armed) {
         if (uiLayout::mainUndo.contains(point))
             return target(InteractiveType::historyUndo);
@@ -994,7 +995,7 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
     if (!context.armed && uiLayout::globalVintage.contains(point))
         return target(InteractiveType::globalVintage);
     if (!context.armed && uiLayout::globalMixerGsp.contains(point))
-        return target(InteractiveType::globalGsp, 1);
+        return target(InteractiveType::globalGsp);
     for (int knob = 1; !context.armed && knob < 7; ++knob) {
         if (knob != 5 && uiLayout::globalMixerValueLabel(knob).contains(point))
             return target(InteractiveType::globalMixerValueLabel, knob);

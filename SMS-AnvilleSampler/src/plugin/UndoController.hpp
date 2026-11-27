@@ -131,6 +131,8 @@ public:
     /** Vintage popup: sets only the pad's vintage FX, as its own step like TUNE. */
     void applyPadVintage(std::uint32_t pad, const sms::dsp::VintageSettings& vintage,
                          std::mutex& mutation, Clock::time_point now);
+    /** Pad GSP buttons: flips only that flag and publishes "GS1;0|1"; every click is its own step. */
+    void togglePadGsp(std::uint32_t pad, std::mutex& mutation, Clock::time_point now);
     void undo() { step(true); }
     void redo() { step(false); }
     /** Host restored durable state: history no longer describes it. */

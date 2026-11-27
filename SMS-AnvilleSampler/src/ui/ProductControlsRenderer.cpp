@@ -293,11 +293,11 @@ void drawPadGspToggle(const ViewRenderContext& ctx)
                               hovered(ctx, InteractiveType::padGsp));
 }
 
-void drawGlobalGspToggle(const ViewRenderContext& ctx, const sms::ui::Rect bounds, const int index)
+void drawGlobalGspToggle(const ViewRenderContext& ctx)
 {
-    sms::ui::dpf::drawSegment(ctx.canvas, bounds, "GSP", ctx.state.globalGsp,
+    sms::ui::dpf::drawSegment(ctx.canvas, uiLayout::globalMixerGsp, "GSP", ctx.state.globalGsp,
                               sms::ui::dpf::theme().controlAccent,
-                              hovered(ctx, InteractiveType::globalGsp, index));
+                              hovered(ctx, InteractiveType::globalGsp));
 }
 
 void drawOutputSelector(const ViewRenderContext& ctx)
@@ -412,7 +412,7 @@ void drawGlobalMixer(const ViewRenderContext& ctx)
                   ctx.state.globalValueSettings[4].maximum, high);
     drawSlopeButton(ctx, uiLayout::globalMixerKnob(5), InteractiveType::globalMixerKnob,
                     ctx.state.globalFilterSlope);
-    drawGlobalGspToggle(ctx, uiLayout::globalMixerGsp, 1);
+    drawGlobalGspToggle(ctx);
     drawVintageButton(ctx, false);
 }
 

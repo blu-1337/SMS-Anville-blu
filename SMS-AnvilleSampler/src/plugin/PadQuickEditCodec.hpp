@@ -102,4 +102,11 @@ struct PadQuickEditDelta {
     return true;
 }
 
+/** Pad GSP, also sent on the pad's mixer key, so the pad's other settings are never rewritten:
+ * "GS1;?" asks for the flag, "GS1;T" flips it (one undo step); the plugin answers "GS1;0|1". */
+inline constexpr const char* kPadGspQuery = "GS1;?";
+inline constexpr const char* kPadGspToggle = "GS1;T";
+
+[[nodiscard]] inline const char* encodePadGsp(const bool on) noexcept { return on ? "GS1;1" : "GS1;0"; }
+
 } // namespace midichopper::plugin

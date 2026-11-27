@@ -193,11 +193,10 @@ inline constexpr sms::ui::Rect padOutput{800.0f, 112.0f, 120.0f, 28.0f};
 // HOLD-mode loop toggle, directly under the GLOBAL MIXER button (same x and width).
 inline constexpr sms::ui::Rect padLoop{879.0f, 646.0f, 42.0f, 34.0f};
 inline constexpr sms::ui::Rect padChoke{664.0f, 112.0f, 120.0f, 28.0f};
-// GSP pitch mode toggles. Main view: the free slot between the overview waveform (ends x 630) and
-// bank A (x 690), level with the bank buttons. GLOBAL MIXER: under its TUNE knob, left of SLOPE
-// (x 1089). Sample Editor: under the pad TUNE knob, left of SLOPE (x 495). The first two share the
-// one global flag; the third is the pad's own flag.
-inline constexpr sms::ui::Rect mainGsp{636.0f, 104.0f, 48.0f, 28.0f};
+// GSP pitch mode toggles. Header: left of the detection ON/OFF button, the detection/TUNE target
+// pad's own flag. GLOBAL MIXER: under its TUNE knob, left of SLOPE (x 1089), the global flag.
+// Sample Editor: under the pad TUNE knob, left of SLOPE (x 495), the pad's own flag.
+inline constexpr sms::ui::Rect topGsp{510.0f, 25.0f, 46.0f, 32.0f};
 inline constexpr sms::ui::Rect globalMixerGsp{1000.0f, 569.0f, 56.0f, 22.0f};
 inline constexpr sms::ui::Rect padGsp{388.0f, 664.0f, 56.0f, 24.0f};
 // Drop-down lists under the CHOKE (kind 1: Off, 1-8) and OUT (kind 2: Main, 1-16) chips.

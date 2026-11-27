@@ -1,4 +1,5 @@
 #include "UndoController.hpp"
+#include "PadQuickEditCodec.hpp"
 
 #include "PadColorState.hpp"
 #include "PadFingerprint.hpp"
@@ -179,6 +180,22 @@ void UndoController::applyPadTune(const std::uint32_t pad, const float semitones
         mixer = sms::dsp::sanitize(mixer);
         static_cast<void>(sampler_.restorePadMixerSettings(pad, mixer));
         observer_.publishUiState(kPadMixerStateKeys[pad].c_str(), encodeMixerSettings(mixer).c_str());
+    });
+}
+
+void UndoController::togglePadGsp(const std::uint32_t pad, std::mutex& mutation,
+                                  const Clock::time_point now)
+{
+    if (pad >= kPadCount)
+        return;
+    record(Kind::action, now, [&] {
+        const std::lock_guard lock(mutation);
+        sms::dsp::SamplePlaybackSettings playback;
+        sms::dsp::SampleMixerSettings mixer;
+        sampler_.snapshotPadSettings(pad, playback, mixer);
+        mixer.gsp = mixer.gsp >= 0.5f ? 0.0f : 1.0f;
+        static_cast<void>(sampler_.restorePadMixerSettings(pad, mixer));
+        observer_.publishUiState(kPadMixerStateKeys[pad].c_str(), encodePadGsp(mixer.gsp >= 0.5f));
     });
 }
 

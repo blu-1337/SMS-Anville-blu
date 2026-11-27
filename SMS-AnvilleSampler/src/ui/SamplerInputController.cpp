@@ -344,11 +344,8 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
                 fSession.toggleDropdown(1);
                 return true;
             }
-            if (fMixer.sampleMixerPress(mixerContext(), clicked, position, adjustment)) {
-                if (isTarget(clicked, InteractiveType::mixerKnob) && fMixer.entry().target().valid())
-                    fDragTarget = EditTarget::none;
+            if (fMixer.sampleMixerPress(mixerContext(), clicked, position, adjustment))
                 return true;
-            }
             if (isTarget(clicked, InteractiveType::closeEditor)) {
                 fSession.closeSampleEditor();
                 return true;

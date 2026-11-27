@@ -571,6 +571,13 @@ protected:
                 return;
             }
             sms::dsp::SampleMixerSettings settings;
+            const std::size_t resetPrefix = std::strlen(midichopper::plugin::kPadMixerReset);
+            if (value != nullptr &&
+                std::strncmp(value, midichopper::plugin::kPadMixerReset, resetPrefix) == 0) {
+                if (midichopper::plugin::decodeMixerSettings(value + resetPrefix, settings))
+                    undo_.applyPadReset(pad, settings, padWorkflows_.mutationMutex(), UndoClock::now());
+                return;
+            }
             if (midichopper::plugin::decodeMixerSettings(value, settings)) {
                 undo_.record(UndoKind::settings, UndoClock::now(), [&] {
                     const std::lock_guard lock(padWorkflows_.mutationMutex());

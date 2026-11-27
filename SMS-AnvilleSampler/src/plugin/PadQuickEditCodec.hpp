@@ -107,6 +107,9 @@ struct PadQuickEditDelta {
 inline constexpr const char* kPadGspQuery = "GS1;?";
 inline constexpr const char* kPadGspToggle = "GS1;T";
 
+/** Prefix of a full mixer write from a knob reset: its own undo step. */
+inline constexpr const char* kPadMixerReset = "RS1;";
+
 [[nodiscard]] inline const char* encodePadGsp(const bool on) noexcept { return on ? "GS1;1" : "GS1;0"; }
 
 } // namespace midichopper::plugin

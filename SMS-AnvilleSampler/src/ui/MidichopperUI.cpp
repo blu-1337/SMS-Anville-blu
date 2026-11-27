@@ -415,6 +415,8 @@ private:
     void setMixerParameter(const std::uint32_t parameter, const float value) override { fSession.setControlValue(parameter, value); }
     void commitPadMixer(const int pad, const sms::dsp::SampleMixerSettings& settings) override
     { if (pad == fSession.state().selectedPad) fSession.commitMixerSettings(settings); }
+    void resetPadMixer(const int pad, const sms::dsp::SampleMixerSettings& settings) override
+    { if (pad == fSession.state().selectedPad) fSession.commitMixerSettings(settings, true); }
     void saveGlobalMixerSettings(const std::uint32_t parameter, const GlobalValueSettings& settings) override
     {
         fSession.setLocalStatus("");

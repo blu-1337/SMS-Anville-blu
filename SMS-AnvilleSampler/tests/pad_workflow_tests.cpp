@@ -2393,6 +2393,27 @@ void padVintageTravelsWithPad()
           "undo restores vintage Off");
     check(gspOf(4U) == 0.0f && gspOf(7U) == 0.0f, "undo restores GSP Off");
 
+    // A knob reset right after a drag (RS1) is its own step and undoes back to the dragged value.
+    {
+        UndoController resets(fixture.engine, fixture.main, fixture.observer, colors);
+        fixture.engine.applyPendingState();
+        auto dragged = fixture.engine.padMixerSettings(4U);
+        dragged.pan = -0.25f;
+        resets.record(UndoController::Kind::settings, at(1000),
+                      [&] { fixture.engine.restorePadMixerSettings(4U, dragged); });
+        fixture.engine.applyPendingState();
+        auto reset = dragged;
+        reset.pan = 0.0f;
+        resets.applyPadReset(4U, reset, mutation, at(1010));
+        check(resets.undoDepth() == 2U, "a reset never coalesces with the drag before it");
+        fixture.engine.applyPendingState();
+        resets.undo();
+        fixture.engine.applyPendingState();
+        check(fixture.engine.padMixerSettings(4U).pan == -0.25f, "undo returns the dragged value");
+        resets.undo();
+        fixture.engine.applyPendingState();
+    }
+
     // The pad GSP buttons (GS1) flip only the flag, one step per click.
     const auto mixerOf = [&](const std::uint32_t pad) {
         sms::dsp::SamplePlaybackSettings playback;

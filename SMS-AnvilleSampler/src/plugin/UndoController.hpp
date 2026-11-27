@@ -129,6 +129,9 @@ public:
      */
     void applyPadTune(std::uint32_t pad, float semitones, std::mutex& mutation, Clock::time_point now);
     /** Vintage popup: sets only the pad's vintage FX, as its own step like TUNE. */
+    /** A knob reset (RS1): a full mixer write that is always its own step. */
+    void applyPadReset(std::uint32_t pad, const sms::dsp::SampleMixerSettings& mixer,
+                       std::mutex& mutation, Clock::time_point now);
     void applyPadVintage(std::uint32_t pad, const sms::dsp::VintageSettings& vintage,
                          std::mutex& mutation, Clock::time_point now);
     /** Pad GSP buttons: flips only that flag and publishes "GS1;0|1"; every click is its own step. */

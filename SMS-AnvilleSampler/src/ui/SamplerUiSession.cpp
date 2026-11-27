@@ -1502,7 +1502,8 @@ void SamplerUiSession::toggleSampleGsp()
     sendPadGspToggle(fState.selectedPad);
 }
 
-void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &settings)
+void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &settings,
+                                           const bool knobReset)
 {
     fState.mixerSettings = sms::dsp::sanitize(settings);
     fWaveformDetail.setReversed(
@@ -1511,7 +1512,8 @@ void SamplerUiSession::commitMixerSettings(const sms::dsp::SampleMixerSettings &
     if (fState.selectedPad == fAnalysis.pad())
         fAnalysis.setTune(fState.mixerSettings.tuneSemitones);
     if (fCapabilities.stateTransport) {
-        const std::string encoded = sms::state::encodeSampleMixerSettings(fState.mixerSettings);
+        const std::string encoded = std::string(knobReset ? midichopper::plugin::kPadMixerReset : "") +
+            sms::state::encodeSampleMixerSettings(fState.mixerSettings);
         fHost.sendUiState(kPadMixerStateKeys[static_cast<std::size_t>(fState.selectedPad)].c_str(),
                           encoded.c_str());
     }

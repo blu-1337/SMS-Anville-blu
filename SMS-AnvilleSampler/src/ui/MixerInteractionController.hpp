@@ -33,6 +33,8 @@ public:
     virtual void editMixerParameter(std::uint32_t parameter, bool begin) = 0;
     virtual void setMixerParameter(std::uint32_t parameter, float value) = 0;
     virtual void commitPadMixer(int pad, const sms::dsp::SampleMixerSettings& settings) = 0;
+    /** A knob reset: unlike commitPadMixer it never coalesces with other edits. */
+    virtual void resetPadMixer(int pad, const sms::dsp::SampleMixerSettings& settings) = 0;
     virtual void saveGlobalMixerSettings(std::uint32_t parameter,
                                          const plugin::GlobalValueSettings& settings) = 0;
     virtual void setMixerStatus(const char* message) = 0;
@@ -115,6 +117,7 @@ private:
     int fFaderDrag = -1;
     float fFaderGrabY = 0.0f;
     int fSampleDrag = -1;
+    bool fSampleChanged = false;
     float fSampleStartY = 0.0f;
     sms::dsp::SampleMixerSettings fSampleStart{};
     KnobAdjustment fSampleAdjustment = KnobAdjustment::normal;

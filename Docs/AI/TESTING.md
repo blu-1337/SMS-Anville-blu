@@ -81,7 +81,7 @@ Jalv/Carla 2.5.10 cannot validate DSP `active_bank` updates.
   Verify SKIN's separator/pinned `<Get More>` with long collections; it opens the
   additional-skins README without changing appearance/preferences.
 - UI/editor: check drawing, selection, region/mixer/ADSR drag, wheel/reset,
-  sound/playhead, hover. VST3 numeric entry: double-click knob/fader/value;
+  sound/playhead, hover. VST3 numeric entry: double-click fader/value;
   Enter/numpad Enter commit, Escape cancels; Tab/Shift+Tab accept valid entries
   in manual order, retaining invalid entries. Middle-click resets. Check ARM/play/stop icons and
   default green PLAY/red ARMED indicators. ARM hides the mixer; both edge faders remain

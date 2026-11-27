@@ -25,7 +25,7 @@ void VintagePanelController::press(const sms::ui::InteractiveTarget clicked,
     if (!fSession.vintageReady(popup))
         return;
     const auto current = fSession.vintageSettings(popup);
-    if (knob && (middle || fDoubleClick.press(clicked, position, milliseconds))) {
+    if (knob && middle) {
         fDragKnob = -1;
         commit(popup, vintageWithDefault(current, clicked.index));
         return;
@@ -33,6 +33,7 @@ void VintagePanelController::press(const sms::ui::InteractiveTarget clicked,
     if (!left)
         return;
     if (knob) {
+        fDoubleClick.knobPress(clicked, position, milliseconds);
         fDragKnob = clicked.index;
         fDragPopup = popup;
         fDragStartY = position.y;
@@ -49,7 +50,7 @@ void VintagePanelController::press(const sms::ui::InteractiveTarget clicked,
 
 void VintagePanelController::motion(const sms::ui::Point position)
 {
-    if (fDragKnob < 0 || fSession.vintagePopup() != fDragPopup)
+    if (fDragKnob < 0 || fSession.vintagePopup() != fDragPopup || !fDoubleClick.knobMotion(position))
         return;
     const float travel = fDragAdjustment == KnobAdjustment::fine ? 0.0012f : 0.006f;
     fDragValue = vintageWithKnob(fDragStart, fDragKnob,
@@ -61,8 +62,11 @@ bool VintagePanelController::release()
 {
     if (fDragKnob < 0)
         return false;
+    const int knob = fDragKnob;
     fDragKnob = -1;
-    if (fDragValue != fDragStart)
+    if (fDoubleClick.knobRelease())
+        commit(fDragPopup, vintageWithDefault(fDragStart, knob));
+    else if (fDragValue != fDragStart)
         fSession.commitVintage(fDragPopup, fDragValue);
     return true;
 }

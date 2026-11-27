@@ -47,6 +47,8 @@ struct Fixture final : SamplerUiHost, MixerInteractionHost, ApplicationMenuHost,
     void setMixerParameter(std::uint32_t p, float value) override { session.setControlValue(p, value); }
     void commitPadMixer(int pad, const sms::dsp::SampleMixerSettings& settings) override
     { check(pad == session.state().selectedPad, "mixer commits only the current pad"); session.commitMixerSettings(settings); }
+    void resetPadMixer(int pad, const sms::dsp::SampleMixerSettings& settings) override
+    { check(pad == session.state().selectedPad, "mixer resets only the current pad"); session.commitMixerSettings(settings, true); }
     void saveGlobalMixerSettings(std::uint32_t, const GlobalValueSettings&) override {}
     void setMixerStatus(const char* text) override { session.setLocalStatus(text); }
     void repaintMixer() override {}
@@ -383,11 +385,11 @@ void editorWheelAndPointerRoutes()
     check(std::abs(f.session.state().editorSettings.start - 0.25f) < 1.0f / 48000.0f,
           "region pointer motion commits local sample coordinates");
 
-    const auto knob = center(layout::mixerKnob(0));
+    const auto knob = center(layout::mixerValueLabel(0));
     f.input.mouse(knob, InputButton::left, true);
     f.input.mouse(knob, InputButton::left, false);
     f.input.mouse(knob, InputButton::left, true);
-    check(f.mixer.entry().target().valid(), "knob double-click starts numeric entry");
+    check(f.mixer.entry().target().valid(), "value double-click starts numeric entry");
     f.input.mouse(knob, InputButton::left, false);
     check(f.input.keyboard(InputKey::deleteText, true), "numeric Delete consumed");
     f.input.character('-'); f.input.character('6');
@@ -805,6 +807,19 @@ void vintagePopup()
           "release sends one write for the gesture");
     e.click(drive, InputButton::middle);
     check(e.states.size() == 5U && decoded(e.states.back().second).driveDb == 0.0f, "middle click resets");
+    e.click(drive);
+    check(e.input.mouse(drive, InputButton::left, true), "quick re-press");
+    e.input.motion({drive.x, drive.y - 40.0f});
+    e.input.mouse({drive.x, drive.y - 40.0f}, InputButton::left, false);
+    check(e.states.size() == 6U && decoded(e.states.back().second).driveDb > 0.0f,
+          "a re-drag inside the double-click window still drags");
+    e.click(drive);
+    check(e.states.size() == 6U, "one click after a drag does not reset");
+    check(e.input.mouse(drive, InputButton::left, true) && e.states.size() == 6U, "reset waits for release");
+    e.input.mouse(drive, InputButton::left, false);
+    check(e.states.size() == 7U && decoded(e.states.back().second).driveDb == 0.0f,
+          "double click resets a vintage knob with one write");
+    e.states.resize(5U);
     e.input.scroll(drive, 1.0f, false, false, KnobAdjustment::normal);
     check(e.states.size() == 6U && e.states.back().second.rfind("MX9;", 0U) == 0U &&
           e.session.state().mixerSettings.vintage.driveDb > 0.0f, "wheel writes a coalescing mixer edit");

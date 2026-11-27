@@ -170,7 +170,7 @@ class SamplerUiSession final : private ChopEditorHost, private PadActionHost,
     void requestWaveform();
     void requestWaveformDetail();
     void commitPlaybackSettings(const sms::dsp::SamplePlaybackSettings &settings);
-    void commitMixerSettings(const sms::dsp::SampleMixerSettings &settings);
+    void commitMixerSettings(const sms::dsp::SampleMixerSettings &settings, bool knobReset = false);
     void flipSampleDirection();
     void toggleSampleGlobalMixer();
     /** Sample Editor drop-down lists: kind 1 = CHOKE (Off, 1..8), 2 = OUT (Main, 1..16). */

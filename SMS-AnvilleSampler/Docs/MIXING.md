@@ -69,8 +69,8 @@ filtering and tune. You can enable it for one pad or for every pad using the
 global switch. Monitoring the input remains clean. The pad effects are saved
 with each pad; global effects are host parameters saved with the project.
 
-Drag or wheel Lowpass and Highpass. Double-click the knob or value to type a
-percentage, or middle-click to reset. Click Dirty to toggle it.
+Drag or wheel Lowpass and Highpass. Double-click or middle-click a knob to reset
+it; double-click its value to type one. Click Dirty to toggle it.
 
 Global Pan, Tune, Lowpass, Highpass, and OUT also have per-control modes and
 custom ranges. The [knob settings manual](../README.md#knob-settings) explains

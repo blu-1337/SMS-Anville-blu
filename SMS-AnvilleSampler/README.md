@@ -218,9 +218,9 @@ Right-click for **Split Sample**; following samples shift right without being ov
 
 - Drag/wheel knobs and sliders.
 - **Shift** gives 10× knob precision; **Ctrl** steps Gain/Volume 1 dB, Pan and filters 10 percentage points, and Tune one semitone.
-- Double-click a continuous mixer knob, its value, or an edge fader to type a
-  value. Enter and numpad Enter accept; Escape cancels. Middle-click resets.
-  ADSR and waveform handles retain double/middle-click reset.
+- Double-click or middle-click a knob to reset it. Double-click a mixer value
+  or an edge fader to type a value. Enter and numpad Enter accept; Escape
+  cancels. Middle-click also resets faders and ADSR sliders.
 - While typing, **Tab** accepts a valid value and opens the next control;
   **Shift+Tab** goes backwards. Invalid values retain focus. Order wraps:
   Main View uses IN → Pan → Tune → Lowpass → Highpass → OUT; Sample Editor

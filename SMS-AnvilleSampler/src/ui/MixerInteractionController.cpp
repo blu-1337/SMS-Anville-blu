@@ -226,7 +226,7 @@ bool MixerInteractionController::resetControl(const MixerInteractionContext& con
         midichopper::ui::isTarget(
             clicked, midichopper::ui::InteractiveType::mixerValueLabel)) {
         midichopper::ui::resetMixerKnob(mixer, clicked.index);
-        fHost.commitPadMixer(context.selectedPad, mixer);
+        fHost.resetPadMixer(context.selectedPad, mixer);
         fHost.repaintMixer();
         fResetPointerCaptured = true;
         return true;
@@ -334,6 +334,12 @@ void MixerInteractionController::updateSampleDrag(const MixerInteractionContext&
         return;
     }
     mixer = sms::dsp::sanitize(mixer);
+    const auto& old = context.mixer;
+    if (mixer.gainDecibels == old.gainDecibels && mixer.pan == old.pan &&
+        mixer.tuneSemitones == old.tuneSemitones && mixer.lowpass == old.lowpass &&
+        mixer.highpass == old.highpass)
+        return;
+    fSampleChanged = true;
     fHost.commitPadMixer(context.selectedPad, mixer);
     fHost.repaintMixer();
 }
@@ -549,17 +555,13 @@ bool MixerInteractionController::sampleMixerPress(const MixerInteractionContext&
             return true;
         }
     } else if (knob) {
-        if (fDoubleClick.press(clicked, position, milliseconds(now))) {
-            fSampleDrag = -1;
-            beginEntry(context, clicked);
-            fEntryPointerCaptured = true;
-            return true;
-        }
+        fDoubleClick.knobPress(clicked, position, milliseconds(now));
     } else {
         static_cast<void>(fDoubleClick.press(sms::ui::kNoInteractiveTarget, position, milliseconds(now)));
         return false;
     }
     fSampleDrag = clicked.index;
+    fSampleChanged = false;
     fSampleStartY = position.y;
     fSampleStart = context.mixer;
     fSampleAdjustment = adjustment;
@@ -592,12 +594,7 @@ bool MixerInteractionController::globalMixerPress(const MixerInteractionContext&
             return true;
         }
     } else if (knob) {
-        if (fDoubleClick.press(clicked, position, milliseconds(now))) {
-            fGlobalDrag = -1;
-            beginEntry(context, clicked);
-            fEntryPointerCaptured = true;
-            return true;
-        }
+        fDoubleClick.knobPress(clicked, position, milliseconds(now));
     } else {
         static_cast<void>(fDoubleClick.press(sms::ui::kNoInteractiveTarget, position, milliseconds(now)));
         return false;
@@ -663,12 +660,27 @@ bool MixerInteractionController::releaseFader()
 bool MixerInteractionController::releaseKnob(const MixerInteractionContext& context)
 {
     if (context.view == MixerValueEntryView::sampleEditor && fSampleDrag >= 0) {
-        fHost.commitPadMixer(context.selectedPad, sms::dsp::sanitize(context.mixer));
+        if (fDoubleClick.knobRelease()) {
+            auto mixer = context.mixer;
+            midichopper::ui::resetMixerKnob(mixer, fSampleDrag);
+            fHost.resetPadMixer(context.selectedPad, mixer);
+        } else if (fSampleChanged) { // a plain click writes nothing: no empty undo step
+            fHost.commitPadMixer(context.selectedPad, sms::dsp::sanitize(context.mixer));
+        }
         fSampleDrag = -1;
         fHost.repaintMixer();
         return true;
     }
     if (fGlobalDrag >= 0) {
+        if (fDoubleClick.knobRelease()) {
+            const auto knob = midichopper::ui::target(
+                midichopper::ui::InteractiveType::globalMixerKnob, fGlobalDrag);
+            const auto parameter = midichopper::ui::globalValueParameterForTarget(knob);
+            fHost.editMixerParameter(parameter, true);
+            static_cast<void>(resetControl(context, knob));
+            fHost.editMixerParameter(parameter, false);
+            fResetPointerCaptured = false; // the button is already up
+        }
         fGlobalDrag = -1;
         fHost.repaintMixer();
         return true;
@@ -683,11 +695,13 @@ bool MixerInteractionController::motion(const MixerInteractionContext& context, 
         return true;
     }
     if (context.view == MixerValueEntryView::sampleEditor && fSampleDrag >= 0) {
-        updateSampleDrag(context, position);
+        if (fDoubleClick.knobMotion(position))
+            updateSampleDrag(context, position);
         return true;
     }
     if (fGlobalDrag >= 0) {
-        updateGlobalDrag(position);
+        if (fDoubleClick.knobMotion(position))
+            updateGlobalDrag(position);
         return true;
     }
     return false;

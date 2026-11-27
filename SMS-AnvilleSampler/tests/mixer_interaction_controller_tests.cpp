@@ -56,6 +56,12 @@ struct Host final : MixerInteractionHost {
         committedPad = pad;
         context->mixer = settings;
     }
+    void resetPadMixer(const int pad, const sms::dsp::SampleMixerSettings& settings) override
+    {
+        effects.push_back({"reset"});
+        committedPad = pad;
+        context->mixer = settings;
+    }
     void saveGlobalMixerSettings(const std::uint32_t parameter,
                                  const GlobalValueSettings& settings) override
     {
@@ -344,20 +350,74 @@ void faderAndCapture()
     effect(f.host, 2, "end", kParameterMonitorGainDb);
 }
 
+void knobDoubleClickResets()
+{
+    const sms::ui::Point point{100.0f, 100.0f};
+    const sms::ui::Point jitter{101.0f, 101.0f}; // hand movement inside the click slop
+    for (int knob = 0; knob < 5; ++knob) {
+        Fixture f;
+        f.context.view = MixerValueEntryView::sampleEditor;
+        f.context.mixer = {-6.0f, 0.5f, 3.0f, 0.4f, 0.6f};
+        const auto pad = target(InteractiveType::mixerKnob, knob);
+        f.mixer.sampleMixerPress(f.context, pad, point, KnobAdjustment::normal, Clock::time_point{} + 1s);
+        f.mixer.releaseKnob(f.context);
+        check(f.host.effects.empty(), "a plain knob click writes nothing, so adds no undo step");
+        auto expected = f.context.mixer;
+        resetMixerKnob(expected, knob);
+        f.mixer.sampleMixerPress(f.context, pad, point, KnobAdjustment::fine, Clock::time_point{} + 1100ms);
+        f.mixer.motion(f.context, jitter);
+        check(f.host.effects.empty() && !f.mixer.entry().target().valid(),
+              "the second press waits for release and opens no numeric entry");
+        f.mixer.releaseKnob(f.context);
+        check(f.host.effects.size() == 1U && f.host.effects[0].kind == "reset" &&
+              f.context.mixer.gainDecibels == expected.gainDecibels && f.context.mixer.pan == expected.pan &&
+              f.context.mixer.tuneSemitones == expected.tuneSemitones &&
+              f.context.mixer.lowpass == expected.lowpass && f.context.mixer.highpass == expected.highpass &&
+              !f.mixer.sampleDragging() && !f.mixer.releaseCaptured(),
+              "pad knob double click resets that knob once, as its own step");
+
+        const auto global = target(InteractiveType::globalMixerKnob, knob);
+        const auto parameter = globalValueParameterForTarget(global);
+        f.context.view = MixerValueEntryView::main;
+        f.context.globalRaw = {-6.0f, 0.5f, 3.0f, 0.4f, 0.6f, 0.0f, 0.0f};
+        f.mixer.globalMixerPress(f.context, global, point, KnobAdjustment::normal, Clock::time_point{} + 2s);
+        f.mixer.releaseKnob(f.context);
+        f.host.effects.clear();
+        f.mixer.globalMixerPress(f.context, global, point, KnobAdjustment::normal, Clock::time_point{} + 2100ms);
+        f.mixer.motion(f.context, jitter);
+        f.mixer.releaseKnob(f.context);
+        check(f.host.effects.size() == 3U && !f.mixer.entry().target().valid() && !f.mixer.globalDragging(),
+              "global knob double click is one balanced gesture");
+        effect(f.host, 0, "begin", parameter);
+        effect(f.host, 1, "set", parameter, rawGlobalValue(parameter, 0.0f, f.mixer.settings(parameter)));
+        effect(f.host, 2, "end", parameter);
+    }
+}
+
 void doubleClickHistory()
 {
     Fixture f;
     f.context.view = MixerValueEntryView::sampleEditor;
     const auto knob = target(InteractiveType::mixerKnob, 0);
+    const auto label = target(InteractiveType::mixerValueLabel, 0);
     const sms::ui::Point point{100.0f, 100.0f};
     f.mixer.sampleMixerPress(f.context, knob, point, KnobAdjustment::normal, Clock::time_point{} + 1s);
     f.mixer.releaseKnob(f.context);
-    f.host.effects.clear();
     f.mixer.sampleMixerPress(f.context, knob, point, KnobAdjustment::normal, Clock::time_point{} + 1100ms);
-    check(!f.mixer.sampleDragging() && f.mixer.entry().target() == target(InteractiveType::mixerValueLabel, 0) &&
-          f.host.effects.empty() && f.mixer.releaseCaptured(),
-          "pad knob double click opens numeric input and captures the second release");
-    f.mixer.cancelEntryUnless(target(InteractiveType::mixerValueLabel, 0));
+    f.mixer.motion(f.context, {100.0f, 80.0f});
+    f.mixer.releaseKnob(f.context);
+    const float dragged = f.context.mixer.gainDecibels;
+    check(dragged > 0.0f && f.host.effects.back().kind == "pad", "a second press that moves drags");
+    f.host.effects.clear();
+    f.mixer.sampleMixerPress(f.context, knob, point, KnobAdjustment::normal, Clock::time_point{} + 1200ms);
+    f.mixer.releaseKnob(f.context);
+    check(f.context.mixer.gainDecibels == dragged && f.host.effects.empty(),
+          "one click right after a drag does not reset");
+    f.mixer.sampleMixerPress(f.context, label, point, KnobAdjustment::normal, Clock::time_point{} + 3s);
+    f.mixer.releaseKnob(f.context);
+    f.mixer.sampleMixerPress(f.context, label, point, KnobAdjustment::normal, Clock::time_point{} + 3100ms);
+    check(f.mixer.entry().target() == label, "value label double click still opens numeric input");
+    f.mixer.cancelEntryUnless(label);
     check(f.mixer.entry().target().valid(), "clicking the current numeric label preserves entry");
     f.mixer.cancelEntryUnless(sms::ui::kNoInteractiveTarget);
     check(!f.mixer.entry().target().valid(), "outside click cancels numeric input");
@@ -470,6 +530,7 @@ int main()
     globalSlopeButtonCycles();
     staleSampleDragRoutesToGlobal();
     faderAndCapture();
+    knobDoubleClickResets();
     doubleClickHistory();
     rangeMenu();
     focusAndModeCancellation();

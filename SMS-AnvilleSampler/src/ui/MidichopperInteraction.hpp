@@ -207,13 +207,44 @@ public:
         target_ = matched ? sms::ui::kNoInteractiveTarget : target;
         point_ = point;
         milliseconds_ = milliseconds;
+        armed_ = false;
         return matched;
+    }
+
+    // Knob bodies: a double click resets on the second RELEASE, so a second press that
+    // moves is still a drag. Shared by every knob family.
+    void knobPress(const sms::ui::InteractiveTarget target, const sms::ui::Point point,
+                   const std::uint64_t milliseconds) noexcept
+    {
+        const bool matched = press(target, point, milliseconds);
+        armed_ = matched;
+    }
+
+    /** False while a pending double click is still within click slop: do not drag yet. */
+    [[nodiscard]] bool knobMotion(const sms::ui::Point point) noexcept
+    {
+        const float dx = point.x - point_.x;
+        const float dy = point.y - point_.y;
+        if (dx * dx + dy * dy > 9.0f) { // a drag: neither this press nor the next resets
+            armed_ = false;
+            target_ = sms::ui::kNoInteractiveTarget;
+        }
+        return !armed_;
+    }
+
+    /** True when this release completes a double click. */
+    [[nodiscard]] bool knobRelease() noexcept
+    {
+        const bool reset = armed_;
+        armed_ = false;
+        return reset;
     }
 
 private:
     sms::ui::InteractiveTarget target_ = sms::ui::kNoInteractiveTarget;
     sms::ui::Point point_{};
     std::uint64_t milliseconds_ = 0U;
+    bool armed_ = false;
 };
 
 [[nodiscard]] constexpr bool isResettableMixerControl(

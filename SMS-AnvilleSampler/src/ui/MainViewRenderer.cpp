@@ -301,11 +301,14 @@ void drawMainHeader(const ViewRenderContext& ctx)
     }
 
     const auto& modeColor = ctx.state.armed ? colors.intentDanger : colors.meterGreen;
-    sms::ui::dpf::drawLed(ctx.canvas, 1146.0f, 43.0f, modeColor, true);
+    const char* const mode = ctx.state.armed ? "ARMED" : "PLAY";
     ctx.canvas.fontSize(13.0f);
     ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_LEFT | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    measureText(ctx, 0.0f, 43.0f, mode, nullptr, textBounds);
+    const float ledX = uiLayout::playLedCentreX(textBounds.getWidth());
+    sms::ui::dpf::drawLed(ctx.canvas, ledX, 43.0f, modeColor, true);
     ctx.canvas.fillColor(modeColor);
-    text(ctx, 1160.0f, 43.0f, ctx.state.armed ? "ARMED" : "PLAY", nullptr);
+    text(ctx, ledX + uiLayout::playLabelOffset, 43.0f, mode, nullptr);
     drawAnalysisPanel(ctx);
 
     const bool menuHovered = hovered(ctx, InteractiveType::menuButton);
@@ -314,12 +317,31 @@ void drawMainHeader(const ViewRenderContext& ctx)
                                            {ctx.state.menuOpen, menuHovered, false, true});
     for (int line = 0; line < 3; ++line) {
         ctx.canvas.beginPath();
-        ctx.canvas.moveTo(1216.0f, 34.0f + static_cast<float>(line) * 8.0f);
-        ctx.canvas.lineTo(1232.0f, 34.0f + static_cast<float>(line) * 8.0f);
+        const float y = 34.0f + static_cast<float>(line) * 8.0f;
+        ctx.canvas.moveTo(uiLayout::menuButton.x + 8.0f, y);
+        ctx.canvas.lineTo(uiLayout::menuButton.x + 24.0f, y);
         ctx.canvas.strokeColor(ctx.state.menuOpen || menuHovered ? colors.activityPlayback
                                                                  : colors.contentSecondary);
         ctx.canvas.strokeWidth(1.5f);
         ctx.canvas.stroke();
+    }
+
+    const auto donate = uiLayout::donateButton;
+    const bool donateHovered = hovered(ctx, InteractiveType::donateButton);
+    sms::ui::dpf::drawRaisedControlSurface(ctx.canvas, donate, colors.activityPlayback,
+                                           {false, donateHovered, false, true});
+    ctx.canvas.textAlign(DGL_NAMESPACE::NanoVG::ALIGN_CENTER | DGL_NAMESPACE::NanoVG::ALIGN_MIDDLE);
+    ctx.canvas.fontSize(18.0f);
+    ctx.canvas.fillColor(donateHovered ? colors.activityPlayback : colors.contentSecondary);
+    ctx.canvas.text(donate.x + donate.width * 0.5f, donate.y + donate.height * 0.5f, "$", nullptr);
+    if (donateHovered) {
+        // Hover label, right-aligned under the button.
+        const sms::ui::Rect tip{donate.x + donate.width - 56.0f, donate.y + donate.height + 3.0f,
+                                56.0f, 18.0f};
+        sms::ui::dpf::drawInsetSurface(ctx.canvas, tip, 4.0f);
+        ctx.canvas.fontSize(10.0f);
+        ctx.canvas.fillColor(colors.contentPrimary);
+        text(ctx, tip.x + tip.width * 0.5f, tip.y + tip.height * 0.5f, "Donate", nullptr);
     }
 }
 

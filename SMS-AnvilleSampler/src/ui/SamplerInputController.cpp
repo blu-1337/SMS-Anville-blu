@@ -243,6 +243,7 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
 
     if (press) {
         const auto clicked = targetAt(position);
+        const bool enteringValue = fMixer.entry().target().valid();
         fMixer.cancelEntryUnless(clicked);
         if (fHover.update(clicked)) fHost.repaintSamplerInput();
         if (fMixer.faderPress(mixerContext(), clicked, position)) return true;
@@ -272,6 +273,16 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         if (isTarget(clicked, InteractiveType::analysisToggle)) {
             fSession.toggleAnalysis();
             return true;
+        }
+        if (isTarget(clicked, InteractiveType::donateButton)) {
+            // A click that dismisses a value entry, list or dialog never also opens the page.
+            const bool popup = enteringValue || fSession.dropdown() != 0 ||
+                (s.mainSampleMode && (fSession.mainSample().modeMenuOpen() ||
+                                      fSession.mainSample().confirmPending()));
+            if (!popup) {
+                fDonatePressed = true;
+                return true;
+            }
         }
         // An open list of its own view swallows this click instead.
         if (fSession.dropdown() == 0 && !(s.mainSampleMode && fSession.mainSample().modeMenuOpen())) {
@@ -598,6 +609,11 @@ bool SamplerInputController::mouse(const sms::ui::Point position, const InputBut
         return true;
     }
 
+    if (fDonatePressed) {
+        fDonatePressed = false;
+        if (isTarget(targetAt(position), InteractiveType::donateButton)) fMenu.donate();
+        return true;
+    }
     if (fMixer.releaseCaptured()) return true;
     if (fResetPointerCaptured) { fResetPointerCaptured = false; return true; }
     if (fPadContextPointerCaptured) { fPadContextPointerCaptured = false; return true; }
@@ -647,6 +663,7 @@ bool SamplerInputController::motion(const sms::ui::Point position)
     const auto& s = fSession.state();
     auto& chop = fSession.chopEditor();
     fSession.reconcileVintagePopup();
+    if (fDonatePressed && !uiLayout::donateButton.contains(position)) fDonatePressed = false;
     if (fVintage.dragging()) {
         fVintage.motion(position);
         return true;
@@ -897,6 +914,7 @@ bool SamplerInputController::character(const std::uint32_t codepoint)
 void SamplerInputController::focus(const bool focused)
 {
     if (focused) return;
+    fDonatePressed = false;
     fMixer.cancelScope(MixerCancelScope::focus);
     if (fMainSampleDrag != MainSampleDrag::none) {
         fSession.mainSample().cancelDrag();

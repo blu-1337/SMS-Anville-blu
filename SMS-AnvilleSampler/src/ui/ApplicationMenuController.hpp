@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HelpLinks.hpp"
 #include "Interaction.hpp"
 #include "MidichopperLayout.hpp"
 
@@ -51,6 +52,8 @@ public:
     bool press(const ApplicationMenuContext&, sms::ui::InteractiveTarget,
                Clock::time_point now = Clock::now());
     bool rightPress();
+    /** Header donate button: opens the fixed donation page. */
+    void donate() { openLink(kDonateUrl.data()); }
     bool dismiss();
     void hover(const ApplicationMenuContext&, sms::ui::InteractiveTarget);
     bool scroll(const ApplicationMenuContext&, sms::ui::Point position, float delta);

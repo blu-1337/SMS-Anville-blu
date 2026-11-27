@@ -121,6 +121,7 @@ enum class InteractiveType : int {
     vintageVoicing,
     vintageKnob,
     vintageValueLabel,
+    donateButton, // header, right of the menu button
 };
 
 class PadPressTracker {
@@ -778,6 +779,8 @@ interactiveTargetAt(const sms::ui::Point point, const InteractionContext& contex
         return sms::ui::kNoInteractiveTarget;
     }
 
+    if (uiLayout::donateButton.contains(point))
+        return target(InteractiveType::donateButton);
     if (uiLayout::topGsp.contains(point))
         return target(InteractiveType::topGsp);
     if (uiLayout::analysisToggle.contains(point))

@@ -2910,7 +2910,7 @@ void tuneTargetTable()
     namespace layout = midichopper::ui::layout;
     using midichopper::ui::InteractiveType;
     const auto box = layout::tuneDropdownBox;
-    check(box.x == 994.0F && box.y == 59.0F && box.width == 176.0F && box.height == 104.0F,
+    check(box.x == layout::tuneButton.x && box.y == 59.0F && box.width == 176.0F && box.height == 104.0F,
           "note list sits under the TUNE button");
     midichopper::ui::InteractionContext context;
     context.tuneEnabled = true;
@@ -2938,9 +2938,10 @@ void analysisHeaderGeometry()
                l.y + l.height <= r.y || r.y + r.height <= l.y;
     };
     // The logo starts 14 units after the title block and its glow ends before x 540.
-    // The PLAY / ARMED LED is centred on x 1146 and the menu button starts at x 1208.
+    // The PLAY / ARMED indicator sits in the slot between the panel and the menu button.
     check(panel.y == layout::menuButton.y && panel.height == layout::menuButton.height &&
-          panel.x >= 540.0f && panel.x + panel.width <= 1136.0f && apart(panel, layout::menuButton),
+          panel.x >= 540.0f && panel.x + panel.width <= layout::playIndicatorSlot.x &&
+          apart(panel, layout::menuButton) && apart(panel, layout::donateButton),
           "analysis panel sits between the logo and PLAY, level with the menu button");
     const std::array children{layout::analysisToggle, layout::analysisNote, layout::analysisChord,
         layout::analysisKey, layout::analysisConfidence, layout::tuneButton, layout::tuneDropdown};
@@ -2983,6 +2984,36 @@ void analysisHeaderGeometry()
                   "the open application menu blocks the toggle");
         }
     }
+}
+
+// PLAY light and text are evenly spaced; donate sits right of the hamburger.
+void headerSpacingGeometry()
+{
+    namespace layout = midichopper::ui::layout;
+    using midichopper::ui::InteractiveType;
+    const auto menu = layout::menuButton;
+    const auto donate = layout::donateButton;
+    const float panelRight = layout::analysisPanel.x + layout::analysisPanel.width;
+    // DejaVu Sans advance widths of PLAY and ARMED at the header's 13 unit size.
+    for (const float textWidth : {27.4f, 40.7f}) {
+        const float centre = layout::playLedCentreX(textWidth);
+        const float left = centre - layout::playLedRadius - panelRight;
+        const float right = menu.x - (centre + layout::playLabelOffset + textWidth);
+        check(left - right < 0.01f && right - left < 0.01f && left >= 14.0f && left <= 23.0f,
+              "PLAY / ARMED has equal gaps to the panel and the menu button");
+    }
+    const float playGap = layout::playLedCentreX(27.4f) - layout::playLedRadius - panelRight;
+    check(playGap >= 18.0f && playGap <= 22.0f, "the PLAY gap is about 20 units");
+    check(donate.x >= menu.x + menu.width && donate.y == menu.y && donate.width == menu.width &&
+          donate.height == menu.height && donate.x + donate.width <= 1240.0f &&
+          donate.y + donate.height <= layout::menuPanel.y,
+          "donate sits right of the menu button and clears the menu panel");
+    midichopper::ui::InteractionContext context;
+    check(midichopper::ui::isTarget(midichopper::ui::interactiveTargetAt(center(donate), context),
+              InteractiveType::donateButton), "donate is a target");
+    context.menuOpen = true;
+    check(!midichopper::ui::interactiveTargetAt(center(donate), context).valid(),
+          "the open application menu blocks donate");
 }
 
 } // namespace
@@ -3100,7 +3131,7 @@ int main()
 {
     vintageGeometryAndMapping();
     gspGeometry();
-    analysisHeaderGeometry();
+    analysisHeaderGeometry(); headerSpacingGeometry();
     tuneTargetTable();
     mainSampleTargetPrecedence();
     logoGlow();

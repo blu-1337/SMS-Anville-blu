@@ -33,6 +33,8 @@ Plugin captures: v1.0.0.
 
 
 
+[Donate](https://www.paypal.com/donate/?hosted_button_id=PVBAWTWCD2VRN)
+
 ## How to Install
 
 Download your format's ZIP from [Releases](https://github.com/sirsipe/SMS-Plugins/releases).
@@ -44,7 +46,7 @@ Extract it and copy the **whole folder**, including skins and licenses:
 | Linux LV2 | `SMS-AnvilleSampler.lv2` | `~/.lv2/` |
 | Windows VST3 | `SMS-AnvilleSampler.vst3` | `C:\Program Files\Common Files\VST3\` |
 
-Create missing destination folders. Restart your DAW or rescan plugins.
+Create missing destination folders. Restart or rescan your DAW.
 Linux x64 builds use Ubuntu 24.04; other distributions remain unverified.
 Windows builds are unsigned. See [Windows runtime requirements](../Docs/AI/PLATFORM-BUILDS.md#windows-runtime-requirements).
 

@@ -61,7 +61,8 @@ struct Fixture final : SamplerUiHost, MixerInteractionHost, ApplicationMenuHost,
     void setStatus(const char* text) override { session.setLocalStatus(text); }
     void repaintApplicationMenu() override {}
     void clearHover() noexcept override { input.clearHover(); }
-    bool openLink(const char*) override { return true; }
+    std::vector<std::string> links; // injected: tests never open a browser
+    bool openLink(const char* url) override { links.emplace_back(url); return true; }
     void openMainSample() override { session.openMainSample(); }
     void focusSamplerInput() override {}
     void ignoreSamplerKeyRepeat(bool ignore) override { ignoringRepeat = ignore; }
@@ -871,8 +872,53 @@ void vintagePopup()
           "no global vintage button while ARMED");
 }
 
+void donateClicks()
+{
+    const std::vector<std::string> once{
+        "https://www.paypal.com/donate/?hosted_button_id=PVBAWTWCD2VRN"};
+    const auto donate = center(layout::donateButton);
+    const sms::ui::Point away{600.0f, 300.0f};
+    Fixture f;
+    f.input.mouse(donate, InputButton::left, true);
+    check(f.links.empty(), "press alone opens nothing");
+    f.input.mouse(donate, InputButton::left, false);
+    check(f.links == once, "one click opens the donate page once");
+    f.input.mouse(donate, InputButton::left, false);
+    f.input.mouse(donate, InputButton::right, true);
+    f.input.mouse(donate, InputButton::right, false);
+    check(f.links == once, "stray release and right click open nothing");
+
+    f.links.clear();
+    f.input.mouse(away, InputButton::left, true);
+    f.input.motion(donate);
+    f.input.mouse(donate, InputButton::left, false);
+    f.input.mouse(donate, InputButton::left, true);
+    f.input.motion(away);
+    f.input.motion(donate);
+    f.input.mouse(donate, InputButton::left, false);
+    f.input.mouse(donate, InputButton::left, true);
+    f.input.mouse(away, InputButton::left, false);
+    f.input.mouse(donate, InputButton::left, true);
+    f.input.focus(false);
+    f.input.mouse(donate, InputButton::left, false);
+    check(f.links.empty(), "drags and lost focus open nothing");
+
+    f.click(center(layout::menuButton));
+    f.click(donate);
+    check(!f.menu.open() && f.links.empty(), "the click that closes the menu opens nothing");
+    f.click(donate);
+    check(f.links == once, "the next click opens it");
+
+    f.links.clear();
+    f.readyEditor();
+    f.session.toggleDropdown(1);
+    f.click(donate);
+    check(f.session.dropdown() == 0 && f.links.empty(), "the click that closes a list opens nothing");
+}
+
 int main()
 {
+    donateClicks();
     gspLinkage();
     vintagePopup();
     analysisToggleRouting();

@@ -91,6 +91,7 @@ private:
     Clock::time_point fSwapBankSince{};
     bool fPadContextPointerCaptured = false;
     bool fResetPointerCaptured = false;
+    bool fDonatePressed = false; // opens on release; leaving the button cancels
     bool fPlayButtonPressCaptured = false;
     bool fClearArmed = false;
     Clock::time_point fClearDeadline{};
